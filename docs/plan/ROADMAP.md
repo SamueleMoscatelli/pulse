@@ -3,7 +3,7 @@
 Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh done <ID>`. Each task is one Claude Code session; task cards live in `docs/plan/phase-<N>.md`.
 
 ## Phase 0 — Foundations
-- [ ] P0.1 Cargo workspace & tooling scaffold
+- [x] P0.1 Cargo workspace & tooling scaffold
 - [ ] P0.2 Core model types, Asset & LineIndex
 - [ ] P0.3 Config (`pulse.toml`) & `pulse init`
 

@@ -1,0 +1,22 @@
+[package]
+name = "pulse-cli"
+description = "Pulse command-line interface"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive"] }
+pulse-core.workspace = true
+pulse-engine.workspace = true
+pulse-report.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "pulse"
+path = "src/main.rs"

@@ -1,0 +1,36 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/SamueleMoscatelli/pulse"
+rust-version = "1.98"
+
+[workspace.dependencies]
+pulse-core = { path = "crates/pulse-core" }
+pulse-rules = { path = "crates/pulse-rules" }
+pulse-engine = { path = "crates/pulse-engine" }
+pulse-report = { path = "crates/pulse-report" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+dbg_macro = "warn"
+todo = "warn"
+print_stdout = "warn"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+debug = "line-tables-only"

@@ -1,0 +1,15 @@
+[package]
+name = "pulse-engine"
+description = "Pulse analysis pipeline: rules, suppression, scoring, quality gate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+pulse-core.workspace = true
+pulse-rules.workspace = true
+
+[lints]
+workspace = true
