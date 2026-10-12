@@ -127,6 +127,22 @@ impl AssetKind {
     pub const fn bit(self) -> u16 {
         1 << self as u16
     }
+
+    /// Load mode from the discovery table, before frontmatter/nesting refinements.
+    /// Skill and Agent are `Always`: only their description counts as always-on.
+    pub const fn default_load(self) -> LoadMode {
+        match self {
+            Self::ScopedInstructions => LoadMode::Conditional,
+            Self::Prompt | Self::Custom => LoadMode::OnDemand,
+            Self::Instructions
+            | Self::Agent
+            | Self::Skill
+            | Self::Tools
+            | Self::McpConfig
+            | Self::Settings
+            | Self::Hooks => LoadMode::Always,
+        }
+    }
 }
 
 /// When an asset is loaded into the model's context; drives context-load metrics.

@@ -2,12 +2,14 @@
 
 pub mod asset;
 pub mod config;
+pub mod discover;
 pub mod model;
 pub mod rule;
 pub mod text;
 
 pub use asset::Asset;
 pub use config::{Config, ConfigError, DEFAULT_TOML};
+pub use discover::{Classifier, DiscoverError, DiscoveredFile, Discovery, discover};
 pub use model::{
     AssetKind, Category, Finding, KindSet, LoadMode, Location, ParseEnumError, Rating, RuleMeta,
     Severity, Span,

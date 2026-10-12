@@ -1,0 +1,589 @@
+//! Asset discovery: walk the scan root and classify files with the discovery table.
+
+use std::collections::HashSet;
+use std::fs::File;
+use std::io::{self, Read};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, PoisonError};
+
+use globset::{Candidate, Glob, GlobBuilder, GlobSet, GlobSetBuilder};
+use ignore::{DirEntry, WalkBuilder, WalkState};
+
+use crate::config::Config;
+use crate::model::{AssetKind, LoadMode};
+
+/// Directory names pruned at any depth (spec 02-assets → Default excludes).
+pub const DEFAULT_EXCLUDES: &[&str] = &[
+    ".git",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    "out",
+    "vendor",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".next",
+    ".turbo",
+    "coverage",
+];
+
+/// Ignore file honored alongside `.gitignore` and `.ignore`.
+pub const PULSE_IGNORE: &str = ".pulseignore";
+
+/// Bytes read when sniffing a `tools/*.json` candidate.
+const SNIFF_BYTES: u64 = 64 * 1024;
+
+/// Error building the classifier or starting the walk.
+#[derive(Debug, thiserror::Error)]
+pub enum DiscoverError {
+    #[error("invalid glob `{glob}` in {field}: {source}")]
+    Glob {
+        field: &'static str,
+        glob: String,
+        source: globset::Error,
+    },
+    #[error("scan root {} is not a directory", .0.display())]
+    NotADirectory(PathBuf),
+}
+
+/// A file classified as an asset. Contents are read later.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiscoveredFile {
+    pub path: Arc<Path>,
+    /// Path relative to the scan root, always with `/` separators.
+    pub rel_path: String,
+    pub kind: AssetKind,
+    pub load: LoadMode,
+}
+
+/// Result of a walk. `assets` and `skipped` are sorted by path.
+#[derive(Debug, Default)]
+pub struct Discovery {
+    pub assets: Vec<DiscoveredFile>,
+    /// Rel paths of every walked (non-excluded) file, assets or not; used by AI-STR-003.
+    pub all_paths: HashSet<String>,
+    /// Files or directories that could not be walked or sniffed, with the reason.
+    pub skipped: Vec<(PathBuf, String)>,
+}
+
+/// Post-match refinement attached to a table entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Refine {
+    None,
+    /// CLAUDE.md / AGENTS.md: root-level is Always, nested is Conditional.
+    NestedConditional,
+    /// Promoted to Always by frontmatter (resolved in P1.3).
+    Scoped,
+    /// `tools/*.json`: a Tools asset only if its content looks like tool schemas.
+    SniffTools,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Entry {
+    kind: AssetKind,
+    load: LoadMode,
+    refine: Refine,
+}
+
+/// The built-in discovery table, in priority order (first match wins).
+const TABLE: &[(&[&str], AssetKind, Refine)] = &[
+    (
+        &["**/.claude/settings.json", "**/.claude/settings.local.json"],
+        AssetKind::Settings,
+        Refine::None,
+    ),
+    (
+        &["**/.cursor/hooks.json", "**/hooks/hooks.json"],
+        AssetKind::Hooks,
+        Refine::None,
+    ),
+    (
+        &[
+            "**/.mcp.json",
+            "**/.vscode/mcp.json",
+            "**/.cursor/mcp.json",
+            "**/claude_desktop_config.json",
+            "**/.gemini/settings.json",
+        ],
+        AssetKind::McpConfig,
+        Refine::None,
+    ),
+    (&["**/SKILL.md"], AssetKind::Skill, Refine::None),
+    (
+        &[
+            "**/.claude/agents/**/*.md",
+            "**/.github/agents/*.agent.md",
+            "**/.github/chatmodes/*.chatmode.md",
+        ],
+        AssetKind::Agent,
+        Refine::None,
+    ),
+    (
+        &[
+            "**/.claude/commands/**/*.md",
+            "**/.github/prompts/*.prompt.md",
+            "**/*.prompty",
+        ],
+        AssetKind::Prompt,
+        Refine::None,
+    ),
+    (
+        &[
+            "**/.cursor/rules/**/*.mdc",
+            "**/.claude/rules/**/*.md",
+            "**/.github/instructions/**/*.instructions.md",
+            "**/.windsurf/rules/**/*.md",
+            "**/.clinerules/**/*.md",
+        ],
+        AssetKind::ScopedInstructions,
+        Refine::Scoped,
+    ),
+    (
+        &["**/CLAUDE.md", "**/AGENTS.md"],
+        AssetKind::Instructions,
+        Refine::NestedConditional,
+    ),
+    (
+        // `.clinerules` as a file lands here; as a directory, its `.md` files match row 7.
+        &[
+            "**/CLAUDE.local.md",
+            "**/GEMINI.md",
+            "**/.github/copilot-instructions.md",
+            "**/.cursorrules",
+            "**/.windsurfrules",
+            "**/.clinerules",
+        ],
+        AssetKind::Instructions,
+        Refine::None,
+    ),
+    (&["**/*.tools.json"], AssetKind::Tools, Refine::None),
+    (&["**/tools/*.json"], AssetKind::Tools, Refine::SniffTools),
+];
+
+fn glob(field: &'static str, pattern: &str) -> Result<Glob, DiscoverError> {
+    GlobBuilder::new(pattern)
+        .literal_separator(true)
+        .build()
+        .map_err(|source| DiscoverError::Glob {
+            field,
+            glob: pattern.to_owned(),
+            source,
+        })
+}
+
+/// Maps a rel path to its asset kind and load mode. Built once per scan.
+#[derive(Debug)]
+pub struct Classifier {
+    set: GlobSet,
+    /// Glob index in `set` → table entry. Lower index = higher priority.
+    entries: Vec<Entry>,
+    exclude: GlobSet,
+}
+
+impl Classifier {
+    /// Builds the table plus `scan.custom` (then `scan.include` as Custom) and `scan.exclude`.
+    pub fn new(config: &Config) -> Result<Self, DiscoverError> {
+        let mut set = GlobSetBuilder::new();
+        let mut entries = Vec::new();
+        let mut add = |field, pattern: &str, entry: Entry| -> Result<(), DiscoverError> {
+            set.add(glob(field, pattern)?);
+            entries.push(entry);
+            Ok(())
+        };
+        for &(patterns, kind, refine) in TABLE {
+            let entry = Entry {
+                kind,
+                load: kind.default_load(),
+                refine,
+            };
+            for pattern in patterns {
+                add("discovery table", pattern, entry)?;
+            }
+        }
+        for decl in &config.scan.custom {
+            let entry = Entry {
+                kind: decl.kind,
+                load: decl.load.unwrap_or(decl.kind.default_load()),
+                refine: Refine::None,
+            };
+            add("scan.custom", &decl.glob, entry)?;
+        }
+        for pattern in &config.scan.include {
+            let entry = Entry {
+                kind: AssetKind::Custom,
+                load: AssetKind::Custom.default_load(),
+                refine: Refine::None,
+            };
+            add("scan.include", pattern, entry)?;
+        }
+        let set = set.build().map_err(|source| DiscoverError::Glob {
+            field: "discovery table",
+            glob: String::new(),
+            source,
+        })?;
+
+        let mut exclude = GlobSetBuilder::new();
+        for pattern in &config.scan.exclude {
+            exclude.add(glob("scan.exclude", pattern)?);
+        }
+        let exclude = exclude.build().map_err(|source| DiscoverError::Glob {
+            field: "scan.exclude",
+            glob: String::new(),
+            source,
+        })?;
+
+        Ok(Self {
+            set,
+            entries,
+            exclude,
+        })
+    }
+
+    /// Classifies `rel_path` by name only. `scratch` is reused across calls to avoid allocation.
+    /// Returns the entry and whether the content must be sniffed as Tools.
+    fn lookup(&self, rel_path: &str, scratch: &mut Vec<usize>) -> Option<(Entry, bool)> {
+        self.set
+            .matches_candidate_into(&Candidate::new(rel_path), scratch);
+        let entry = *self.entries.get(*scratch.iter().min()?)?;
+        let load = resolve_load(entry, rel_path);
+        Some((Entry { load, ..entry }, entry.refine == Refine::SniffTools))
+    }
+
+    /// Classifies `rel_path` by name only (no content sniffing).
+    pub fn classify(&self, rel_path: &str) -> Option<(AssetKind, LoadMode)> {
+        self.lookup(rel_path, &mut Vec::new())
+            .map(|(e, _)| (e.kind, e.load))
+    }
+
+    /// Whether `rel_path` matches `scan.exclude`.
+    pub fn is_excluded(&self, rel_path: &str) -> bool {
+        !self.exclude.is_empty() && self.exclude.is_match(rel_path)
+    }
+}
+
+/// Load mode from path alone; frontmatter-based refinements come later.
+fn resolve_load(entry: Entry, rel_path: &str) -> LoadMode {
+    match entry.refine {
+        Refine::NestedConditional => {
+            let parent = rel_path.rsplit_once('/').map_or("", |(dir, _)| dir);
+            // `.claude/CLAUDE.md` is a root-level memory file in Claude Code.
+            if parent.is_empty() || parent == ".claude" {
+                LoadMode::Always
+            } else {
+                LoadMode::Conditional
+            }
+        }
+        // TODO(P1.3): promote to Always from frontmatter (`alwaysApply: true`; no `paths`/`applyTo`,
+        // or `applyTo: "**"`).
+        Refine::Scoped | Refine::None | Refine::SniffTools => entry.load,
+    }
+}
+
+/// Spec 02-assets → Content sniffing for Tools: an object, or array of objects, with `name`
+/// plus `input_schema` | `parameters` | `inputSchema`. Reads at most 64 KiB.
+fn sniff_tools(path: &Path) -> io::Result<bool> {
+    let mut buf = Vec::new();
+    File::open(path)?.take(SNIFF_BYTES).read_to_end(&mut buf)?;
+    let bytes = buf.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&buf);
+    if let Ok(value) = serde_json::from_slice::<serde_json::Value>(bytes) {
+        return Ok(match &value {
+            serde_json::Value::Array(items) => !items.is_empty() && items.iter().all(is_tool),
+            other => is_tool(other),
+        });
+    }
+    if (buf.len() as u64) < SNIFF_BYTES {
+        return Ok(false);
+    }
+    // Truncated: fall back to a key scan over the prefix.
+    let starts_ok = bytes
+        .iter()
+        .find(|b| !b.is_ascii_whitespace())
+        .is_some_and(|b| matches!(b, b'{' | b'['));
+    let has = |key: &[u8]| memchr::memmem::find(bytes, key).is_some();
+    Ok(starts_ok
+        && has(b"\"name\"")
+        && (has(b"\"input_schema\"") || has(b"\"parameters\"") || has(b"\"inputSchema\"")))
+}
+
+fn is_tool(value: &serde_json::Value) -> bool {
+    value.as_object().is_some_and(|o| {
+        o.contains_key("name")
+            && ["input_schema", "parameters", "inputSchema"]
+                .iter()
+                .any(|k| o.contains_key(*k))
+    })
+}
+
+fn rel_of(root: &Path, path: &Path) -> Option<String> {
+    let rel = path.strip_prefix(root).ok()?.to_str()?;
+    Some(if rel.contains('\\') {
+        rel.replace('\\', "/")
+    } else {
+        rel.to_owned()
+    })
+}
+
+#[derive(Default)]
+struct Collected {
+    assets: Vec<DiscoveredFile>,
+    all_paths: HashSet<String>,
+    skipped: Vec<(PathBuf, String)>,
+}
+
+/// Per-thread buffer, merged into the shared one when the walker thread finishes.
+struct Local<'a> {
+    out: Collected,
+    shared: &'a Mutex<Collected>,
+}
+
+impl Drop for Local<'_> {
+    fn drop(&mut self) {
+        let mut shared = self.shared.lock().unwrap_or_else(PoisonError::into_inner);
+        let out = std::mem::take(&mut self.out);
+        shared.assets.extend(out.assets);
+        shared.all_paths.extend(out.all_paths);
+        shared.skipped.extend(out.skipped);
+    }
+}
+
+/// Walks `root` in parallel and classifies every file. Unreadable entries go to `skipped`.
+pub fn discover(root: &Path, config: &Config) -> Result<Discovery, DiscoverError> {
+    if !root.is_dir() {
+        return Err(DiscoverError::NotADirectory(root.to_path_buf()));
+    }
+    let classifier = Classifier::new(config)?;
+    let filter_root = root.to_path_buf();
+    let exclude = classifier.exclude.clone();
+    let walker = WalkBuilder::new(root)
+        .hidden(false)
+        .git_ignore(true)
+        .git_global(false)
+        .require_git(false)
+        .parents(false)
+        .add_custom_ignore_filename(PULSE_IGNORE)
+        .follow_links(config.scan.follow_symlinks)
+        .filter_entry(move |entry| keep_entry(entry, &filter_root, &exclude))
+        .build_parallel();
+
+    let shared = Mutex::new(Collected::default());
+    walker.run(|| {
+        let mut local = Local {
+            out: Collected::default(),
+            shared: &shared,
+        };
+        let mut scratch = Vec::new();
+        let classifier = &classifier;
+        Box::new(move |result| {
+            match result {
+                Ok(entry) => visit(&entry, root, classifier, &mut scratch, &mut local.out),
+                Err(err) => {
+                    let path = error_path(&err).unwrap_or_else(|| root.to_path_buf());
+                    local.out.skipped.push((path, err.to_string()));
+                }
+            }
+            WalkState::Continue
+        })
+    });
+
+    let mut collected = shared.into_inner().unwrap_or_else(PoisonError::into_inner);
+    collected
+        .assets
+        .sort_unstable_by(|a, b| a.rel_path.cmp(&b.rel_path));
+    collected.skipped.sort_unstable();
+    Ok(Discovery {
+        assets: collected.assets,
+        all_paths: collected.all_paths,
+        skipped: collected.skipped,
+    })
+}
+
+fn keep_entry(entry: &DirEntry, root: &Path, exclude: &GlobSet) -> bool {
+    if entry.depth() == 0 {
+        return true;
+    }
+    let is_dir = entry.file_type().is_some_and(|t| t.is_dir());
+    if is_dir
+        && entry
+            .file_name()
+            .to_str()
+            .is_some_and(|name| DEFAULT_EXCLUDES.contains(&name))
+    {
+        return false;
+    }
+    if exclude.is_empty() {
+        return true;
+    }
+    rel_of(root, entry.path()).is_none_or(|rel| !exclude.is_match(rel.as_str()))
+}
+
+fn visit(
+    entry: &DirEntry,
+    root: &Path,
+    classifier: &Classifier,
+    scratch: &mut Vec<usize>,
+    out: &mut Collected,
+) {
+    let Some(file_type) = entry.file_type() else {
+        return;
+    };
+    // Unfollowed symlinks (e.g. `CLAUDE.md -> AGENTS.md`) exist for AI-STR-003 but are not
+    // analyzed twice: their target is walked on its own.
+    if file_type.is_symlink() {
+        if let Some(rel_path) = rel_of(root, entry.path()) {
+            out.all_paths.insert(rel_path);
+        }
+        return;
+    }
+    if !file_type.is_file() {
+        return;
+    }
+    let path = entry.path();
+    let Some(rel_path) = rel_of(root, path) else {
+        out.skipped
+            .push((path.to_path_buf(), "path is not valid UTF-8".to_owned()));
+        return;
+    };
+    if let Some((entry, sniff)) = classifier.lookup(&rel_path, scratch) {
+        let is_asset = !sniff
+            || match sniff_tools(path) {
+                Ok(is_tools) => is_tools,
+                Err(err) => {
+                    out.skipped.push((path.to_path_buf(), err.to_string()));
+                    false
+                }
+            };
+        if is_asset {
+            out.assets.push(DiscoveredFile {
+                path: Arc::from(path),
+                rel_path: rel_path.clone(),
+                kind: entry.kind,
+                load: entry.load,
+            });
+        }
+    }
+    out.all_paths.insert(rel_path);
+}
+
+fn error_path(err: &ignore::Error) -> Option<PathBuf> {
+    match err {
+        ignore::Error::WithPath { path, .. } => Some(path.clone()),
+        ignore::Error::WithDepth { err, .. } | ignore::Error::WithLineNumber { err, .. } => {
+            error_path(err)
+        }
+        ignore::Error::Loop { child, .. } => Some(child.clone()),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::CustomAssetDecl;
+
+    fn classify(rel: &str) -> Option<(AssetKind, LoadMode)> {
+        Classifier::new(&Config::default())
+            .ok()
+            .and_then(|c| c.classify(rel))
+    }
+
+    #[test]
+    fn classify_root_and_nested_instructions() {
+        assert_eq!(
+            classify("CLAUDE.md"),
+            Some((AssetKind::Instructions, LoadMode::Always))
+        );
+        assert_eq!(
+            classify(".claude/CLAUDE.md"),
+            Some((AssetKind::Instructions, LoadMode::Always))
+        );
+        assert_eq!(
+            classify("pkg/AGENTS.md"),
+            Some((AssetKind::Instructions, LoadMode::Conditional))
+        );
+        assert_eq!(
+            classify("pkg/GEMINI.md"),
+            Some((AssetKind::Instructions, LoadMode::Always))
+        );
+    }
+
+    #[test]
+    fn classify_clinerules_file_and_dir() {
+        assert_eq!(
+            classify(".clinerules"),
+            Some((AssetKind::Instructions, LoadMode::Always))
+        );
+        assert_eq!(
+            classify(".clinerules/style.md"),
+            Some((AssetKind::ScopedInstructions, LoadMode::Conditional))
+        );
+    }
+
+    #[test]
+    fn classify_first_match_wins() {
+        // Row 4 (Skill) beats row 5 (Agent) for a SKILL.md under .claude/agents.
+        assert_eq!(
+            classify(".claude/agents/SKILL.md"),
+            Some((AssetKind::Skill, LoadMode::Always))
+        );
+        // `*` does not cross `/`: tools/a/b.json is not a tools/*.json candidate.
+        assert_eq!(classify("tools/a/b.json"), None);
+        assert_eq!(classify("README.md"), None);
+    }
+
+    #[test]
+    fn classify_custom_and_include() {
+        let mut config = Config::default();
+        config.scan.custom.push(CustomAssetDecl {
+            glob: "prompts/**/*.txt".to_owned(),
+            kind: AssetKind::Prompt,
+            load: None,
+        });
+        config.scan.include.push("docs/ai/*.md".to_owned());
+        let c = Classifier::new(&config).ok();
+        let c = c.as_ref();
+        assert_eq!(
+            c.and_then(|c| c.classify("prompts/a/x.txt")),
+            Some((AssetKind::Prompt, LoadMode::OnDemand))
+        );
+        assert_eq!(
+            c.and_then(|c| c.classify("docs/ai/x.md")),
+            Some((AssetKind::Custom, LoadMode::OnDemand))
+        );
+    }
+
+    #[test]
+    fn classifier_rejects_bad_glob() {
+        let mut config = Config::default();
+        config.scan.exclude.push("a/[".to_owned());
+        assert!(matches!(
+            Classifier::new(&config),
+            Err(DiscoverError::Glob {
+                field: "scan.exclude",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn sniff_tools_shapes() {
+        let dir = tempfile::tempdir().ok();
+        let Some(dir) = dir else { return };
+        let check = |body: &str| {
+            let p = dir.path().join("t.json");
+            std::fs::write(&p, body).ok();
+            sniff_tools(&p).ok()
+        };
+        assert_eq!(check(r#"[{"name":"a","input_schema":{}}]"#), Some(true));
+        assert_eq!(check(r#"{"name":"a","parameters":{}}"#), Some(true));
+        assert_eq!(check(r#"{"name":"a"}"#), Some(false));
+        assert_eq!(check("[]"), Some(false));
+        assert_eq!(check("not json"), Some(false));
+        let big = format!(
+            r#"[{{"name":"a","inputSchema":{{"description":"{}"}}}}]"#,
+            "x".repeat(70_000)
+        );
+        assert_eq!(check(&big), Some(true));
+    }
+}

@@ -22,11 +22,13 @@ Patterns are globset globs relative to the scan root. `**/` means "at any depth"
 
 ### Content sniffing for Tools
 
-A `*.json` file under a `tools/` directory is a Tools asset only if its top-level value is an object or array whose element(s) have `name` plus (`input_schema` | `parameters` | `inputSchema`). Otherwise it is ignored silently. Sniffing parses at most the first 64 KiB.
+A `*.json` file under a `tools/` directory is a Tools asset only if its top-level value is an object or array whose element(s) have `name` plus (`input_schema` | `parameters` | `inputSchema`). Otherwise it is ignored silently. Sniffing parses at most the first 64 KiB; if that prefix is truncated JSON, it falls back to a key scan (starts with `{`/`[`, contains `"name"` and a schema key). `*.tools.json` is not sniffed.
 
 ### Default excludes
 
 `.git`, `node_modules`, `target`, `dist`, `build`, `out`, `vendor`, `.venv`, `venv`, `__pycache__`, `.next`, `.turbo`, `coverage`. `.gitignore`, `.ignore` and `.pulseignore` are honored. Hidden directories are **not** skipped, since most assets live in them. `scan.exclude` / `scan.include` in `pulse.toml` extend the table.
+
+Matching order: built-in rows 1–9, then `[[scan.custom]]`, then `scan.include` globs (kind Custom, load OnDemand). Ignore files are read from the scan root downward only: `.gitignore` applies even outside a git repo, while ancestors' ignore files and the global gitignore do not (deterministic across machines). `scan.exclude` globs are relative to the root and `*` does not cross `/`; use `**/` for any depth. Unfollowed symlinks are recorded as existing paths, not analyzed. `.claude/CLAUDE.md` counts as root-level. Skill and Agent are discovered with load Always; only their description counts toward always-on tokens.
 
 ## Per-kind parsed views
 
