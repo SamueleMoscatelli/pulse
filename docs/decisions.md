@@ -35,3 +35,8 @@ Decision: the CI matrix includes `windows-latest`, running `scripts/check.sh` un
 Context: P1.1 found gaps in 02-assets: the kind of `scan.include` matches, custom vs built-in priority, and ignore-file scope.
 Decision: built-in rows win, then `[[scan.custom]]`, then `scan.include` (Custom, OnDemand). Ignore files apply from the scan root down (`require_git(false)`, `parents(false)`); ancestors' and the global gitignore are ignored for cross-machine determinism. Unfollowed symlinks count as existing paths but are not analyzed. `.claude/CLAUDE.md` is root-level (Always). Truncated `tools/*.json` sniffing falls back to a key scan.
 Consequences: a custom glob cannot reclassify a built-in asset; users who rely on a global gitignore must use `.pulseignore` or `scan.exclude`.
+
+## ADR-010 — Text utility clarifications (2026-10-12)
+Context: P1.2 found gaps in "Token estimation" and "Text normalization" (02-assets): what counts as a word separator, how NFKC interacts with the offset map, and how a normalized range maps back to an end offset.
+Decision: the token estimator splits words on ASCII whitespace only (byte loop, no decoding). Normalization runs NFKC per segment (a starter plus its trailing non-starters), so every output byte maps to the segment's first source byte; Hangul jamo composition across starters is not applied. `map` carries a trailing sentinel equal to the source length, and `source_span` extends the end to the next source unit, so dropped characters after a match fold into its span.
+Consequences: exotic Unicode spaces don't split words for token estimates; source spans may include trailing invisibles, which is harmless for reporting.

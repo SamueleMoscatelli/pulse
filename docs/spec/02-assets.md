@@ -45,7 +45,7 @@ Every JSON view keeps a JSON-pointer → `Span` map, so rules can report exact l
 
 ## Token estimation (ADR-005)
 
-`tokens(text) = round(max(chars / 4.0, words * 1.3) * calibration)`, where `chars` counts Unicode scalar values, `words` counts runs of non-whitespace, and `calibration` comes from `pulse.toml` (default `1.0`). Fenced code counts characters at 3.2 chars/token. The estimator must process ≥ 1 GB/s in the benchmark (single pass, no allocation).
+`tokens(text) = round(max(chars / 4.0, words * 1.3) * calibration)`, where `chars` counts Unicode scalar values, `words` counts runs of non-whitespace (ASCII whitespace separates words, ADR-010), and `calibration` comes from `pulse.toml` (default `1.0`). Fenced code counts characters at 3.2 chars/token. The estimator must process ≥ 1 GB/s in the benchmark (single pass, no allocation).
 
 For Skill and Agent, `Always` tokens = frontmatter `name` + `description` only. The body is OnDemand.
 
@@ -57,4 +57,4 @@ For Skill and Agent, `Always` tokens = frontmatter `name` + `description` only. 
 3. Map common confusables for Latin letters (Cyrillic/Greek lookalikes → ASCII) using a small built-in table.
 4. Lowercase, collapse whitespace runs into one space, strip Markdown emphasis markers `*_~\``.
 
-`map[i]` is the source byte offset of normalized byte `i`, so findings on normalized text report source locations. Injection, exfiltration, filler and contradiction rules match on normalized text, which makes simple obfuscation useless.
+`map[i]` is the source byte offset of normalized byte `i` (plus a trailing sentinel equal to the source length; NFKC runs per starter segment, see ADR-010), so findings on normalized text report source locations. Injection, exfiltration, filler and contradiction rules match on normalized text, which makes simple obfuscation useless.

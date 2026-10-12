@@ -9,7 +9,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 
 ## Phase 1 — Discovery & parsing
 - [x] P1.1 Asset discovery (walker + classification)
-- [ ] P1.2 Text utilities: token estimator & normalization
+- [x] P1.2 Text utilities: token estimator & normalization
 - [ ] P1.3 Markdown view (frontmatter, structure, links, imports)
 - [ ] P1.4 JSON views (MCP, settings/hooks, tools)
 
