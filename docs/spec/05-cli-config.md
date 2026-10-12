@@ -103,7 +103,7 @@ new_code_only = false
 # remediation = "Use the public alias"
 ```
 
-Validation: unknown top-level keys and unknown rule IDs are errors (exit 2) with a "did you mean" suggestion. Custom rule IDs must match `^X-[A-Z0-9]+-\d{3}$`.
+Validation: unknown top-level keys and unknown rule IDs are errors (exit 2) with a "did you mean" suggestion. Custom rule IDs must match `^X-[A-Z0-9]+-\d{3}$`. Unknown rule IDs are checked by the engine against the registry; `pulse-core` checks `max_context_debt` in [0, 1], budgets, `context.window` and `context.calibration` > 0. Optional keys: `scan.custom.load` (omitted = the kind's default), `ignore.rules` and `custom_rules.kinds` (omitted = all), `ignore.reason`, `custom_rules.remediation`. `gate.min_ratings` keys: `security`, `reliability`, `clarity`, `efficiency`.
 
 ## Inline suppressions (Markdown-based assets)
 

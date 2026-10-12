@@ -142,6 +142,19 @@ string_enum!(LoadMode, "load mode", {
     Always => "always", Conditional => "conditional", OnDemand => "on_demand",
 });
 
+/// Sonar-style rating, `A` (best) to `E` (worst). Ordered `A < B < … < E`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum Rating {
+    A,
+    B,
+    C,
+    D,
+    E,
+}
+
+string_enum!(Rating, "rating", { A => "A", B => "B", C => "C", D => "D", E => "E" });
+
 /// A set of [`AssetKind`]s, stored as a `u16` bitset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct KindSet(u16);
