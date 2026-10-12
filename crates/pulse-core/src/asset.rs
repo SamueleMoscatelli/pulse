@@ -1,10 +1,13 @@
 //! A discovered AI asset: its source text plus lazily parsed views.
 
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
-use crate::model::{AssetKind, LoadMode, Location, Span};
-use crate::text::LineIndex;
+use serde_yaml_ng::Value;
+
+use crate::model::{AssetKind, KindSet, LoadMode, Location, Span};
+use crate::parse::MarkdownView;
+use crate::text::{LineIndex, Normalized, normalize, tokens};
 
 /// One file under analysis. Owns its source; parsed views are computed at most once.
 #[derive(Debug)]
@@ -16,8 +19,11 @@ pub struct Asset {
     pub load: LoadMode,
     pub source: String,
     pub lines: LineIndex,
-    // --- Parsed views (P1.x) ---
-    // `OnceLock` caches go here: `markdown()`, `json()`, `normalized()`, `tokens()`.
+    /// `context.calibration` applied by [`Asset::tokens`].
+    calibration: f64,
+    markdown: OnceLock<MarkdownView>,
+    normalized: OnceLock<Normalized>,
+    tokens: OnceLock<u32>,
 }
 
 impl Asset {
@@ -40,6 +46,75 @@ impl Asset {
             load,
             source,
             lines,
+            calibration: 1.0,
+            markdown: OnceLock::new(),
+            normalized: OnceLock::new(),
+            tokens: OnceLock::new(),
+        }
+    }
+
+    /// Sets the token calibration factor (`context.calibration`, default 1.0).
+    #[must_use]
+    pub fn with_calibration(mut self, calibration: f64) -> Self {
+        self.calibration = calibration;
+        self.tokens = OnceLock::new();
+        self
+    }
+
+    /// The Markdown view, parsed on first use. Any kind can be viewed; rules ask only for
+    /// Markdown kinds (plain-text `.cursorrules` included).
+    pub fn markdown(&self) -> &MarkdownView {
+        self.markdown
+            .get_or_init(|| MarkdownView::parse(&self.source, &self.lines))
+    }
+
+    /// The normalized source (spec "Text normalization"), computed on first use.
+    pub fn normalized(&self) -> &Normalized {
+        self.normalized.get_or_init(|| normalize(&self.source))
+    }
+
+    /// Estimated tokens of the whole file; Markdown kinds count fenced code at the code rate.
+    pub fn tokens(&self) -> u32 {
+        *self.tokens.get_or_init(|| {
+            if KindSet::MARKDOWN.contains(self.kind) {
+                let code: Vec<Span> = self.markdown().code_spans().collect();
+                tokens::estimate_markdown(&self.source, &code, self.calibration)
+            } else {
+                tokens::estimate(&self.source, self.calibration)
+            }
+        })
+    }
+
+    /// Load mode after frontmatter promotion (spec 02-assets → Discovery table, footnote *):
+    /// a Conditional ScopedInstructions becomes Always with `.mdc` `alwaysApply: true`, or for
+    /// `.claude/rules` / `.github/instructions` without `paths`/`applyTo` or with `applyTo: "**"`.
+    /// Invalid YAML keeps the discovered mode.
+    pub fn effective_load(&self) -> LoadMode {
+        if self.kind != AssetKind::ScopedInstructions || self.load != LoadMode::Conditional {
+            return self.load;
+        }
+        let fm = self.markdown().frontmatter.as_ref();
+        if fm.is_some_and(|f| f.value.is_err()) {
+            return self.load;
+        }
+        let get = |key: &str| fm.and_then(|f| f.get(key));
+        let promoted = if self.rel_path.ends_with(".mdc") {
+            get("alwaysApply").and_then(Value::as_bool) == Some(true)
+        } else if in_dir(&self.rel_path, ".claude/rules/")
+            || in_dir(&self.rel_path, ".github/instructions/")
+        {
+            match (get("paths"), get("applyTo")) {
+                (None, None) => true,
+                (_, Some(apply)) => apply.as_str().map(str::trim) == Some("**"),
+                (Some(_), None) => false,
+            }
+        } else {
+            false
+        };
+        if promoted {
+            LoadMode::Always
+        } else {
+            self.load
         }
     }
 
@@ -55,6 +130,14 @@ impl Asset {
             end_col,
         }
     }
+}
+
+/// Whether `rel_path` lies under a `dir` (ending in `/`) at any depth.
+fn in_dir(rel_path: &str, dir: &str) -> bool {
+    rel_path.starts_with(dir)
+        || rel_path
+            .match_indices(dir)
+            .any(|(i, _)| rel_path.as_bytes()[i - 1] == b'/')
 }
 
 #[cfg(test)]
@@ -75,5 +158,67 @@ mod tests {
         assert_eq!(asset.rel_path, "a/CLAUDE.md");
         let loc = asset.span_to_location(Span::new(4, 13));
         assert_eq!((loc.line, loc.col, loc.end_line, loc.end_col), (2, 1, 2, 9));
+    }
+
+    fn asset(rel: &str, kind: AssetKind, load: LoadMode, src: &str) -> Asset {
+        Asset::new(PathBuf::from(rel), rel, kind, load, src.to_owned())
+    }
+
+    fn scoped(rel: &str, src: &str) -> LoadMode {
+        asset(
+            rel,
+            AssetKind::ScopedInstructions,
+            LoadMode::Conditional,
+            src,
+        )
+        .effective_load()
+    }
+
+    #[test]
+    fn effective_load_promotes_scoped_from_frontmatter() {
+        use LoadMode::{Always, Conditional};
+        let mdc = ".cursor/rules/a.mdc";
+        assert_eq!(scoped(mdc, "---\nalwaysApply: true\n---\nx"), Always);
+        assert_eq!(
+            scoped(mdc, "---\nalwaysApply: false\nglobs: '*.ts'\n---\n"),
+            Conditional
+        );
+        assert_eq!(scoped(mdc, "no frontmatter"), Conditional);
+        let claude = "pkg/.claude/rules/r.md";
+        assert_eq!(scoped(claude, "plain rule"), Always);
+        assert_eq!(scoped(claude, "---\npaths: ['src/**']\n---\n"), Conditional);
+        let gh = ".github/instructions/x.instructions.md";
+        assert_eq!(scoped(gh, "---\napplyTo: \"**\"\n---\n"), Always);
+        assert_eq!(scoped(gh, "---\napplyTo: \"**/*.ts\"\n---\n"), Conditional);
+        assert_eq!(
+            scoped(gh, "---\napplyTo: [\n---\n"),
+            Conditional,
+            "invalid YAML"
+        );
+        assert_eq!(scoped(".windsurf/rules/w.md", "x"), Conditional);
+        let other = asset(
+            mdc,
+            AssetKind::Instructions,
+            Conditional,
+            "---\nalwaysApply: true\n---\n",
+        );
+        assert_eq!(other.effective_load(), Conditional);
+    }
+
+    #[test]
+    fn lazy_views_are_cached_and_cursorrules_is_markdown() {
+        let a = asset(
+            ".cursorrules",
+            AssetKind::Instructions,
+            LoadMode::Always,
+            "Use tabs. See @docs/style.md\n",
+        )
+        .with_calibration(2.0);
+        assert!(std::ptr::eq(a.markdown(), a.markdown()));
+        assert_eq!(a.markdown().imports[0].path, "docs/style.md");
+        assert_eq!(a.normalized().text, "use tabs. see @docs/style.md ");
+        let raw = tokens::estimate(&a.source, 2.0);
+        assert_eq!(a.tokens(), raw);
+        assert_eq!(a.tokens(), raw);
     }
 }
