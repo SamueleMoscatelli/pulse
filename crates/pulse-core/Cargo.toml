@@ -10,6 +10,7 @@ rust-version.workspace = true
 [dependencies]
 globset = "0.4.20"
 ignore = "0.4.33"
+jsonc-parser = "0.34.0"
 memchr = "2.8.3"
 pulldown-cmark = { version = "0.13.4", default-features = false }
 serde = { version = "1.0.229", features = ["derive"] }

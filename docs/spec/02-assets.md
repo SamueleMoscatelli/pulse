@@ -43,6 +43,8 @@ Matching order: built-in rows 1–9, then `[[scan.custom]]`, then `scan.include`
 
 Every JSON view keeps a JSON-pointer → `Span` map, so rules can report exact lines for nested keys.
 
+JSON view details (ADR-012): `json()` is JSONC (comments, trailing commas) as an owned span tree; the pointer map is built on first use. MCP servers carry `args`/`env`/`headers` beside a `Transport` (`Stdio`/`Http`/`Sse`/`Unknown`). Hooks assets reuse the Settings view. Shape problems are `ViewError { span, msg }` lists on each view; syntax errors live on `json()`.
+
 Markdown view details (ADR-011): frontmatter needs a closing `---` line; `@path` imports skip code, raw HTML, links, emails and bare URLs. ScopedInstructions promotion (Discovery table, footnote *) is resolved by `Asset::effective_load()`.
 
 ## Token estimation (ADR-005)
