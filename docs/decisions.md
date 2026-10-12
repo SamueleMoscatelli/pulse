@@ -26,3 +26,7 @@ Decision: AI-SEC-001/002/003/008/012 can only be suppressed through `pulse.toml`
 
 ## ADR-007 — Severity scale and ratings (2026-10-12)
 Decision: Critical/High/Medium/Low/Info (the draft's scale, not Sonar's Blocker/Major/Minor). Security/Reliability/Clarity ratings use the worst open severity; Efficiency uses the context-debt ratio (see 04-scoring-gate.md).
+
+## ADR-008 — Windows in CI from Phase 0 (2026-10-12)
+Context: P0.1 specified CI on ubuntu + macos only, but Phase 7 ships a Windows x64 binary.
+Decision: the CI matrix includes `windows-latest`, running `scripts/check.sh` under Git Bash. `.gitattributes` forces LF checkout so fmt, snapshots and fixtures behave the same on every OS; CRLF test input is generated in code.

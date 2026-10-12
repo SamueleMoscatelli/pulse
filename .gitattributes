@@ -1,0 +1,2 @@
+# Check out text as LF on every OS (Windows CI would otherwise get CRLF via autocrlf).
+* text=auto eol=lf

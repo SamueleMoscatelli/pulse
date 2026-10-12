@@ -10,7 +10,7 @@ Goal: a compiling workspace with tooling, the core vocabulary types, and configu
   - Five crates (`pulse-core`, `pulse-rules`, `pulse-engine`, `pulse-report` as libs; `pulse-cli` as bin named `pulse`), each with `lints.workspace = true` and the dependency edges from the spec.
   - `pulse-cli`: `clap` derive with subcommands `init`, `scan`, `ci`, `baseline`, `rules`, `explain` as stubs (print "not implemented yet" to stderr, exit 2); `--version` works.
   - `rust-toolchain.toml` (stable + rustfmt, clippy), `rustfmt.toml` (`edition = "2024"`, `max_width = 100`), `clippy.toml` (`allow-unwrap-in-tests = true`, `allow-expect-in-tests = true`, `allow-print-in-tests = true`), `.gitignore` additions (`/target`, `*.snap.new`, `.pulse/cache`).
-  - `.github/workflows/ci.yml`: ubuntu + macos, runs `scripts/check.sh`.
+  - `.github/workflows/ci.yml`: ubuntu + macos + windows (ADR-008), runs `scripts/check.sh`.
   - `README.md`: 15-line stub (what, status, build instructions).
   - Add dependencies lazily: each task `cargo add`s what it first needs. Here: only `clap` (features `derive`), `anyhow`.
 - **Done when**
