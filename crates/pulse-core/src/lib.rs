@@ -4,6 +4,7 @@ pub mod asset;
 pub mod config;
 pub mod discover;
 pub mod model;
+pub mod parse;
 pub mod rule;
 pub mod text;
 
@@ -14,5 +15,6 @@ pub use model::{
     AssetKind, Category, Finding, KindSet, LoadMode, Location, ParseEnumError, Rating, RuleMeta,
     Severity, Span,
 };
+pub use parse::MarkdownView;
 pub use rule::{ProjectRule, Rule, RuleCtx, RuleOptions};
 pub use text::LineIndex;

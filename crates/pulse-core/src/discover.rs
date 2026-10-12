@@ -74,7 +74,7 @@ enum Refine {
     None,
     /// CLAUDE.md / AGENTS.md: root-level is Always, nested is Conditional.
     NestedConditional,
-    /// Promoted to Always by frontmatter (resolved in P1.3).
+    /// Promoted to Always by frontmatter (see `Asset::effective_load`).
     Scoped,
     /// `tools/*.json`: a Tools asset only if its content looks like tool schemas.
     SniffTools,
@@ -275,8 +275,7 @@ fn resolve_load(entry: Entry, rel_path: &str) -> LoadMode {
                 LoadMode::Conditional
             }
         }
-        // TODO(P1.3): promote to Always from frontmatter (`alwaysApply: true`; no `paths`/`applyTo`,
-        // or `applyTo: "**"`).
+        // Scoped: frontmatter promotion happens in `Asset::effective_load`.
         Refine::Scoped | Refine::None | Refine::SniffTools => entry.load,
     }
 }

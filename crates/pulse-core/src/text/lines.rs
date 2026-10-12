@@ -21,6 +21,11 @@ impl LineIndex {
         self.starts.len()
     }
 
+    /// 1-based line of byte offset `byte` (offsets past the end are on the last line).
+    pub fn line_of(&self, byte: u32) -> u32 {
+        to_u32(self.starts.partition_point(|&s| s <= byte))
+    }
+
     /// 1-based `(line, col)` of byte offset `byte` in `source`; `col` counts chars, not bytes.
     ///
     /// `source` must be the string this index was built from. Offsets past the end clamp
