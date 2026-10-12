@@ -1,0 +1,67 @@
+# Pulse configuration — https://github.com/SamueleMoscatelli/pulse
+# Every key is optional; these are the defaults.
+
+[scan]
+include = []                 # extra globs to treat as assets, e.g. ["prompts/**/*.md"]
+exclude = []                 # globs to skip, e.g. ["examples/**"]
+max_file_bytes = 1048576
+follow_symlinks = false
+
+# Declare additional asset kinds for custom paths
+# [[scan.custom]]
+# glob = "prompts/**/*.txt"
+# kind = "prompt"            # instructions | scoped_instructions | agent | prompt | skill | tools | mcp_config | settings | hooks
+# load = "on_demand"         # always | conditional | on_demand
+
+[context]
+window = 200000              # model context window used for context_load
+calibration = 1.0            # multiply token estimates (calibrate against your tokenizer)
+
+[budgets]                    # tokens unless noted
+instructions = 3000
+scoped_instructions = 1500
+agent = 2500
+prompt = 2000
+skill = 5000
+tools = 3000
+custom = 3000
+always_on = 8000
+description = 150
+mcp_servers = 8              # count
+tools_count = 40             # count
+
+[gate]
+fail_on_severity = "high"
+max_context_debt = 0.10
+max_always_on_tokens = 0
+new_code_only = false
+# min_ratings = { security = "A", reliability = "B" }
+
+[rules]
+# Per-rule toggles and severity overrides:
+# "AI-COG-003" = "off"
+# "AI-COG-004" = "medium"
+#
+# Per-rule options:
+# [rules.AI-SEC-010]
+# allowed_domains = ["github.com", "docs.rs"]
+# [rules.AI-COG-001]
+# exclusive = [["bun", "deno"]]
+# [rules.AI-SEC-002]
+# allow = ["ignore previous instructions"]   # phrases to accept (e.g. in security docs)
+
+# Suppress findings by path (config suppressions work for every rule, including critical security rules)
+# [[ignore]]
+# path = "docs/attacks/**"
+# rules = ["AI-SEC-002", "AI-SEC-011"]
+# reason = "Documented attack samples"
+
+# Custom declarative rules
+# [[custom_rules]]
+# id = "X-ORG-001"
+# name = "No internal hostnames"
+# severity = "high"
+# kinds = ["instructions", "skill"]
+# pattern = '\binternal\.corp\.example\b'
+# message = "Internal hostname leaked into AI context"
+# remediation = "Use the public alias"

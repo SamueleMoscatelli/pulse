@@ -5,7 +5,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 ## Phase 0 — Foundations
 - [x] P0.1 Cargo workspace & tooling scaffold
 - [x] P0.2 Core model types, Asset & LineIndex
-- [ ] P0.3 Config (`pulse.toml`) & `pulse init`
+- [x] P0.3 Config (`pulse.toml`) & `pulse init`
 
 ## Phase 1 — Discovery & parsing
 - [ ] P1.1 Asset discovery (walker + classification)
