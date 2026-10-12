@@ -30,3 +30,8 @@ Decision: Critical/High/Medium/Low/Info (the draft's scale, not Sonar's Blocker/
 ## ADR-008 — Windows in CI from Phase 0 (2026-10-12)
 Context: P0.1 specified CI on ubuntu + macos only, but Phase 7 ships a Windows x64 binary.
 Decision: the CI matrix includes `windows-latest`, running `scripts/check.sh` under Git Bash. `.gitattributes` forces LF checkout so fmt, snapshots and fixtures behave the same on every OS; CRLF test input is generated in code.
+
+## ADR-009 — Discovery clarifications (2026-10-12)
+Context: P1.1 found gaps in 02-assets: the kind of `scan.include` matches, custom vs built-in priority, and ignore-file scope.
+Decision: built-in rows win, then `[[scan.custom]]`, then `scan.include` (Custom, OnDemand). Ignore files apply from the scan root down (`require_git(false)`, `parents(false)`); ancestors' and the global gitignore are ignored for cross-machine determinism. Unfollowed symlinks count as existing paths but are not analyzed. `.claude/CLAUDE.md` is root-level (Always). Truncated `tools/*.json` sniffing falls back to a key scan.
+Consequences: a custom glob cannot reclassify a built-in asset; users who rely on a global gitignore must use `.pulseignore` or `scan.exclude`.

@@ -1,0 +1,3 @@
+[[scan.custom]]
+glob = "playbooks/*.txt"
+kind = "prompt"

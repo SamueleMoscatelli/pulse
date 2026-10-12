@@ -8,7 +8,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [x] P0.3 Config (`pulse.toml`) & `pulse init`
 
 ## Phase 1 — Discovery & parsing
-- [ ] P1.1 Asset discovery (walker + classification)
+- [x] P1.1 Asset discovery (walker + classification)
 - [ ] P1.2 Text utilities: token estimator & normalization
 - [ ] P1.3 Markdown view (frontmatter, structure, links, imports)
 - [ ] P1.4 JSON views (MCP, settings/hooks, tools)
@@ -58,4 +58,4 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [ ] P7.3 Docs, license, dogfooding in CI
 
 ## Backlog (unscheduled; promote by adding a card + roadmap line)
-`pulse fix` autofixes · LSP server & VS Code extension · WASM playground · opt-in `--deep` LLM analysis · result cache keyed by content hash · optional tiktoken feature · multilingual injection lexicon · `apm` integration · scanning prompts embedded in source code.
+`pulse fix` autofixes · LSP server & VS Code extension · WASM playground · opt-in `--deep` LLM analysis · result cache keyed by content hash · optional tiktoken feature · multilingual injection lexicon · `apm` integration · scanning prompts embedded in source code. · default excludes (`build`, `out`, …) also prune same-named dirs inside asset trees (e.g. `.claude/commands/build/`): consider pruning them only outside hidden dirs.
