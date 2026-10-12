@@ -6,7 +6,7 @@ use std::sync::{Arc, OnceLock};
 use serde_yaml_ng::Value;
 
 use crate::model::{AssetKind, KindSet, LoadMode, Location, Span};
-use crate::parse::MarkdownView;
+use crate::parse::{JsonDoc, MarkdownView, McpView, SettingsView, ToolsView};
 use crate::text::{LineIndex, Normalized, normalize, tokens};
 
 /// One file under analysis. Owns its source; parsed views are computed at most once.
@@ -22,6 +22,10 @@ pub struct Asset {
     /// `context.calibration` applied by [`Asset::tokens`].
     calibration: f64,
     markdown: OnceLock<MarkdownView>,
+    json: OnceLock<JsonDoc>,
+    mcp: OnceLock<McpView>,
+    settings: OnceLock<SettingsView>,
+    tools_view: OnceLock<ToolsView>,
     normalized: OnceLock<Normalized>,
     tokens: OnceLock<u32>,
 }
@@ -48,6 +52,10 @@ impl Asset {
             lines,
             calibration: 1.0,
             markdown: OnceLock::new(),
+            json: OnceLock::new(),
+            mcp: OnceLock::new(),
+            settings: OnceLock::new(),
+            tools_view: OnceLock::new(),
             normalized: OnceLock::new(),
             tokens: OnceLock::new(),
         }
@@ -66,6 +74,33 @@ impl Asset {
     pub fn markdown(&self) -> &MarkdownView {
         self.markdown
             .get_or_init(|| MarkdownView::parse(&self.source, &self.lines))
+    }
+
+    /// The generic JSON(C) document, parsed on first use.
+    pub fn json(&self) -> &JsonDoc {
+        self.json.get_or_init(|| JsonDoc::parse(&self.source))
+    }
+
+    /// The MCP config view (McpConfig assets), built on first use.
+    pub fn mcp(&self) -> &McpView {
+        self.mcp.get_or_init(|| McpView::build(self.json()))
+    }
+
+    /// The settings view (Settings assets; a Hooks asset fills only `hooks`), built on first use.
+    pub fn settings(&self) -> &SettingsView {
+        self.settings
+            .get_or_init(|| SettingsView::build(self.json()))
+    }
+
+    /// The hook entries of a Settings or Hooks asset.
+    pub fn hooks(&self) -> &[crate::parse::HookEntry] {
+        &self.settings().hooks
+    }
+
+    /// The tool definitions view (Tools assets), built on first use.
+    pub fn tools(&self) -> &ToolsView {
+        self.tools_view
+            .get_or_init(|| ToolsView::build(self.json()))
     }
 
     /// The normalized source (spec "Text normalization"), computed on first use.

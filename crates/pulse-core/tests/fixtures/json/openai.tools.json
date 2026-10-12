@@ -1,0 +1,18 @@
+{
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "search_docs",
+        "description": "Search the documentation.",
+        "parameters": { "type": "object", "properties": { "q": { "type": "string" } } }
+      }
+    },
+    {
+      "type": "function",
+      "name": "flat_tool",
+      "description": "Responses API form.",
+      "parameters": { "type": "object", "properties": {} }
+    }
+  ]
+}

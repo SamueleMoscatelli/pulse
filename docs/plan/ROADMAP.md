@@ -11,7 +11,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [x] P1.1 Asset discovery (walker + classification)
 - [x] P1.2 Text utilities: token estimator & normalization
 - [x] P1.3 Markdown view (frontmatter, structure, links, imports)
-- [ ] P1.4 JSON views (MCP, settings/hooks, tools)
+- [x] P1.4 JSON views (MCP, settings/hooks, tools)
 
 ## Phase 2 — Engine & MVP (v0.1.0)
 - [ ] P2.1 Engine pipeline, rule registry, fixture harness, AI-STR-002

@@ -1,0 +1,21 @@
+// VS Code MCP config (JSONC)
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "db-password",
+      "description": "Database password",
+      "password": true,
+    },
+  ],
+  "servers": {
+    /* local database */
+    "db": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["mcp-server-postgres"],
+      "env": { "PGPASSWORD": "${input:db-password}" },
+    },
+    "broken": "not an object",
+  },
+}
