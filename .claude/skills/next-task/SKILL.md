@@ -10,10 +10,12 @@ disable-model-invocation: true
 Implement exactly **one** roadmap task, then stop. Be economical with context: read only what the card points to.
 
 ## 1. Load the task
+- Sync first: `git switch main && git pull --ff-only`. If a previous task's PR is still open (its task isn't ticked on `main`), stop and tell the user to merge it first.
 - If `$ARGUMENTS` is a task ID, run `scripts/task.sh show $ARGUMENTS`; otherwise run `scripts/task.sh next`.
 - If the card's **Depends** tasks are not ticked in `docs/plan/ROADMAP.md`, stop and tell the user.
 - If `git log -1` fails (no commits yet), first commit the existing workspace: `git add -A && git commit -m "chore: workspace setup"`.
 - If `git status --porcelain` shows uncommitted changes that are not yours, stop and ask the user how to proceed.
+- Create the task branch: `git switch -c task/<ID>-<short-slug>` (e.g. `task/P0.2-core-model`). Never commit task work to `main`.
 
 ## 2. Gather only the needed context
 - Run each `scripts/spec.sh "<query>"` listed under **Read**. Load the skills it names (e.g. `add-rule`).
@@ -36,6 +38,8 @@ Implement exactly **one** roadmap task, then stop. Be economical with context: r
 - If you discover follow-up work outside the card's scope, append it as one line under the relevant future card's **Do**, or under the roadmap Backlog. Don't do it now.
 - `scripts/task.sh done <ID>`
 - `git add -A && git commit -m "<type>(<ID>): <summary>"` (`feat`/`fix`/`chore`/`test`/`docs`), ending with the attribution lines from the system reminder, if present.
+- `git push -u origin HEAD`, then open the PR: `gh pr create --base main --title "<commit subject>" --body "<summary + Done-when evidence>"`, body ending with the PR attribution line from the system reminder, if present. If `gh` is unavailable, give the user `https://github.com/SamueleMoscatelli/pulse/compare/<branch>?expand=1` instead.
+- Don't merge: the user merges (squash) once CI is green on all OSes.
 
 ## 6. Report (≤ 12 lines)
-Task ID + title · what was built (key files) · test evidence · deviations/ADRs · next task (`scripts/task.sh status --brief`). Then suggest starting a fresh chat for `/next-task`.
+Task ID + title · PR link · what was built (key files) · test evidence · deviations/ADRs · next task (`scripts/task.sh status --brief`). Then suggest merging the PR and starting a fresh chat for `/next-task`.

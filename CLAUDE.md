@@ -3,7 +3,7 @@
 Static analyzer and Quality Gate for AI assets (instructions, agents, prompts, skills, tools, MCP configs, hooks). Rust workspace, single binary `pulse`. Deterministic, offline, and fast (scan in < 20 ms is a hard requirement).
 
 ## Workflow
-- Work is organized in roadmap tasks: `/next-task` implements exactly one. Status: `scripts/task.sh status`.
+- Work is organized in roadmap tasks: `/next-task` implements exactly one, on a `task/<ID>-<slug>` branch, and opens a PR (squash-merged by the user once CI is green). Never commit task work to `main`. Status: `scripts/task.sh status`.
 - The spec lives in `docs/spec/`. Read sections, not files: `scripts/spec.sh "<heading words>"` (no args = TOC).
 - Spec deviations: amend the spec section and append an ADR to `docs/decisions.md`. Never relitigate an existing ADR silently.
 
