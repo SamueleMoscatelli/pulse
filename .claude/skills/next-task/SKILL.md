@@ -38,7 +38,7 @@ Implement exactly **one** roadmap task, then stop. Be economical with context: r
 - If you discover follow-up work outside the card's scope, append it as one line under the relevant future card's **Do**, or under the roadmap Backlog. Don't do it now.
 - `scripts/task.sh done <ID>`
 - `git add -A && git commit -m "<type>(<ID>): <summary>"` (`feat`/`fix`/`chore`/`test`/`docs`), ending with the attribution lines from the system reminder, if present.
-- `git push -u origin HEAD`, then open the PR: `gh pr create --base main --title "<commit subject>" --body "<summary + Done-when evidence>"`, body ending with the PR attribution line from the system reminder, if present. If `gh` is unavailable, give the user `https://github.com/SamueleMoscatelli/pulse/compare/<branch>?expand=1` instead.
+- `git push -u origin HEAD`, then open the PR: `scripts/pr.sh "<commit subject>" <<'EOF' … EOF` with the body (summary + Done-when evidence) on stdin, ending with the PR attribution line from the system reminder, if present. Without `gh` it prints a compare URL with title and body prefilled: give the user that full URL as a markdown link.
 - Don't merge: the user merges (squash) once CI is green on all OSes.
 
 ## 6. Report (≤ 12 lines)
