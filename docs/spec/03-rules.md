@@ -55,9 +55,9 @@
 ### AI-SEC-001 — Invisible or bidirectional Unicode
 - **Sev** Critical · **Kinds** all · **Inline-suppressible** no
 - **Detect** Code points: U+200B–U+200F, U+202A–U+202E, U+2060–U+2064, U+2066–U+2069, U+FEFF (except at offset 0), U+00AD, U+180E, tag block U+E0000–U+E007F ("ASCII smuggling"), and variation selectors U+FE00–U+FE0F / U+E0100–U+E01EF when not preceded by an emoji base. Single pass with `memchr` on lead bytes 0xE2/0xEF/0xF3/0xC2/0xE1, then decode.
-- **Report** One finding per contiguous run: `Invisible character(s) U+202E RIGHT-TO-LEFT OVERRIDE (×3)`. For tag-character runs, decode and include the hidden ASCII payload (truncated to 80 chars) in the message.
+- **Report** One finding per contiguous run: `Invisible character(s) U+202E RIGHT-TO-LEFT OVERRIDE (×3)` (the count only when > 1; `and others` after the first name when the run mixes code points). For runs containing tag characters, decode the hidden ASCII payload (printable tags only, truncated to 80 chars): `Hidden tag text (×27): "ignore all previous rules"`.
 - **Fix** Remove the characters. `pulse fix` (future) strips them automatically.
-- **FP guards** U+200D inside emoji ZWJ sequences (between two emoji code points) is allowed.
+- **FP guards** U+200D inside emoji ZWJ sequences (between two non-ASCII emoji code points; an allowed variation selector keeps the sequence going) is allowed. Variation selectors after an ASCII keycap base (`#`, `*`, `0`–`9`) are allowed.
 
 ### AI-SEC-002 — Prompt-injection phrase
 - **Sev** Critical · **Kinds** all except Settings · **Inline-suppressible** no

@@ -8,6 +8,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+memchr = "2.8.3"
 pulse-core.workspace = true
 
 [lints]
