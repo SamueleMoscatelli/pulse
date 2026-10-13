@@ -1,0 +1,6 @@
+{
+  // JSONC comments and trailing commas are fine in MCP configs.
+  "mcpServers": {
+    "github": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github@1.0.0"], },
+  },
+}

@@ -1,5 +1,7 @@
 //! Byte offset → (line, column) mapping.
 
+use crate::model::Span;
+
 /// Start offsets of every line in a source, for fast byte → (line, col) lookups.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LineIndex {
@@ -40,6 +42,23 @@ impl LineIndex {
         let start = self.starts[line] as usize;
         let col = source.get(start..byte).map_or(0, |s| s.chars().count());
         (to_u32(line + 1), to_u32(col + 1))
+    }
+
+    /// Byte span of 1-based `line`, without its `\n` / `\r\n` terminator (lines past the end
+    /// clamp to the last line). `source` must be the string this index was built from.
+    pub fn line_span(&self, source: &str, line: u32) -> Span {
+        let i = (line.max(1) as usize - 1).min(self.starts.len() - 1);
+        let start = self.starts[i] as usize;
+        let end = self
+            .starts
+            .get(i + 1)
+            .map_or(source.len(), |&next| next as usize - 1);
+        let end = if source.as_bytes().get(end.wrapping_sub(1)) == Some(&b'\r') && end > start {
+            end - 1
+        } else {
+            end
+        };
+        Span::new(to_u32(start), to_u32(end))
     }
 }
 
@@ -100,5 +119,18 @@ mod tests {
         assert_eq!(loc(src, 99), (2, 3));
         let trailing = "a\n";
         assert_eq!(loc(trailing, 2), (2, 1));
+    }
+
+    #[test]
+    fn line_spans() {
+        let src = "ab\r\ncd\n\nef";
+        let idx = LineIndex::new(src);
+        let text = |l| {
+            let s = idx.line_span(src, l);
+            &src[s.start as usize..s.end as usize]
+        };
+        assert_eq!([text(0), text(1), text(2), text(3)], ["ab", "ab", "cd", ""]);
+        assert_eq!([text(4), text(99)], ["ef", "ef"]);
+        assert_eq!(LineIndex::new("").line_span("", 1), Span::new(0, 0));
     }
 }

@@ -30,4 +30,5 @@ Goal: CI-grade integration: machine-readable output, PR feedback, new-code focus
 - **Size** M · **Depends** P6.4
 - **Read** `scripts/spec.sh "Custom rules (declarative)"`, `scripts/spec.sh "pulse.toml"` (`[[custom_rules]]`)
 - **Do** `pulse-rules/src/custom.rs`: compile `CustomRule`s at engine start into dynamic rule objects (`Box<dyn Rule>` stored in the engine next to the static registry); matchers `pattern` | `phrases` | `max_tokens`; they appear in `pulse rules`; config errors (bad regex) → exit 2 with the rule ID.
+- [from P2.1] Custom-rule IDs in `[rules]` are accepted but their severity/enabled settings are not applied yet (`pulse-engine` `Resolved::new`); wire them here.
 - **Done when** check is green; an engine test with two custom rules; a CLI test showing a custom finding in terminal output.

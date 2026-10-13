@@ -16,5 +16,5 @@ pub use model::{
     Severity, Span,
 };
 pub use parse::{JsonDoc, MarkdownView, McpView, SettingsView, ToolsView};
-pub use rule::{ProjectRule, Rule, RuleCtx, RuleOptions};
+pub use rule::{OptionsStore, ProjectRule, Rule, RuleCtx, RuleOptions};
 pub use text::LineIndex;
