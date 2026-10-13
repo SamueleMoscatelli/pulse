@@ -19,6 +19,11 @@ pub struct Asset {
     pub load: LoadMode,
     pub source: String,
     pub lines: LineIndex,
+    /// The file was not valid UTF-8 and `source` is its lossy decoding (AI-STR-002).
+    pub lossy: bool,
+    /// Why the file was not analyzed (over `scan.max_file_bytes`, unreadable); `source` is
+    /// then empty and only AI-STR-002 runs on it.
+    pub skipped: Option<String>,
     /// `context.calibration` applied by [`Asset::tokens`].
     calibration: f64,
     markdown: OnceLock<MarkdownView>,
@@ -50,6 +55,8 @@ impl Asset {
             load,
             source,
             lines,
+            lossy: false,
+            skipped: None,
             calibration: 1.0,
             markdown: OnceLock::new(),
             json: OnceLock::new(),
@@ -59,6 +66,36 @@ impl Asset {
             normalized: OnceLock::new(),
             tokens: OnceLock::new(),
         }
+    }
+
+    /// Like [`Asset::new`] from raw bytes: invalid UTF-8 is decoded lossily and flagged.
+    pub fn from_bytes(
+        path: impl Into<Arc<Path>>,
+        rel_path: impl Into<String>,
+        kind: AssetKind,
+        load: LoadMode,
+        bytes: Vec<u8>,
+    ) -> Self {
+        let (source, lossy) = match String::from_utf8(bytes) {
+            Ok(s) => (s, false),
+            Err(e) => (String::from_utf8_lossy(e.as_bytes()).into_owned(), true),
+        };
+        let mut asset = Self::new(path, rel_path, kind, load, source);
+        asset.lossy = lossy;
+        asset
+    }
+
+    /// An empty asset standing for a file that was not analyzed, with the reason.
+    pub fn skipped(
+        path: impl Into<Arc<Path>>,
+        rel_path: impl Into<String>,
+        kind: AssetKind,
+        load: LoadMode,
+        reason: impl Into<String>,
+    ) -> Self {
+        let mut asset = Self::new(path, rel_path, kind, load, String::new());
+        asset.skipped = Some(reason.into());
+        asset
     }
 
     /// Sets the token calibration factor (`context.calibration`, default 1.0).
@@ -118,6 +155,26 @@ impl Asset {
                 tokens::estimate(&self.source, self.calibration)
             }
         })
+    }
+
+    /// Tokens this asset adds to every session (spec 00-overview → Always-on context): the
+    /// whole file for always-loaded instructions, prompts and tools; only the frontmatter
+    /// `description` for skills and agents; nothing for MCP configs, settings and hooks.
+    pub fn always_tokens(&self) -> u32 {
+        if self.effective_load() != LoadMode::Always {
+            return 0;
+        }
+        match self.kind {
+            AssetKind::Skill | AssetKind::Agent => self
+                .markdown()
+                .frontmatter
+                .as_ref()
+                .and_then(|f| f.get("description"))
+                .and_then(Value::as_str)
+                .map_or(0, |d| tokens::estimate(d, self.calibration)),
+            AssetKind::McpConfig | AssetKind::Settings | AssetKind::Hooks => 0,
+            _ => self.tokens(),
+        }
     }
 
     /// Load mode after frontmatter promotion (spec 02-assets → Discovery table, footnote *):
@@ -238,6 +295,68 @@ mod tests {
             "---\nalwaysApply: true\n---\n",
         );
         assert_eq!(other.effective_load(), Conditional);
+    }
+
+    #[test]
+    fn from_bytes_flags_invalid_utf8() {
+        let ok = Asset::from_bytes(
+            PathBuf::from("a.md"),
+            "a.md",
+            AssetKind::Prompt,
+            LoadMode::OnDemand,
+            b"hi".to_vec(),
+        );
+        assert!(!ok.lossy);
+        let bad = Asset::from_bytes(
+            PathBuf::from("a.md"),
+            "a.md",
+            AssetKind::Prompt,
+            LoadMode::OnDemand,
+            b"h\xffi".to_vec(),
+        );
+        assert!(bad.lossy);
+        assert_eq!(bad.source, "h\u{FFFD}i");
+        let skipped = Asset::skipped(
+            PathBuf::from("a.md"),
+            "a.md",
+            AssetKind::Prompt,
+            LoadMode::OnDemand,
+            "too big",
+        );
+        assert_eq!(
+            (skipped.source.as_str(), skipped.skipped.as_deref()),
+            ("", Some("too big"))
+        );
+    }
+
+    #[test]
+    fn always_tokens_by_kind() {
+        let skill = asset(
+            "s/SKILL.md",
+            AssetKind::Skill,
+            LoadMode::Always,
+            "---\ndescription: one two three four\n---\nlong body text here and more\n",
+        );
+        assert_eq!(
+            skill.always_tokens(),
+            tokens::estimate("one two three four", 1.0)
+        );
+        let root = asset(
+            "CLAUDE.md",
+            AssetKind::Instructions,
+            LoadMode::Always,
+            "Use tabs.\n",
+        );
+        assert_eq!(root.always_tokens(), root.tokens());
+        let prompt = asset(
+            "p.prompt.md",
+            AssetKind::Prompt,
+            LoadMode::OnDemand,
+            "Use tabs.\n",
+        );
+        assert_eq!(prompt.always_tokens(), 0);
+        let mcp = asset(".mcp.json", AssetKind::McpConfig, LoadMode::Always, "{}");
+        assert_eq!(mcp.always_tokens(), 0);
     }
 
     #[test]

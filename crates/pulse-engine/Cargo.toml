@@ -10,6 +10,12 @@ rust-version.workspace = true
 [dependencies]
 pulse-core.workspace = true
 pulse-rules.workspace = true
+rayon = "1.12.0"
+thiserror = "2.0.21"
+xxhash-rust = { version = "0.8.19", features = ["xxh3"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tempfile = "3.27.0"

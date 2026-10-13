@@ -96,7 +96,7 @@ pub trait ProjectRule: Sync {
 
 `Asset` owns the source (`String`), the path, kind, load mode, `LineIndex`, and `OnceLock` caches for its parsed views (`markdown()`, `json()`, `normalized()`, `tokens()`). Rules share parsed views, so each view is computed at most once per asset.
 
-`RuleCtx` holds the resolved per-rule options (`&RuleOptions` from `pulse.toml`), the project root and a file-exists oracle (a `HashSet` of walked paths) for reference checks.
+`RuleCtx` holds the per-rule options store (`ctx.options::<T>(rule_id)`: typed, from `[rules.<ID>]`, parsed once per scan, validated up front through `Rule::validate`), the project root and a file-exists oracle (a `HashSet` of walked paths) for reference checks. Oversized/unreadable files become skipped assets that only AI-STR-002 sees (ADR-013).
 
 ## Performance design
 
