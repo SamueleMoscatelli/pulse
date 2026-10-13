@@ -2,11 +2,15 @@
 
 use pulse_core::{ProjectRule, Rule, RuleMeta};
 
+pub mod security;
 pub mod structure;
 pub mod util;
 
 /// Asset-scoped rules, in ID order.
-pub static RULES: &[&dyn Rule] = &[&structure::content::InvalidContent];
+pub static RULES: &[&dyn Rule] = &[
+    &security::unicode::InvisibleUnicode,
+    &structure::content::InvalidContent,
+];
 
 /// Project-scoped rules, in ID order.
 pub static PROJECT_RULES: &[&dyn ProjectRule] = &[];
