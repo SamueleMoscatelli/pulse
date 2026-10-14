@@ -177,6 +177,22 @@ impl Asset {
         }
     }
 
+    /// Estimated tokens after the frontmatter block (the whole file when there is none);
+    /// this is the OnDemand body of a skill or agent.
+    pub fn body_tokens(&self) -> u32 {
+        let Some(fm) = self.markdown().frontmatter.as_ref() else {
+            return self.tokens();
+        };
+        let start = fm.span.end;
+        let code: Vec<Span> = self
+            .markdown()
+            .code_spans()
+            .filter(|s| s.start >= start)
+            .map(|s| Span::new(s.start - start, s.end - start))
+            .collect();
+        tokens::estimate_markdown(&self.source[start as usize..], &code, self.calibration)
+    }
+
     /// Load mode after frontmatter promotion (spec 02-assets → Discovery table, footnote *):
     /// a Conditional ScopedInstructions becomes Always with `.mdc` `alwaysApply: true`, or for
     /// `.claude/rules` / `.github/instructions` without `paths`/`applyTo` or with `applyTo: "**"`.
@@ -329,6 +345,11 @@ mod tests {
         );
     }
 
+    fn skill_with_body(body: &str) -> Asset {
+        let src = format!("---\ndescription: d\n---\n{body}");
+        asset("s/SKILL.md", AssetKind::Skill, LoadMode::Always, &src)
+    }
+
     #[test]
     fn always_tokens_by_kind() {
         let skill = asset(
@@ -357,6 +378,12 @@ mod tests {
         assert_eq!(prompt.always_tokens(), 0);
         let mcp = asset(".mcp.json", AssetKind::McpConfig, LoadMode::Always, "{}");
         assert_eq!(mcp.always_tokens(), 0);
+        let body = "long body text here and more\n```\ncode\n```\n";
+        assert_eq!(
+            skill_with_body(body).body_tokens(),
+            asset("b.md", AssetKind::Prompt, LoadMode::OnDemand, body).tokens()
+        );
+        assert_eq!(root.body_tokens(), root.tokens());
     }
 
     #[test]

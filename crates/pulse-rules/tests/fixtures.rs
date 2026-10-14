@@ -11,7 +11,7 @@ use std::collections::{BTreeSet, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use pulse_core::{Asset, AssetKind, Finding, LoadMode, OptionsStore, RuleCtx, Severity};
+use pulse_core::{Asset, AssetKind, Config, Finding, LoadMode, OptionsStore, RuleCtx, Severity};
 use pulse_rules::{PROJECT_RULES, RULES, all_meta};
 
 fn crate_dir() -> &'static Path {
@@ -49,8 +49,19 @@ fn run(rule_id: &str, assets: &[Asset]) -> Vec<Finding> {
 
 /// Like [`run`], with `[rules.<ID>]` options.
 fn run_with(rule_id: &str, assets: &[Asset], options: &OptionsStore) -> Vec<Finding> {
+    run_cfg(rule_id, assets, options, &Config::default())
+}
+
+/// Like [`run_with`], with a whole `pulse.toml` config (e.g. `[budgets]`).
+fn run_cfg(
+    rule_id: &str,
+    assets: &[Asset],
+    options: &OptionsStore,
+    config: &Config,
+) -> Vec<Finding> {
     let files: HashSet<String> = assets.iter().map(|a| a.rel_path.clone()).collect();
     let ctx = RuleCtx {
+        config,
         options,
         root: Path::new("."),
         files: &files,
@@ -387,4 +398,130 @@ fn sec002_settings_are_not_checked() {
         )],
     );
     assert!(f.is_empty());
+}
+
+// Token budgets: large content is generated, never committed.
+
+/// Text estimated at exactly `n` tokens (n >= 2): one word of `4n` chars.
+fn tokens_text(n: usize) -> String {
+    "a".repeat(4 * n)
+}
+
+fn eff001(kind: AssetKind, rel: &str, text: &str) -> Vec<Finding> {
+    run("AI-EFF-001", &[asset(rel, kind, text.as_bytes().to_vec())])
+}
+
+#[test]
+fn eff001_budget_boundaries() {
+    let at = |n: usize| eff001(AssetKind::Instructions, "CLAUDE.md", &tokens_text(n));
+    assert!(at(3000).is_empty(), "budget itself passes");
+    let over = at(3001);
+    assert_eq!(over.len(), 1, "{over:?}");
+    assert_eq!(over[0].severity, Severity::Medium);
+    assert_eq!(over[0].token_waste, 1);
+    assert_eq!(loc(&over[0]), (1, 1));
+    assert_eq!(
+        over[0].message,
+        "Over token budget: 3001 tokens > 3000 for instructions (+1)"
+    );
+    let edge = at(3750);
+    assert_eq!(
+        (edge[0].severity, edge[0].token_waste),
+        (Severity::Medium, 750)
+    );
+    let high = at(3751);
+    assert_eq!(
+        (high[0].severity, high[0].token_waste),
+        (Severity::High, 751)
+    );
+}
+
+#[test]
+fn eff001_budget_per_kind_and_skill_body_only() {
+    assert!(eff001(AssetKind::Skill, "s/SKILL.md", &tokens_text(2000)).is_empty());
+    assert_eq!(
+        eff001(AssetKind::ScopedInstructions, "a.mdc", &tokens_text(2000)).len(),
+        1
+    );
+    // A skill's frontmatter does not count against its body budget.
+    let skill = format!(
+        "---\ndescription: {}\n---\n{}",
+        tokens_text(100),
+        tokens_text(5000)
+    );
+    assert!(eff001(AssetKind::Skill, "s/SKILL.md", &skill).is_empty());
+    let skill = format!("---\ndescription: d\n---\n{}", tokens_text(5001));
+    assert_eq!(eff001(AssetKind::Skill, "s/SKILL.md", &skill).len(), 1);
+    // No budget for MCP configs.
+    assert!(eff001(AssetKind::McpConfig, ".mcp.json", &tokens_text(9000)).is_empty());
+}
+
+#[test]
+fn eff001_reads_budgets_from_config() {
+    let config = Config::parse("[budgets]\nprompt = 10\n", Path::new("pulse.toml")).unwrap();
+    let a = asset(
+        "p.prompt.md",
+        AssetKind::Prompt,
+        tokens_text(11).into_bytes(),
+    );
+    let f = run_cfg("AI-EFF-001", &[a], &OptionsStore::empty(), &config);
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(f[0].severity, Severity::Medium);
+}
+
+fn always(rel: &str, kind: AssetKind, text: String) -> Asset {
+    asset(rel, kind, text.into_bytes())
+}
+
+#[test]
+fn eff002_sums_always_tokens_and_points_at_largest() {
+    let skill = |i: usize, n: usize| {
+        always(
+            &format!(".claude/skills/s{i}/SKILL.md"),
+            AssetKind::Skill,
+            format!(
+                "---\ndescription: {}\n---\n{}",
+                tokens_text(n),
+                tokens_text(9000)
+            ),
+        )
+    };
+    let mut assets = vec![
+        always("CLAUDE.md", AssetKind::Instructions, tokens_text(4000)),
+        always("docs/x.prompt.md", AssetKind::Prompt, tokens_text(9000)),
+    ];
+    assets.extend((1..=6).map(|i| skill(i, 600 + i)));
+    // 4000 + (601..=606) = 7621: the skill bodies and the prompt are not Always.
+    assert!(run("AI-EFF-002", &assets).is_empty());
+    assets.push(always(
+        ".cursor/rules/r.mdc",
+        AssetKind::ScopedInstructions,
+        format!("---\nalwaysApply: true\n---\n{}", tokens_text(400)),
+    ));
+    let f = run("AI-EFF-002", &assets);
+    assert_eq!(f.len(), 1, "{f:?}");
+    let total = 7621 + assets[8].always_tokens();
+    assert_eq!(f[0].token_waste, total - 8000);
+    assert_eq!(f[0].severity, Severity::High);
+    assert_eq!(f[0].location.path.as_ref(), Path::new("CLAUDE.md"));
+    assert!(
+        f[0].message.starts_with(&format!(
+            "Always-on context {total} tokens > 8000; top: CLAUDE.md 4000, .claude/skills/s6/SKILL.md 606"
+        )),
+        "{}",
+        f[0].message
+    );
+    assert!(f[0].message.ends_with(", …"), "{}", f[0].message);
+}
+
+#[test]
+fn eff002_exact_budget_passes() {
+    let at = |n: usize| {
+        run(
+            "AI-EFF-002",
+            &[always("AGENTS.md", AssetKind::Instructions, tokens_text(n))],
+        )
+    };
+    assert!(at(8000).is_empty());
+    assert_eq!(at(8001)[0].token_waste, 1);
 }
