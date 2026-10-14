@@ -16,7 +16,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 ## Phase 2 — Engine & MVP (v0.1.0)
 - [x] P2.1 Engine pipeline, rule registry, fixture harness, AI-STR-002
 - [x] P2.2 AI-SEC-001 invisible/bidi Unicode
-- [ ] P2.3 AI-SEC-002 prompt-injection phrases
+- [x] P2.3 AI-SEC-002 prompt-injection phrases
 - [ ] P2.4 AI-EFF-001 & AI-EFF-002 token budgets
 - [ ] P2.5 AI-COG-001 contradictory directives
 - [ ] P2.6 Suppressions (inline + config)

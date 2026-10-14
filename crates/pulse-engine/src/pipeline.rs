@@ -257,22 +257,28 @@ mod tests {
         let config = Config::default();
         assert_eq!(
             ids(&Resolved::new(&config, &ScanOptions::default()).unwrap()),
-            ["AI-SEC-001", "AI-STR-002"]
+            ["AI-SEC-001", "AI-SEC-002", "AI-STR-002"]
         );
         let skip = ScanOptions {
             skip_rules: vec!["AI-STR".into()],
             ..ScanOptions::default()
         };
-        assert_eq!(ids(&Resolved::new(&config, &skip).unwrap()), ["AI-SEC-001"]);
+        assert_eq!(
+            ids(&Resolved::new(&config, &skip).unwrap()),
+            ["AI-SEC-001", "AI-SEC-002"]
+        );
         let only = ScanOptions {
             only_rules: vec!["AI-SEC".into()],
             ..ScanOptions::default()
         };
-        assert_eq!(ids(&Resolved::new(&config, &only).unwrap()), ["AI-SEC-001"]);
+        assert_eq!(
+            ids(&Resolved::new(&config, &only).unwrap()),
+            ["AI-SEC-001", "AI-SEC-002"]
+        );
         let off = Config::parse("[rules.AI-STR-002]\nenabled = false\n", Path::new("p")).unwrap();
         assert_eq!(
             ids(&Resolved::new(&off, &ScanOptions::default()).unwrap()),
-            ["AI-SEC-001"]
+            ["AI-SEC-001", "AI-SEC-002"]
         );
         let sev = Config::parse("[rules]\nAI-STR-002 = \"low\"\n", Path::new("p")).unwrap();
         let r = Resolved::new(&sev, &ScanOptions::default()).unwrap();
