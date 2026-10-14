@@ -8,7 +8,7 @@ use std::sync::{Arc, PoisonError, RwLock};
 use serde::de::DeserializeOwned;
 
 use crate::asset::Asset;
-use crate::config::{CONFIG_FILE, ConfigError};
+use crate::config::{CONFIG_FILE, Config, ConfigError};
 use crate::model::{Finding, RuleMeta};
 
 /// A rule that inspects one asset at a time.
@@ -104,6 +104,7 @@ impl OptionsStore {
 /// Everything a rule may consult besides the asset itself.
 #[derive(Debug, Clone, Copy)]
 pub struct RuleCtx<'a> {
+    pub config: &'a Config,
     pub options: &'a OptionsStore,
     pub root: &'a Path,
     /// Every walked file, as a scan-root-relative path with `/` separators.
@@ -148,7 +149,9 @@ mod tests {
     fn options_parse_typed_and_cache() {
         let s = store("max = 3\nwords = ['a']");
         let files = HashSet::new();
+        let config = Config::default();
         let ctx = RuleCtx {
+            config: &config,
             options: &s,
             root: Path::new("."),
             files: &files,

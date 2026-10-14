@@ -2,6 +2,7 @@
 
 use pulse_core::{ProjectRule, Rule, RuleMeta};
 
+pub mod efficiency;
 pub mod lexicon;
 pub mod security;
 pub mod structure;
@@ -9,13 +10,14 @@ pub mod util;
 
 /// Asset-scoped rules, in ID order.
 pub static RULES: &[&dyn Rule] = &[
+    &efficiency::budget::AssetBudget,
     &security::unicode::InvisibleUnicode,
     &security::injection::InjectionPhrase,
     &structure::content::InvalidContent,
 ];
 
 /// Project-scoped rules, in ID order.
-pub static PROJECT_RULES: &[&dyn ProjectRule] = &[];
+pub static PROJECT_RULES: &[&dyn ProjectRule] = &[&efficiency::budget::AlwaysOnBudget];
 
 /// Metadata of every registered rule, asset rules first, each group in ID order.
 pub fn all_meta() -> impl Iterator<Item = &'static RuleMeta> {
