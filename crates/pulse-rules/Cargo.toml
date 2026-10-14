@@ -8,8 +8,13 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+aho-corasick = "1.1.5"
 memchr = "2.8.3"
 pulse-core.workspace = true
+serde = { version = "1.0.229", features = ["derive"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+toml = "1.1.8"
