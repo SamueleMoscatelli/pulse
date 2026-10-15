@@ -153,6 +153,33 @@ fn scan_applies_inline_and_config_suppressions() {
 }
 
 #[test]
+fn scan_keeps_sec003_over_sec004_on_same_span() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    // A provider-shaped key, built here so no secret-like literal is committed.
+    let key = ["sk-", "proj-", &"Ab3xQ9".repeat(7)].concat();
+    let json = format!(
+        "{{\"mcpServers\": {{\"ai\": {{\"command\": \"npx\", \"args\": [\"openai-mcp@1.4.2\"],\n  \"env\": {{\"OPENAI_API_KEY\": \"{key}\", \"DB_PASSWORD\": \"hunter2-prod\"}}}}}}}}\n"
+    );
+    write(root, ".mcp.json", json.as_bytes());
+    let r = scan(root, &Config::default(), &ScanOptions::default()).unwrap();
+    let got: Vec<_> = r
+        .findings
+        .iter()
+        .filter(|f| f.rule_id.starts_with("AI-SEC-00"))
+        .map(|f| (f.rule_id, f.location.line, f.location.col))
+        .collect();
+    let key_col = u32::try_from(json.lines().nth(1).unwrap().find(&key).unwrap() + 1).unwrap();
+    let pw_col = u32::try_from(json.lines().nth(1).unwrap().find("hunter2").unwrap() + 1).unwrap();
+    assert_eq!(
+        got,
+        [("AI-SEC-003", 2, key_col), ("AI-SEC-004", 2, pw_col)],
+        "{}",
+        render(&r)
+    );
+}
+
+#[test]
 fn scan_scores_and_gates_in_scope_assets() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();

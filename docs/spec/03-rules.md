@@ -76,15 +76,18 @@
 - **Detect** A value in `env`, `headers` or `args` (after a `--token`/`--api-key`/`--password`-like flag) whose key matches `(?i)(key|token|secret|password|auth|bearer)` and whose value is a literal, i.e. not `${env:X}`, `${input:X}`, `${X}`, `$X` or empty.
 - **Fix** Reference an environment variable or VS Code `inputs` (`promptString`, `password: true`).
 - **Note** When AI-SEC-003 also fires on the same span, keep only AI-SEC-003 (the engine dedups by span with severity precedence).
+- **FP guards** A value containing a reference anywhere (`Bearer ${input:X}`), an obvious placeholder (AI-SEC-003 list), a switch/number (`true`, `off`, `4096`), a path or a URL without userinfo is not literal; keys ending in `file`/`path`/`dir`/`url`/`uri`/`type`/`enabled`/`mode` are skipped; Docker `-e KEY=value` args count as env; the span is the value without quotes (ADR-021).
 
 ### AI-SEC-005 — Unpinned MCP server package
 - **Sev** High · **Kinds** McpConfig
 - **Detect** stdio servers whose command is `npx`/`pnpm dlx`/`bunx`/`yarn dlx` with a package arg lacking `@<version>` (or using `@latest`); `uvx`/`pipx run` without `==version` / `@version`; `docker run` with an image lacking a tag/digest or tagged `:latest`. Using `-y`/`--yes` adds "auto-install" to the message.
+- **Detail** npm pinned = exact `MAJOR.MINOR.PATCH[-pre][+build]` (ranges, partial versions and dist-tags are unpinned); `--package`/`--from`/`--spec` values are the packages when present, else the first positional arg; `uv tool run` counts as `uvx`; local paths, URLs, `git+`/protocol specs and variables are skipped (ADR-021).
 - **Fix** Pin an exact version (or a digest for Docker).
 
 ### AI-SEC-006 — Insecure MCP transport
 - **Sev** High · **Kinds** McpConfig
 - **Detect** HTTP/SSE server URL with scheme `http://` and host not in {`localhost`, `127.0.0.1`, `::1`, `*.localhost`}. Medium when the host is a private IP (RFC 1918).
+- **Detail** URLs whose host is a variable (`${…}`) are skipped and all of `127.0.0.0/8` is loopback; `httpUrl`/`serverUrl` count as the URL (ADR-021).
 
 ### AI-SEC-007 — Over-permissive agent permissions
 - **Sev** High · **Kinds** Settings, Agent, Prompt, McpConfig

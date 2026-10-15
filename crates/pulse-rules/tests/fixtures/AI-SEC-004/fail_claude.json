@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres@0.6.2", "--password", "hunter2-prod"],
+      "env": {
+        "PGUSER": "app",
+        "DB_PASSWORD": "hunter2-prod"
+      }
+    }
+  }
+}

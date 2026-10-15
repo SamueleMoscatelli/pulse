@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "vault": {
+      "command": "uvx",
+      "args": ["mcp-vault==0.3.1", "--key-file", "/run/secrets/vault.pem", "--auth-url", "https://vault.example.com/auth"],
+      "env": {
+        "API_KEY_FILE": "/run/secrets/api_key",
+        "AUTH_URL": "https://login.example.com/oauth",
+        "TOKEN_PATH": "~/.config/vault/token",
+        "AUTH_TYPE": "oidc"
+      }
+    }
+  }
+}

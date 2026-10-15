@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "linear": {
+      "command": "uvx",
+      "args": ["mcp-linear==1.4.0", "--api-key=${env:LINEAR_API_KEY}", "--log-level", "debug"],
+      "env": { "LINEAR_API_KEY": "${env:LINEAR_API_KEY}", "LINEAR_TEAM": "core" }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "inputs": [
+    { "type": "promptString", "id": "jira-token", "description": "Jira token", "password": true }
+  ],
+  "servers": {
+    "jira": {
+      "type": "http",
+      "url": "https://jira.example.com/mcp",
+      "headers": { "Authorization": "Bearer abc123def456" }
+    }
+  }
+}
