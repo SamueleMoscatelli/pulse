@@ -19,6 +19,7 @@ pub static RULES: &[&dyn Rule] = &[
     &security::mcp::LiteralMcpCredential,
     &security::mcp::UnpinnedMcpPackage,
     &security::mcp::InsecureMcpTransport,
+    &security::permissions::OverPermissive,
     &structure::content::InvalidContent,
 ];
 

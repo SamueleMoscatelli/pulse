@@ -31,6 +31,12 @@ fn kind_of(dir: &Path, name: &str) -> AssetKind {
         AssetKind::Skill
     } else if name.ends_with(".mdc") {
         AssetKind::ScopedInstructions
+    } else if name.ends_with("settings.json") {
+        AssetKind::Settings
+    } else if name.ends_with("agent.md") {
+        AssetKind::Agent
+    } else if name.ends_with("command.md") || name.ends_with("prompt.md") {
+        AssetKind::Prompt
     } else if name.ends_with(".json") {
         AssetKind::McpConfig
     } else {
@@ -709,4 +715,39 @@ fn sec003_provider_wins_over_generic_on_same_span() {
     assert_eq!(f.len(), 1, "{f:?}");
     assert_eq!(loc(&f[0]), (1, 19));
     assert!(f[0].message.starts_with("Possible Anthropic secret"));
+}
+
+fn sec007(kind: AssetKind, rel: &str, text: &str) -> Vec<Severity> {
+    let a = asset(rel, kind, text.as_bytes().to_vec());
+    run("AI-SEC-007", &[a]).iter().map(|f| f.severity).collect()
+}
+
+#[test]
+fn sec007_severity_matrix_bash_alone_medium_with_network_high() {
+    let agent = |tools: &str| format!("---\nname: a\ntools: {tools}\n---\nBody.\n");
+    assert_eq!(
+        sec007(AssetKind::Agent, "a.md", &agent("Read, Bash")),
+        [Severity::Medium]
+    );
+    assert_eq!(
+        sec007(AssetKind::Agent, "a.md", &agent("Bash, WebSearch")),
+        [Severity::High]
+    );
+    assert_eq!(
+        sec007(AssetKind::Prompt, "c.md", &agent("[Bash(:*), WebFetch]")),
+        [Severity::High]
+    );
+    assert!(
+        sec007(
+            AssetKind::Agent,
+            "a.md",
+            &agent("Bash(git log:*), WebFetch")
+        )
+        .is_empty()
+    );
+    let settings = r#"{"permissions":{"allow":["Bash"]},"enableAllProjectMcpServers":true}"#;
+    assert_eq!(
+        sec007(AssetKind::Settings, ".claude/settings.json", settings),
+        [Severity::High, Severity::Medium]
+    );
 }

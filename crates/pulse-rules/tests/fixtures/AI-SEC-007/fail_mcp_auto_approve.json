@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem@2025.8.21", "/repo"],
+      "alwaysAllow": ["read_file", "write_file", "list_directory"]
+    },
+    "shell": {
+      "command": "uvx",
+      "args": ["mcp-shell-server==1.0.3"],
+      "autoApprove": ["*"]
+    }
+  }
+}
