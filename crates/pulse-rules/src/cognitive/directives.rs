@@ -128,6 +128,80 @@ pub fn words<'a>(s: &'a str, out: &mut Vec<Word<'a>>) {
     }
 }
 
+/// Calls `f` with the trimmed, non-empty source range of every sentence in `md`'s body,
+/// outside code blocks, HTML comments and headings, in source order. List items and
+/// paragraphs are split on `.` `!` `?` (before whitespace or the end), `;` and `|`, outside
+/// inline code.
+pub fn sentences(src: &str, md: &MarkdownView, mut f: impl FnMut(Range<usize>)) {
+    let (mut pos, end) = (md.body.start as usize, md.body.end as usize);
+    let bytes = src.as_bytes();
+    let mut unit: Option<Range<usize>> = None;
+    let flush = |unit: Option<Range<usize>>, f: &mut dyn FnMut(Range<usize>)| {
+        if let Some(u) = unit {
+            split(src, u, f);
+        }
+    };
+    while pos < end {
+        let eol = bytes
+            .get(pos..end)
+            .and_then(|b| memchr(b'\n', b))
+            .map_or(end, |n| pos + n);
+        let line = src.get(pos..eol).unwrap_or("");
+        let trimmed = line.trim_start();
+        let at = pos + (line.len() - trimmed.len());
+        if trimmed.trim_end().is_empty()
+            || covers(&md.code_blocks, at, |b| b.span)
+            || covers(&md.html_comments, at, |s| *s)
+            || covers(&md.headings, at, |h| h.span)
+        {
+            flush(unit.take(), &mut f);
+        } else if let Some(marker) = list_marker(trimmed) {
+            flush(unit.take(), &mut f);
+            unit = Some(at + marker..eol);
+        } else {
+            unit = Some(unit.map_or(at, |u| u.start)..eol);
+        }
+        pos = eol + 1;
+    }
+    flush(unit, &mut f);
+}
+
+/// Calls `f` with the trimmed, non-empty range of every sentence of `src[unit]` (a paragraph
+/// or list item, or any plain text such as a tool description).
+pub fn split(src: &str, unit: Range<usize>, f: &mut dyn FnMut(Range<usize>)) {
+    let Some(text) = src.get(unit.clone()) else {
+        return;
+    };
+    let mut emit = |r: Range<usize>| {
+        let Some(raw) = src.get(r.clone()) else {
+            return;
+        };
+        let t = raw.trim();
+        if !t.is_empty() {
+            let start = r.start + (raw.len() - raw.trim_start().len());
+            f(start..start + t.len());
+        }
+    };
+    let mut start = 0;
+    let mut code = false;
+    let mut it = text.char_indices().peekable();
+    while let Some((i, c)) = it.next() {
+        match c {
+            '`' => code = !code,
+            '.' | '!' | '?' if !code && it.peek().is_none_or(|&(_, n)| n.is_whitespace()) => {
+                emit(unit.start + start..unit.start + i + 1);
+                start = i + 1;
+            }
+            ';' | '|' if !code => {
+                emit(unit.start + start..unit.start + i);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    emit(unit.start + start..unit.end);
+}
+
 struct Extractor<'a> {
     src: &'a str,
     md: &'a MarkdownView,
@@ -138,71 +212,15 @@ struct Extractor<'a> {
 
 impl<'a> Extractor<'a> {
     fn run(&mut self) {
-        let md = self.md;
-        let (mut pos, end) = (md.body.start as usize, md.body.end as usize);
-        let bytes = self.src.as_bytes();
-        let mut unit: Option<Range<usize>> = None;
-        while pos < end {
-            let eol = bytes
-                .get(pos..end)
-                .and_then(|b| memchr(b'\n', b))
-                .map_or(end, |n| pos + n);
-            let line = self.src.get(pos..eol).unwrap_or("");
-            let trimmed = line.trim_start();
-            let at = pos + (line.len() - trimmed.len());
-            if trimmed.trim_end().is_empty()
-                || covers(&md.code_blocks, at, |b| b.span)
-                || covers(&md.html_comments, at, |s| *s)
-                || covers(&md.headings, at, |h| h.span)
-            {
-                self.flush(unit.take());
-            } else if let Some(marker) = list_marker(trimmed) {
-                self.flush(unit.take());
-                unit = Some(at + marker..eol);
-            } else {
-                unit = Some(unit.map_or(at, |u| u.start)..eol);
-            }
-            pos = eol + 1;
-        }
-        self.flush(unit);
-    }
-
-    /// Splits a paragraph or list item into sentences and extracts their directives.
-    fn flush(&mut self, unit: Option<Range<usize>>) {
-        let Some(unit) = unit else { return };
-        let Some(text) = self.src.get(unit.clone()) else {
-            return;
-        };
-        let mut start = 0;
-        let mut code = false;
-        let mut it = text.char_indices().peekable();
-        while let Some((i, c)) = it.next() {
-            match c {
-                '`' => code = !code,
-                '.' | '!' | '?' if !code && it.peek().is_none_or(|&(_, n)| n.is_whitespace()) => {
-                    self.sentence(unit.start + start..unit.start + i + 1);
-                    start = i + 1;
-                }
-                ';' | '|' if !code => {
-                    self.sentence(unit.start + start..unit.start + i);
-                    start = i + 1;
-                }
-                _ => {}
-            }
-        }
-        self.sentence(unit.start + start..unit.end);
+        sentences(self.src, self.md, |r| self.sentence(r));
     }
 
     fn sentence(&mut self, range: Range<usize>) {
         let src = self.src;
-        let Some(raw) = src.get(range.clone()) else {
+        let Some(text) = src.get(range.clone()) else {
             return;
         };
-        let text = raw.trim();
-        if text.is_empty() {
-            return;
-        }
-        let start = range.start + (raw.len() - raw.trim_start().len());
+        let start = range.start;
         let mut ws = std::mem::take(&mut self.words);
         words(text, &mut ws);
         if let Some((polarity, verb, object, context)) = parse(&ws) {

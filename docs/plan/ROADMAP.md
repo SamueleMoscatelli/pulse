@@ -29,7 +29,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [x] P3.2 AI-SEC-004/005/006 MCP config security
 - [x] P3.3 AI-SEC-007 over-permissive permissions
 - [x] P3.4 AI-SEC-008/009 hook command safety
-- [ ] P3.5 AI-SEC-010/011 exfiltration & hidden instructions
+- [x] P3.5 AI-SEC-010/011 exfiltration & hidden instructions
 - [ ] P3.6 AI-SEC-012/013 tool poisoning & sensitive paths
 
 ## Phase 4 — Structure & validity pack

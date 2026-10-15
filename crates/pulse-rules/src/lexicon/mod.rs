@@ -1,6 +1,7 @@
 //! Shared word lists and the automata built from them.
 
 pub mod directives;
+pub mod imperatives;
 pub mod injection;
 pub mod mcp;
 pub mod permissions;

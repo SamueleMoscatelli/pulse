@@ -20,6 +20,8 @@ pub struct MarkdownView {
     pub code_blocks: Vec<CodeBlock>,
     /// `<!-- … -->`, delimiters included; an unclosed comment runs to the end of its HTML.
     pub html_comments: Vec<Span>,
+    /// Raw HTML outside code: whole HTML blocks and single inline tags, in source order.
+    pub html: Vec<Span>,
     pub links: Vec<Link>,
     pub imports: Vec<Import>,
     pub paragraphs: Vec<Span>,
@@ -157,6 +159,7 @@ impl MarkdownView {
                 Event::Start(Tag::HtmlBlock) | Event::InlineHtml(_) => {
                     let span = sp(range);
                     scan_comments(source, span, &mut view.html_comments);
+                    view.html.push(span);
                     code.push(span);
                 }
                 Event::Code(text) => {
@@ -449,6 +452,21 @@ mod tests {
             .map(|&p| lines.line_of(p.start))
             .collect();
         assert_eq!(paras, [10, 19]);
+    }
+
+    #[test]
+    fn raw_html_blocks_and_inline_tags() {
+        let src = "<div hidden>\nx\n</div>\n\nText <span style=\"display:none\">y</span>.\n\n```\n<b>\n```\n";
+        let md = parse(src);
+        let html: Vec<_> = md.html.iter().map(|&s| text(src, s)).collect();
+        assert_eq!(
+            html,
+            [
+                "<div hidden>\nx\n</div>\n",
+                "<span style=\"display:none\">",
+                "</span>"
+            ]
+        );
     }
 
     #[test]
