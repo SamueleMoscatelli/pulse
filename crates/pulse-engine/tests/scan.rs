@@ -120,3 +120,34 @@ fn scan_rejects_unknown_rule_in_config() {
         "{err}"
     );
 }
+
+#[test]
+fn scan_applies_inline_and_config_suppressions() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let bad_yaml = "---\na: [\n---\n";
+    write(
+        root,
+        "CLAUDE.md",
+        format!("{bad_yaml}<!-- pulse-ignore-file AI-STR-002 -- legacy -->\n# T\n").as_bytes(),
+    );
+    write(
+        root,
+        "docs/AGENTS.md",
+        format!("{bad_yaml}# T\n").as_bytes(),
+    );
+    write(root, "AGENTS.md", format!("{bad_yaml}# T\n").as_bytes());
+    let config = Config::parse(
+        "[[ignore]]\npath = \"docs/**\"\nrules = [\"AI-STR-002\"]\n",
+        Path::new("pulse.toml"),
+    )
+    .unwrap();
+    let r = scan(root, &config, &ScanOptions::default()).unwrap();
+    let got: Vec<_> = r
+        .findings
+        .iter()
+        .map(|f| f.location.path.strip_prefix(root).unwrap().to_owned())
+        .collect();
+    assert_eq!(got, [PathBuf::from("AGENTS.md")], "{}", render(&r));
+    assert_eq!(r.suppressed, 2);
+}

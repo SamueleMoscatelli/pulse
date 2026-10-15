@@ -2,6 +2,7 @@
 
 mod pipeline;
 mod post;
+mod suppress;
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -54,6 +55,8 @@ pub struct Timings {
 #[derive(Debug, Clone, Default)]
 pub struct Report {
     pub findings: Vec<Finding>,
+    /// Findings dropped by inline or `[[ignore]]` suppressions.
+    pub suppressed: usize,
     pub assets_meta: Vec<AssetMeta>,
     /// Entries the walker could not visit, with the reason.
     pub walk_errors: Vec<(PathBuf, String)>,
