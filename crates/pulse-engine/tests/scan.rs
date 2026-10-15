@@ -6,7 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use pulse_core::{Config, Severity};
-use pulse_engine::{Report, ScanOptions, scan};
+use pulse_engine::{GateStatus, Report, ScanOptions, scan};
 
 fn mixed() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/repos/mixed")
@@ -150,4 +150,42 @@ fn scan_applies_inline_and_config_suppressions() {
         .collect();
     assert_eq!(got, [PathBuf::from("AGENTS.md")], "{}", render(&r));
     assert_eq!(r.suppressed, 2);
+}
+
+#[test]
+fn scan_scores_and_gates_in_scope_assets() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root,
+        "CLAUDE.md",
+        "Use tabs for indentation.\n".repeat(20).as_bytes(),
+    );
+    write(
+        root,
+        "sub/AGENTS.md",
+        "Write tests first.\n".repeat(50).as_bytes(),
+    );
+    let config = Config::parse("[budgets]\ninstructions = 10\n", Path::new("pulse.toml")).unwrap();
+    let opts = ScanOptions {
+        paths: vec!["CLAUDE.md".into()],
+        ..ScanOptions::default()
+    };
+    let r = scan(root, &config, &opts).unwrap();
+    let claude = r
+        .assets_meta
+        .iter()
+        .find(|a| a.rel_path == "CLAUDE.md")
+        .unwrap();
+    assert_eq!(r.assets_meta.len(), 2);
+    assert_eq!(r.metrics.total_tokens, u64::from(claude.tokens));
+    assert!(r.metrics.context_debt > 0.10, "{:?}", r.metrics);
+    assert_eq!(r.gate.status, GateStatus::Failed, "{:?}", r.gate);
+    let debt = r
+        .gate
+        .conditions
+        .iter()
+        .find(|c| c.name == "max_context_debt")
+        .unwrap();
+    assert!(!debt.passed);
 }

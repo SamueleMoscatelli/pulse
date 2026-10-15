@@ -39,7 +39,9 @@ Efficiency uses the **Context debt ratio**:
 - **context_load** = `always_on_tokens / context.window` (default window 200,000). Reported as a percentage. It is a metric only, not a rating; AI-EFF-002 handles the budget.
 - **issues_by_severity**, **issues_by_category**, **assets_by_kind**.
 
-Open findings = findings after suppressions. When `--new-only`/baseline is active, ratings are computed on new findings only and the overall numbers are shown alongside them.
+Metrics cover the in-scope assets (after `paths` narrowing). Findings of custom (`X-`) rules have no category: they count in `issues_by_severity` and the severity gate condition, not in ratings or `issues_by_category`. Overlap = same file and intersecting half-open ranges (line, col)..(end_line, end_col); identical start points always overlap.
+
+Open findings = findings after suppressions. When `--new-only`/baseline is active, ratings are computed on new findings only and the overall numbers are shown alongside them. (Baseline-aware ratings land with P6.3; until then ratings use all open findings.)
 
 ## Quality Gate
 
@@ -54,7 +56,7 @@ min_ratings = {}              # e.g. { security = "A", reliability = "B" }
 new_code_only = false         # evaluate conditions on new findings only (needs a baseline or --changed-since)
 ```
 
-Evaluation produces `Gate { status: Passed | Failed, conditions: Vec<Condition { name, actual, threshold, passed }> }`. Every condition is listed in the report, passed or failed.
+Evaluation produces `Gate { status: Passed | Failed, conditions: Vec<Condition { name, actual, threshold, passed }> }`. Every enabled condition is listed in the report, passed or failed; disabled ones (`fail_on_severity = "none"`, `max_always_on_tokens = 0`, unset `min_ratings` keys) are omitted. `max_context_debt` is always enabled. `fail_on_severity` passes when the worst open severity is below the threshold; a rating passes when it is equal to or better than its minimum. `new_code_only` is applied by P6.3 (baseline).
 
 ## Fingerprints (baseline / new code)
 
