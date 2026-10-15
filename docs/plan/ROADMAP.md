@@ -21,7 +21,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [x] P2.5 AI-COG-001 contradictory directives
 - [x] P2.6 Suppressions (inline + config)
 - [x] P2.7 Scoring, ratings & quality gate
-- [ ] P2.8 Terminal reporter, `scan` & `ci` commands
+- [x] P2.8 Terminal reporter, `scan` & `ci` commands
 - [ ] P2.9 End-to-end tests, benchmarks, v0.1.0
 
 ## Phase 3 — Security pack

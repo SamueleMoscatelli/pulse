@@ -1,0 +1,5 @@
+---
+source: crates/pulse-report/tests/terminal.rs
+expression: "render(\"mixed\", true, false)"
+---
+tools/fetch.json:1:1: HIGH AI-STR-002 Invalid shape: `tools` must be an array, found object

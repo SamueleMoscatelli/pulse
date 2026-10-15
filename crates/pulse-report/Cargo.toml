@@ -8,8 +8,12 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+anstyle = "1.0.14"
 pulse-core.workspace = true
 pulse-engine.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+insta = "1.49.0"

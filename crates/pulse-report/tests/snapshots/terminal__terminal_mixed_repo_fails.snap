@@ -1,0 +1,21 @@
+---
+source: crates/pulse-report/tests/terminal.rs
+expression: "render(\"mixed\", false, false)"
+---
+ Pulse 0.1.0 · 33 assets · 204 tokens · 8 ms
+
+ QUALITY GATE   FAILED
+   ✖ severity ≥ high        1 issue    (allowed 0)
+   ✔ context debt           0%         (max 10%)
+
+   Security      A   0 vulnerabilities
+   Reliability   D   1 bug
+   Clarity       A   0 smells
+   Efficiency    A   context debt 0%
+   Context load      70 always-on tokens · 0% of 200k window
+
+   CRITICAL 0   HIGH 1   MEDIUM 0   LOW 0   INFO 0
+
+ tools/fetch.json
+   1:1     HIGH      AI-STR-002  Invalid shape: `tools` must be an array, found object
+                     ↳ Fix the syntax or shape so the agent (and Pulse) can read the whole file.
