@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-e", "GITHUB_TOKEN", "-e", "SENTRY_AUTH=${SENTRY_AUTH}", "--env=AUTH_MODE=oauth", "ghcr.io/github/github-mcp-server:0.4.0"]
+    }
+  }
+}

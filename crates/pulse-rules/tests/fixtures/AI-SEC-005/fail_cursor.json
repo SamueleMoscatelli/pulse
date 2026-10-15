@@ -1,0 +1,6 @@
+{
+  "mcpServers": {
+    "browser": { "command": "pnpm", "args": ["dlx", "@browsermcp/mcp@^0.1"] },
+    "sqlite": { "command": "uvx", "args": ["--from", "mcp-server-sqlite>=0.6", "mcp-server-sqlite"] }
+  }
+}

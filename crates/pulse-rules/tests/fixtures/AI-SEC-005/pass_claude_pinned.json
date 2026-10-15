@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github@2025.4.8"]
+    },
+    "fetch": { "command": "uvx", "args": ["mcp-server-fetch==2025.1.17"] },
+    "local": { "command": "node", "args": ["./dist/server.js"] },
+    "dev": { "command": "npx", "args": ["tsx@4.19.2", "./src/server.ts"], "cwd": "." }
+  }
+}

@@ -2,6 +2,7 @@
 
 pub mod directives;
 pub mod injection;
+pub mod mcp;
 pub mod secrets;
 
 use pulse_core::text::normalize;

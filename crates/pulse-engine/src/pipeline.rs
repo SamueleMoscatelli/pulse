@@ -279,50 +279,41 @@ mod tests {
     #[test]
     fn rule_selection_honors_config_and_prefixes() {
         let ids = |r: &Resolved| r.asset.iter().map(|r| r.meta().id).collect::<Vec<_>>();
+        let all: Vec<&str> = pulse_rules::RULES.iter().map(|r| r.meta().id).collect();
+        let except = |p: &str| {
+            all.iter()
+                .copied()
+                .filter(|id| !id.starts_with(p))
+                .collect::<Vec<_>>()
+        };
         let config = Config::default();
         assert_eq!(
             ids(&Resolved::new(&config, &ScanOptions::default()).unwrap()),
-            [
-                "AI-COG-001",
-                "AI-EFF-001",
-                "AI-SEC-001",
-                "AI-SEC-002",
-                "AI-SEC-003",
-                "AI-STR-002"
-            ]
+            all
         );
+        assert!(all.contains(&"AI-STR-002") && all.contains(&"AI-SEC-001"));
         let skip = ScanOptions {
             skip_rules: vec!["AI-STR".into()],
             ..ScanOptions::default()
         };
         assert_eq!(
             ids(&Resolved::new(&config, &skip).unwrap()),
-            [
-                "AI-COG-001",
-                "AI-EFF-001",
-                "AI-SEC-001",
-                "AI-SEC-002",
-                "AI-SEC-003"
-            ]
+            except("AI-STR")
         );
         let only = ScanOptions {
             only_rules: vec!["AI-SEC".into()],
             ..ScanOptions::default()
         };
-        assert_eq!(
-            ids(&Resolved::new(&config, &only).unwrap()),
-            ["AI-SEC-001", "AI-SEC-002", "AI-SEC-003"]
-        );
+        let sec: Vec<&str> = all
+            .iter()
+            .copied()
+            .filter(|id| id.starts_with("AI-SEC"))
+            .collect();
+        assert_eq!(ids(&Resolved::new(&config, &only).unwrap()), sec);
         let off = Config::parse("[rules.AI-STR-002]\nenabled = false\n", Path::new("p")).unwrap();
         assert_eq!(
             ids(&Resolved::new(&off, &ScanOptions::default()).unwrap()),
-            [
-                "AI-COG-001",
-                "AI-EFF-001",
-                "AI-SEC-001",
-                "AI-SEC-002",
-                "AI-SEC-003"
-            ]
+            except("AI-STR-002")
         );
         let sev = Config::parse("[rules]\nAI-STR-002 = \"low\"\n", Path::new("p")).unwrap();
         let r = Resolved::new(&sev, &ScanOptions::default()).unwrap();

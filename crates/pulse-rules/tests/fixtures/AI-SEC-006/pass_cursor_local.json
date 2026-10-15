@@ -1,0 +1,6 @@
+{
+  "mcpServers": {
+    "docs": { "url": "http://docs.localhost:4000/mcp" },
+    "hosted": { "url": "https://docs-mcp.example.org/mcp" }
+  }
+}

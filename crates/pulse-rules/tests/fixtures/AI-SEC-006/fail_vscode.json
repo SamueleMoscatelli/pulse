@@ -1,0 +1,10 @@
+{
+  "inputs": [{ "type": "promptString", "id": "tok", "password": true }],
+  "servers": {
+    "intranet": {
+      "type": "http",
+      "url": "http://192.168.1.20:8080/mcp",
+      "headers": { "Authorization": "Bearer ${input:tok}" }
+    }
+  }
+}

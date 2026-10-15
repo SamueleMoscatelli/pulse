@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres@0.6.2", "--password", "${DB_PASSWORD}"],
+      "env": {
+        "DB_PASSWORD": "${DB_PASSWORD}",
+        "API_TOKEN": "$API_TOKEN",
+        "AUTH_ENABLED": "true",
+        "MAX_TOKENS": "4096",
+        "SECRET_KEY": ""
+      }
+    }
+  }
+}

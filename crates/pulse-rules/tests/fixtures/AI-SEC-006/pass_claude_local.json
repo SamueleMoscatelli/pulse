@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "dev": { "type": "http", "url": "http://localhost:3000/mcp" },
+    "loop": { "type": "sse", "url": "http://127.0.0.1:8931/sse" },
+    "remote": { "type": "http", "url": "https://mcp.analytics.example.com/mcp" }
+  }
+}
