@@ -22,6 +22,8 @@ pub static RULES: &[&dyn Rule] = &[
     &security::permissions::OverPermissive,
     &security::hooks::HookRemoteExec,
     &security::hooks::HookUnsafeInterpolation,
+    &security::exfil::Exfiltration,
+    &security::hidden::HiddenInstructions,
     &structure::content::InvalidContent,
 ];
 

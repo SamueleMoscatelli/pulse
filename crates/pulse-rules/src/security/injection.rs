@@ -93,7 +93,7 @@ impl Rule for InjectionPhrase {
 
 /// Whether `range` in `text` starts and ends on word boundaries (where the phrase has
 /// word characters at its edges), so "renew instructions:" doesn't match "new instructions:".
-fn at_word_bounds(text: &str, range: Range<usize>) -> bool {
+pub(crate) fn at_word_bounds(text: &str, range: Range<usize>) -> bool {
     let word = |c: char| c.is_alphanumeric();
     let (Some(phrase), Some(before), Some(after)) = (
         text.get(range.clone()),
