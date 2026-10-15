@@ -6,18 +6,21 @@ Goal: CI-grade integration: machine-readable output, PR feedback, new-code focus
 - **Size** M · **Depends** P5.5
 - **Read** `scripts/spec.sh "JSON ("`, `scripts/spec.sh "SARIF"`
 - **Do** `json.rs` (serde structs mirroring the schema, plus a `generated_at` timestamp that snapshot tests override), `sarif.rs` (hand-built with `serde_json::json!` or small structs). Rule help text comes from the embedded `docs/rules/*.md`: add `pulse-rules::docs(id) -> &'static str` via a build-time `include_str!` table (a macro generating the match).
+- **Do** (from P2.8) route `-f json|sarif` in `run_scan` (`pulse-cli/src/main.rs`), which currently exits 2 with "not implemented yet".
 - **Done when** check is green; `insta` snapshots for both; the SARIF output validates against the 2.1.0 schema (vendor the schema under `tests/schemas/` and validate in a test with `jsonschema` as a dev-dependency, or document a manual validation step if that crate is too heavy; add a decision note either way).
 
 ## P6.2 — Markdown & GitHub reporters
 - **Size** S · **Depends** P6.1
 - **Read** `scripts/spec.sh "Markdown ("`, `scripts/spec.sh "GitHub ("`
 - **Do** Both reporters, escaping per GitHub workflow-command rules (`%`, `\r`, `\n`, `:` and `,` in properties); `GITHUB_STEP_SUMMARY` append; `ci` auto-format.
+- **Do** (from P2.8) replace the `Format::Github` → terminal fallback and route `-f markdown` in `run_scan`.
 - **Done when** check is green; snapshots for both; an escaping unit test.
 
 ## P6.3 — Baseline, `--new-only`, `--changed-since`
 - **Size** M · **Depends** P6.2
 - **Read** `scripts/spec.sh "Fingerprints"`, `scripts/spec.sh "Commands"`
 - **Do** `baseline.rs` (read/write, version check), the `pulse baseline` command, `--new-only` + `gate.new_code_only` (ratings/gate on new findings; metrics show both), and `--changed-since <ref>` via `std::process::Command` running `git diff --name-only --relative <ref>...HEAD` plus untracked files; a clear error if git is missing.
+- **Do** (from P2.8) add the `--new-only` / `--changed-since` flags to `ScanArgs` in `pulse-cli/src/main.rs` (not defined yet, ADR-018).
 - **Done when** check is green; tests: fingerprint stability when lines shift, new-only filtering, gate on new code; a tempdir git repo test for `--changed-since`.
 
 ## P6.4 — `pulse rules` & `pulse explain`

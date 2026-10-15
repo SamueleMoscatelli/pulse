@@ -1,0 +1,19 @@
+---
+source: crates/pulse-report/tests/terminal.rs
+expression: "render(\"clean\", false, false)"
+---
+ Pulse 0.1.0 · 2 assets · 107 tokens · 8 ms
+
+ QUALITY GATE   PASSED
+   ✔ severity ≥ high        0 issues   (allowed 0)
+   ✔ context debt           0%         (max 10%)
+
+   Security      A   0 vulnerabilities
+   Reliability   A   0 bugs
+   Clarity       A   0 smells
+   Efficiency    A   context debt 0%
+   Context load      69 always-on tokens · 0% of 200k window
+
+   CRITICAL 0   HIGH 0   MEDIUM 0   LOW 0   INFO 0
+
+ No issues found.

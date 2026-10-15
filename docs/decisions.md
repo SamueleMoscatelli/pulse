@@ -75,3 +75,8 @@ Consequences: a multi-line finding is suppressed only from its first line. Custo
 Context: P2.7 found gaps in 04-scoring-gate: how custom rules map to ratings, what "overlapping waste" means for findings that carry locations rather than spans, and how disabled gate conditions are shown.
 Decision: a finding's category comes from its `AI-<PREFIX>-` rule ID, so custom `X-` rules have no category and affect no rating (they still count in `fail_on_severity`). Waste overlaps when two EFF findings in one file have intersecting half-open location ranges; each overlapping cluster contributes its max waste. Disabled gate conditions are omitted from `Gate.conditions`. Metrics cover in-scope assets only. Condition values are typed (`GateValue`) and formatted by the reporters.
 Consequences: a project of only custom-rule findings rates A everywhere but can still fail the gate through `fail_on_severity`.
+
+## ADR-018 — CLI flag details for `scan`/`ci` (2026-10-15)
+Context: P2.8 wired `scan`/`ci`; the Commands section left `-v`, `PATHS` resolution and color precedence implicit.
+Decision: `-v, --verbose` is a global flag (remediation for every finding in the terminal report). `PATHS` are root-relative (absolute paths under the root are stripped). An explicit `--color` wins over `NO_COLOR`; `ci` treats `--color auto` as off. `init` uses the global `-C`. Formats without a reporter yet (`json`, `sarif`, `markdown`) exit 2 with "not implemented yet"; `github` renders as terminal until P6.2.
+Consequences: `pulse -C dir scan sub/` scans `dir/sub`, not `./sub`; `--new-only`/`--changed-since` are added with their implementation in P6.3.

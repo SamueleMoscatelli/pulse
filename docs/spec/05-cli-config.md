@@ -9,6 +9,7 @@ GLOBAL: -C, --root <DIR>   scan root (default: cwd)
         -c, --config <FILE> config path (default: <root>/pulse.toml if present)
         --color <auto|always|never>   (also honors NO_COLOR)
         -q, --quiet         findings only, no summary
+        -v, --verbose       show the remediation of every finding (terminal)
         --timings           print phase timings to stderr
 
 pulse init [--force]                        write a commented default pulse.toml (refuse to overwrite without --force)
@@ -27,7 +28,9 @@ pulse rules [--category <CAT>] [--format terminal|json]   list rules (id, severi
 pulse explain <RULE-ID>                     print the rule's docs (embedded docs/rules/<ID>.md)
 ```
 
-`PATHS` restrict analysis to those files/dirs, but project rules still see the full discovered asset set for context (e.g. reference checks).
+`PATHS` are relative to the scan root (absolute paths under it are accepted) and restrict analysis to those files/dirs, but project rules still see the full discovered asset set for context (e.g. reference checks).
+
+Color: an explicit `--color always|never` wins over `NO_COLOR`; `auto` means stdout is a TTY and `NO_COLOR` is unset or empty (`pulse ci` treats `auto` as off). `--timings` and walk warnings go to stderr.
 
 Exit codes: `0` OK / gate passed · `1` gate failed · `2` usage, config or I/O error.
 
