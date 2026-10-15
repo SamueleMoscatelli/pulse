@@ -17,6 +17,7 @@ use rayon::prelude::*;
 use crate::post::{dedup, fingerprint, sort};
 use crate::suppress::{self, Ignores};
 use crate::{AssetMeta, EngineError, Report, ScanOptions, Timings};
+use crate::{gate, score};
 
 /// Scans `root` with `config`: discover, read, run rules, override severities, dedup,
 /// fingerprint and sort.
@@ -109,7 +110,7 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
     fingerprint(&mut findings, &assets);
     let rules_at = Instant::now();
 
-    let assets_meta = assets
+    let assets_meta: Vec<AssetMeta> = assets
         .iter()
         .map(|a| AssetMeta {
             rel_path: a.rel_path.clone(),
@@ -119,11 +120,21 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
             always_tokens: a.always_tokens(),
         })
         .collect();
+    let scoped: Vec<&AssetMeta> = assets_meta
+        .iter()
+        .filter(|a| in_paths(&a.rel_path, &opts.paths))
+        .collect();
+    let metrics = score::metrics(&findings, &scoped, config.context.window);
+    let ratings = score::ratings(&findings, metrics.context_debt);
+    let gate = gate::evaluate(&config.gate, &findings, &metrics, &ratings);
     Ok(Report {
         findings,
         suppressed,
         assets_meta,
         walk_errors: discovery.skipped,
+        metrics,
+        ratings,
+        gate,
         timings: Timings {
             discover: discovered_at - start,
             read: read_at - discovered_at,

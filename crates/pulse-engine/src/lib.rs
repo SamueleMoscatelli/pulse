@@ -1,7 +1,9 @@
 //! Pulse engine: discover, parse, run rules, suppress, baseline, score, gate.
 
+mod gate;
 mod pipeline;
 mod post;
+mod score;
 mod suppress;
 
 use std::path::PathBuf;
@@ -9,7 +11,9 @@ use std::time::Duration;
 
 use pulse_core::{AssetKind, ConfigError, DiscoverError, Finding, LoadMode};
 
+pub use gate::{Condition, Gate, GateStatus, GateValue};
 pub use pipeline::scan;
+pub use score::{Metrics, Ratings, category_of};
 
 /// Error that aborts a scan (bad assets never do: they become findings).
 #[derive(Debug, thiserror::Error)]
@@ -60,5 +64,9 @@ pub struct Report {
     pub assets_meta: Vec<AssetMeta>,
     /// Entries the walker could not visit, with the reason.
     pub walk_errors: Vec<(PathBuf, String)>,
+    /// Metrics over the in-scope assets and open findings.
+    pub metrics: Metrics,
+    pub ratings: Ratings,
+    pub gate: Gate,
     pub timings: Timings,
 }
