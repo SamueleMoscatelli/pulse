@@ -12,6 +12,7 @@ Goal: the full SEC catalog. Every task follows the `add-rule` skill. Precision m
 - **Size** M · **Depends** P3.1
 - **Read** `scripts/spec.sh "AI-SEC-004"`, `scripts/spec.sh "AI-SEC-005"`, `scripts/spec.sh "AI-SEC-006"`; skill `add-rule`
 - **Do** Three rules in `security/mcp.rs` over `asset.mcp()`. The package-spec parser for npx/uvx/docker args lives in one helper with unit tests (scoped npm names `@scope/pkg@1.2.3`, `pkg@^1` = unpinned range, docker `image@sha256:`).
+  AI-SEC-004 reports on the value span without quotes, so the engine dedup lets AI-SEC-003 win on the same span (ADR-020); add an engine test with both rules registered.
 - **Done when** check is green; fixtures for Claude, VS Code (inputs) and Cursor config shapes, each with pass and fail.
 
 ## P3.3 — AI-SEC-007 over-permissive permissions

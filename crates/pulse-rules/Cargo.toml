@@ -11,6 +11,7 @@ rust-version.workspace = true
 aho-corasick = "1.1.5"
 memchr = "2.8.3"
 pulse-core.workspace = true
+regex = "1.13.1"
 serde = { version = "1.0.229", features = ["derive"] }
 
 [lints]
