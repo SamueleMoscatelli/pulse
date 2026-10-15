@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run test:*)",
+      "Bash(git diff:*)",
+      "WebFetch(domain:docs.rs)",
+      "Read"
+    ],
+    "deny": ["Bash", "WebFetch"],
+    "defaultMode": "acceptEdits"
+  },
+  "enableAllProjectMcpServers": false
+}

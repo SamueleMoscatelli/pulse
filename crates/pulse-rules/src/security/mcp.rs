@@ -441,7 +441,7 @@ pub fn insecure_url(url: &str) -> Option<Severity> {
 
 /// The span of `len` bytes at `off` in a JSON string `value` whose node covers `span`,
 /// without quotes. Falls back to the whole string when escapes shift the offsets.
-fn value_span(asset: &Asset, span: Span, value: &str, off: usize, len: usize) -> Span {
+pub(crate) fn value_span(asset: &Asset, span: Span, value: &str, off: usize, len: usize) -> Span {
     let src = asset.source.as_bytes();
     let quoted =
         span.end >= span.start + 2 && matches!(src.get(span.start as usize), Some(b'"' | b'\''));

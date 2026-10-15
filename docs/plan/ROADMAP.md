@@ -27,7 +27,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 ## Phase 3 — Security pack
 - [x] P3.1 AI-SEC-003 hardcoded secrets
 - [x] P3.2 AI-SEC-004/005/006 MCP config security
-- [ ] P3.3 AI-SEC-007 over-permissive permissions
+- [x] P3.3 AI-SEC-007 over-permissive permissions
 - [ ] P3.4 AI-SEC-008/009 hook command safety
 - [ ] P3.5 AI-SEC-010/011 exfiltration & hidden instructions
 - [ ] P3.6 AI-SEC-012/013 tool poisoning & sensitive paths
@@ -58,4 +58,4 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [ ] P7.3 Docs, license, dogfooding in CI
 
 ## Backlog (unscheduled; promote by adding a card + roadmap line)
-`pulse fix` autofixes · LSP server & VS Code extension · WASM playground · opt-in `--deep` LLM analysis · result cache keyed by content hash · optional tiktoken feature · multilingual injection lexicon · `apm` integration · scanning prompts embedded in source code. · default excludes (`build`, `out`, …) also prune same-named dirs inside asset trees (e.g. `.claude/commands/build/`): consider pruning them only outside hidden dirs. · AI-SEC-001: allow emoji tag sequences (U+1F3F4 + tags + U+E007F, e.g. the England flag) instead of reporting them as tag smuggling. · AI-EFF-002: the top-5 contributor list can push the message past 100 chars; consider basenames or a shorter format once reporters show details.
+`pulse fix` autofixes · LSP server & VS Code extension · WASM playground · opt-in `--deep` LLM analysis · result cache keyed by content hash · optional tiktoken feature · multilingual injection lexicon · `apm` integration · scanning prompts embedded in source code. · default excludes (`build`, `out`, …) also prune same-named dirs inside asset trees (e.g. `.claude/commands/build/`): consider pruning them only outside hidden dirs. · AI-SEC-001: allow emoji tag sequences (U+1F3F4 + tags + U+E007F, e.g. the England flag) instead of reporting them as tag smuggling. · AI-EFF-002: the top-5 contributor list can push the message past 100 chars; consider basenames or a shorter format once reporters show details. · AI-SEC-007: map Copilot `.prompt.md` tool names (`runCommands`, `runInTerminal`, `fetch`) to Bash/network.

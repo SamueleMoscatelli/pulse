@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "ask": ["Bash", "WebFetch"],
+    "allow": ["Bash(cargo test:*)", "Grep", "Glob"],
+    "defaultMode": "default"
+  }
+}

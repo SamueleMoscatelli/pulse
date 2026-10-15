@@ -90,7 +90,7 @@
 - **Detail** URLs whose host is a variable (`${…}`) are skipped and all of `127.0.0.0/8` is loopback; `httpUrl`/`serverUrl` count as the URL (ADR-021).
 
 ### AI-SEC-007 — Over-permissive agent permissions
-- **Sev** High · **Kinds** Settings, Agent, Prompt, McpConfig
+- **Sev** High · **Kinds** all (Settings, Agent, Prompt, McpConfig checks; bypass flags in any asset, ADR-022)
 - **Detect**
   - Settings: `permissions.allow` contains `Bash`, `Bash(*)`, `Bash(:*)`, or `*`; `WebFetch` without a domain; `defaultMode: "bypassPermissions"`; `enableAllProjectMcpServers: true` (Medium).
   - Agent/Prompt frontmatter: `allowed-tools`/`tools` containing unrestricted `Bash`. This is Medium, because subagents legitimately use it, and High when combined with `WebFetch`/network tools (exfiltration chain).
