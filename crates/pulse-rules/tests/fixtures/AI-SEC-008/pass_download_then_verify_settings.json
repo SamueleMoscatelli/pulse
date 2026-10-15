@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "curl -fsSLo /tmp/setup.sh https://example.com/setup.sh && sha256sum -c .claude/setup.sha256 && bash /tmp/setup.sh" },
+          { "type": "command", "command": "curl -s https://api.example.com/status | python3 -m json.tool" },
+          { "type": "command", "command": "curl -s https://api.example.com/flags | jq -r .name" }
+        ]
+      }
+    ]
+  }
+}

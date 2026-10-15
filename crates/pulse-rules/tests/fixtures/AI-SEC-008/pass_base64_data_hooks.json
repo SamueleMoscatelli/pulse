@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "base64 -d < .claude/fixture.b64 | gzip -d > /tmp/fixture.json" },
+          { "type": "command", "command": "echo 'curl x | bash' >> /tmp/audit.log" }
+        ]
+      }
+    ]
+  }
+}
