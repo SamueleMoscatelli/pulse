@@ -34,5 +34,5 @@ crates/pulse-rules/tests/fixtures/AI-SEC-002/
 
 ## Performance checks
 
-- `divan` benches: estimator throughput, normalize throughput, full `scan()` over the `tests/fixtures/repos/large` generator (synthesized at bench time: 1,000 assets).
-- `scripts/bench.sh` builds release and times `pulse scan` on fixture repos (hyperfine if available, else a loop with `/usr/bin/time`). It fails if the budgets in `00-overview.md` are exceeded by > 20%.
+- `divan` benches (`crates/pulse-engine/benches/scan.rs`): estimator throughput, normalize throughput, full `scan()` over the `large` repo generator (`benches/support/gen_repo.rs`, synthesized at bench time in a tempdir: 1,000 assets among 10,000 files).
+- `scripts/bench.sh` builds release, synthesizes `typical` (200 assets, 20k files) and `large` (1,000 assets, 200k files) under `target/bench-repos/` with the `gen_repo` example, and takes the median wall time of `pulse scan -q` (hyperfine if available, else a Perl `Time::HiRes` loop; `/usr/bin/time` only for peak RSS). It fails if the budgets in `00-overview.md` are exceeded by > 20%. Numbers are recorded in `docs/perf.md`.

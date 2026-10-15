@@ -1,0 +1,6 @@
+# Pulse config for Pulse's own repo (dogfooding). Defaults apply for everything not set here.
+
+[[ignore]]
+path = "**/tests/fixtures/**"
+rules = ["AI-STR-002"]
+reason = "Deliberately malformed test fixtures"
