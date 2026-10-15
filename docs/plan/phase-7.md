@@ -6,6 +6,7 @@ Goal: provably fast, robust against hostile input, easy to install, and dogfoode
 - **Size** M · **Depends** P6.5
 - **Read** `scripts/spec.sh "Performance budget"`, `scripts/spec.sh "Performance design"`, `docs/perf.md`
 - **Do** Profile `scan` on the 1,000-asset generated tree (`cargo build --profile profiling` with debug symbols + `samply` or `cargo flamegraph` if installed, else per-phase `--timings`). Fix the top 3 hotspots. Make `scripts/bench.sh` fail on budget regressions and add it to CI as a non-blocking job on macOS. Add a fuzz-ish robustness test: random bytes / huge lines / deeply nested JSON / 10k HTML comments must not panic or exceed 2× the time budget.
+  - (from P2.9, ADR-019) v0.1.0 numbers in `docs/perf.md` come from a 2019 Intel i5 and miss the budget (startup 6.1 ms, typical 46 ms, large 317 ms); re-measure on Apple M-series or a `macos-14` runner first. Discovery is ~80% of scan time.
 - **Done when** budgets met (update `docs/perf.md`); the robustness test is green.
 
 ## P7.2 — Release pipeline, GitHub Action, pre-commit

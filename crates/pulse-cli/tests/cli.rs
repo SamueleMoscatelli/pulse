@@ -1,4 +1,4 @@
-//! `pulse scan` / `pulse ci` exit codes and output modes, end to end.
+//! The `pulse` binary end to end: exit codes, `init`, `scan`/`ci` and output modes.
 
 #![allow(clippy::unwrap_used)] // helpers outside #[test] fns
 
@@ -111,4 +111,54 @@ fn output_flag_writes_file_and_timings_go_to_stderr() {
             .unwrap()
             .contains("No issues found.")
     );
+}
+
+fn tempdir_str(dir: &tempfile::TempDir) -> String {
+    dir.path().to_string_lossy().into_owned()
+}
+
+#[test]
+fn init_then_scan_uses_the_generated_config() {
+    let dir = tempfile::tempdir().unwrap();
+    let d = tempdir_str(&dir);
+    std::fs::write(
+        dir.path().join("CLAUDE.md"),
+        "# Project\n\nUse cargo to build.\n",
+    )
+    .unwrap();
+    pulse(&["init", "-C", &d]).code(0);
+    assert!(dir.path().join("pulse.toml").is_file());
+    // A second `init` refuses to overwrite.
+    pulse(&["init", "-C", &d]).code(2);
+    let out = pulse(&["ci", "-C", &d]).code(0);
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(stdout.contains("QUALITY GATE   PASSED"), "{stdout}");
+}
+
+#[test]
+fn ci_fails_on_a_critical_finding() {
+    let dir = tempfile::tempdir().unwrap();
+    // Zero-width space (AI-SEC-001, critical), generated rather than committed raw.
+    let text = format!("# Project\n\nAlways run{}the tests.\n", '\u{200B}');
+    std::fs::write(dir.path().join("CLAUDE.md"), text).unwrap();
+    let d = tempdir_str(&dir);
+    let out = pulse(&["ci", "-C", &d]).code(1);
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(stdout.contains("AI-SEC-001"), "{stdout}");
+    assert!(stdout.contains("QUALITY GATE   FAILED"), "{stdout}");
+    // `scan` reports the same finding but exits 0.
+    pulse(&["scan", "-C", &d]).code(0);
+}
+
+#[test]
+fn unknown_rule_in_config_exits_two() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("pulse.toml"),
+        "[rules]\n\"AI-STR-02\" = \"off\"\n",
+    )
+    .unwrap();
+    let out = pulse(&["scan", "-C", &tempdir_str(&dir)]).code(2);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("unknown rule `AI-STR-02`"), "{stderr}");
 }

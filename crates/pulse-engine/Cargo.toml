@@ -19,4 +19,9 @@ xxhash-rust = { version = "0.8.19", features = ["xxh3"] }
 workspace = true
 
 [dev-dependencies]
+divan = "0.1.21"
 tempfile = "3.27.0"
+
+[[bench]]
+name = "scan"
+harness = false
