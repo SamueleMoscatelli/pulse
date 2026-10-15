@@ -116,4 +116,6 @@ Some text <!-- pulse-ignore AI-EFF-007 -->           trailing form: suppresses o
 - Several IDs can be comma-separated. `all` is not accepted (be explicit).
 - Rules with `inline_suppressible = false` (AI-SEC-001/002/003/008/012) ignore inline suppressions and emit an Info note `suppression ignored: <ID> can only be suppressed in pulse.toml` (ADR-006).
 - JSON assets have no inline suppressions; use `[[ignore]]`.
-- An unused suppression comment produces an Info finding (`AI-STR-002`, message "unused suppression").
+- An unused suppression comment produces an Info finding (`AI-STR-002`, message "unused suppression"): `unused suppression: <ID>`, only for rules that ran. A comment listing no IDs, `all`, an unknown non-`X-` ID, or a `pulse-ignore-file` after the first heading produces an Info `invalid suppression: …` and suppresses nothing (ADR-016).
+- A next-line comment skips blank lines and lines holding only another suppression comment (so comments stack). A suppression matches findings that *start* on its target line. Comments inside code blocks are not directives. IDs may be separated by commas or spaces.
+- Order: inline suppressions, then `[[ignore]]` (which can also drop the AI-STR-002 notes), then dedup. `[[ignore]]` globs match the scan-root-relative path (`*` does not cross `/`), and unknown IDs in `ignore.rules` are config errors.

@@ -15,6 +15,7 @@ use pulse_rules::{PROJECT_RULES, RULES, all_meta, structure};
 use rayon::prelude::*;
 
 use crate::post::{dedup, fingerprint, sort};
+use crate::suppress::{self, Ignores};
 use crate::{AssetMeta, EngineError, Report, ScanOptions, Timings};
 
 /// Scans `root` with `config`: discover, read, run rules, override severities, dedup,
@@ -22,6 +23,7 @@ use crate::{AssetMeta, EngineError, Report, ScanOptions, Timings};
 pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, EngineError> {
     let start = Instant::now();
     let rules = Resolved::new(config, opts)?;
+    let ignores = Ignores::new(config)?;
 
     // Options are checked before the walk, so a bad `pulse.toml` fails fast.
     let no_files = HashSet::new();
@@ -93,6 +95,15 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
             f.severity = sev;
         }
     }
+    let in_scope: Vec<&Asset> = assets
+        .iter()
+        .filter(|a| in_paths(&a.rel_path, &opts.paths))
+        .collect();
+    let ran = |id: &str| {
+        rules.asset.iter().any(|r| r.meta().id == id)
+            || rules.project.iter().any(|r| r.meta().id == id)
+    };
+    let (findings, suppressed) = suppress::apply(findings, &in_scope, root, &ignores, ran);
     let mut findings = dedup(findings);
     sort(&mut findings);
     fingerprint(&mut findings, &assets);
@@ -110,6 +121,7 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
         .collect();
     Ok(Report {
         findings,
+        suppressed,
         assets_meta,
         walk_errors: discovery.skipped,
         timings: Timings {
