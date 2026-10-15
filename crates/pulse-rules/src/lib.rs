@@ -2,6 +2,7 @@
 
 use pulse_core::{ProjectRule, Rule, RuleMeta};
 
+pub mod cognitive;
 pub mod efficiency;
 pub mod lexicon;
 pub mod security;
@@ -10,6 +11,7 @@ pub mod util;
 
 /// Asset-scoped rules, in ID order.
 pub static RULES: &[&dyn Rule] = &[
+    &cognitive::contradiction::ContradictoryDirectives,
     &efficiency::budget::AssetBudget,
     &security::unicode::InvisibleUnicode,
     &security::injection::InjectionPhrase,

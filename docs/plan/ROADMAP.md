@@ -18,7 +18,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [x] P2.2 AI-SEC-001 invisible/bidi Unicode
 - [x] P2.3 AI-SEC-002 prompt-injection phrases
 - [x] P2.4 AI-EFF-001 & AI-EFF-002 token budgets
-- [ ] P2.5 AI-COG-001 contradictory directives
+- [x] P2.5 AI-COG-001 contradictory directives
 - [ ] P2.6 Suppressions (inline + config)
 - [ ] P2.7 Scoring, ratings & quality gate
 - [ ] P2.8 Terminal reporter, `scan` & `ci` commands
