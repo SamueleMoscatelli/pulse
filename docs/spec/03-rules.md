@@ -99,11 +99,11 @@
 
 ### AI-SEC-008 — Remote code execution in hook
 - **Sev** Critical · **Kinds** Settings, Hooks, Skill, Prompt · **Inline-suppressible** no
-- **Detect** In hook commands (and in fenced `bash`/`sh` blocks of skills/commands with `!` execution), match pipe-to-shell: `(curl|wget|iwr|Invoke-WebRequest)[^|]*\|\s*(sudo\s+)?(sh|bash|zsh|python3?|node|iex)`, `bash <(curl …)`, `eval "$(curl …)"`, plus base64 decode piped to a shell.
+- **Detect** In hook commands (and in fenced `bash`/`sh` blocks of skills/commands with `!` execution), match pipe-to-shell: `(curl|wget|iwr|Invoke-WebRequest)[^|]*\|\s*(sudo\s+)?(sh|bash|zsh|python3?|node|iex)`, `bash <(curl …)`, `eval "$(curl …)"`, plus base64 decode piped to a shell. Fences: `bash`/`sh`/`shell`/`zsh` in skill and prompt bodies, plus `` !`cmd` `` lines (ADR-023).
 
 ### AI-SEC-009 — Unsafe interpolation in hook command
 - **Sev** High · **Kinds** Settings, Hooks
-- **Detect** Hook commands that interpolate tool input unquoted into a shell, e.g. `$(jq -r .tool_input.command)` or `$CLAUDE_FILE_PATHS` / `${file}` outside double quotes, or passed to `eval`/`sh -c`.
+- **Detect** Hook commands that interpolate tool input unquoted into a shell, e.g. `$(jq -r .tool_input.command)` or `$CLAUDE_FILE_PATHS` / `${file}` outside double quotes, or passed to `eval`/`sh -c`. Also a tool-input stage piped into `xargs` (ADR-023).
 - **Fix** Quote expansions; pass data via stdin or arguments; never `eval` tool input.
 
 ### AI-SEC-010 — Data-exfiltration pattern

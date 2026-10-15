@@ -37,6 +37,8 @@ fn kind_of(dir: &Path, name: &str) -> AssetKind {
         AssetKind::Agent
     } else if name.ends_with("command.md") || name.ends_with("prompt.md") {
         AssetKind::Prompt
+    } else if name.ends_with("hooks.json") {
+        AssetKind::Hooks
     } else if name.ends_with(".json") {
         AssetKind::McpConfig
     } else {

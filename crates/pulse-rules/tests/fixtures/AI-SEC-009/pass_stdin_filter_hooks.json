@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "jq -r '.tool_input.command' | grep -qE 'rm -rf|git push --force' && exit 2 || exit 0" },
+          { "type": "command", "command": "echo '$CLAUDE_FILE_PATHS changed' >> .claude/edits.log" },
+          { "type": "prompt", "prompt": "Check $CLAUDE_FILE_PATHS for secrets" }
+        ]
+      }
+    ]
+  }
+}
