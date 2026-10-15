@@ -205,7 +205,7 @@ Every EFF finding sets `token_waste`, which feeds context debt (`04-scoring-gate
   2. **Opposite polarity, same object** (e.g. "Always use semicolons" / "Never use semicolons") → finding.
   3. **Mutually exclusive choices**: both members of a set in `lexicon::EXCLUSIVE_SETS` are prescribed positively (e.g. {typescript, javascript}, {tabs, spaces}, {npm, yarn, pnpm, bun}, {single quotes, double quotes}, {jest, vitest}, {snake_case, camelCase}) → finding. Users can extend this with `[rules.AI-COG-001] exclusive = [[...]]`.
 - **Report** On the second directive, referencing the first: `Contradicts line 12: "Always use TypeScript" vs "Use plain JavaScript"`.
-- **FP guards** Skip if either sentence has a scoping qualifier (`when`, `if`, `for`, `in`, `except`, `unless`, `only`) followed by different contexts, or if the two directives are in sections whose headings name different scopes (e.g. "Frontend" vs "Scripts").
+- **FP guards** Skip if either sentence has a scoping qualifier (`when`, `if`, `for`, `in`, `except`, `unless`, `only`) followed by different contexts, or if the two directives are in sections whose headings name different scopes (e.g. "Frontend" vs "Scripts"). Also skip a negative directive whose object is more specific than the positive one ("Always use TypeScript" / "Never use TypeScript enums"); a heading names a scope unless all its words are generic (`lexicon::directives::GENERIC_HEADINGS`: "Code style", "Rules", …), and the guard needs both headings to name scopes (ADR-015).
 
 ### AI-COG-002 — Vague directive
 - **Sev** Low · **Kinds** md

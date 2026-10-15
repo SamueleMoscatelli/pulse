@@ -1,5 +1,6 @@
 //! Shared word lists and the automata built from them.
 
+pub mod directives;
 pub mod injection;
 
 use pulse_core::text::normalize;

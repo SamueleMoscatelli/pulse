@@ -525,3 +525,44 @@ fn eff002_exact_budget_passes() {
     assert!(at(8000).is_empty());
     assert_eq!(at(8001)[0].token_waste, 1);
 }
+
+fn cog001_with(text: &str, options: &OptionsStore) -> Vec<Finding> {
+    run_with(
+        "AI-COG-001",
+        &[asset(
+            "CLAUDE.md",
+            AssetKind::Instructions,
+            text.as_bytes().to_vec(),
+        )],
+        options,
+    )
+}
+
+#[test]
+fn cog001_message_references_first_directive() {
+    let f = cog001_with(
+        "# Rules\n\nAlways use TypeScript.\n\nUse plain JavaScript.\n",
+        &OptionsStore::empty(),
+    );
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(loc(&f[0]), (5, 1));
+    assert_eq!(f[0].severity, Severity::Medium);
+    assert_eq!(
+        f[0].message,
+        "Contradicts line 3: \"Always use TypeScript\" vs \"Use plain JavaScript\""
+    );
+}
+
+#[test]
+fn cog001_exclusive_option_extends_sets() {
+    let text = "Always use Bun.\nPrefer Deno.\n";
+    assert!(cog001_with(text, &OptionsStore::empty()).is_empty());
+    let table: toml::Table = toml::from_str("exclusive = [['bun', 'Deno']]").unwrap();
+    let options = OptionsStore::new(
+        [("AI-COG-001".to_owned(), pulse_core::RuleOptions(table))].into(),
+        "pulse.toml",
+    );
+    let f = cog001_with(text, &options);
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(loc(&f[0]), (2, 1));
+}
