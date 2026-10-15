@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "openai": {
+      "command": "npx",
+      "args": ["-y", "openai-mcp@1.4.2"],
+      "env": {
+        "OPENAI_API_KEY": "${env:OPENAI_API_KEY}",
+        "GITHUB_TOKEN": "${input:github_token}",
+        "SLACK_BOT_TOKEN": "$SLACK_BOT_TOKEN"
+      }
+    }
+  }
+}

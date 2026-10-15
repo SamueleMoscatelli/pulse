@@ -566,3 +566,147 @@ fn cog001_exclusive_option_extends_sets() {
     assert_eq!(f.len(), 1, "{f:?}");
     assert_eq!(loc(&f[0]), (2, 1));
 }
+
+// Secrets: fake but format-valid keys, assembled at runtime so none is committed raw.
+
+/// `n` deterministic pseudo-random chars from `alphabet`.
+fn noise(seed: u64, n: usize, alphabet: &str) -> String {
+    let chars: Vec<char> = alphabet.chars().collect();
+    let mut x = seed;
+    (0..n)
+        .map(|_| {
+            x = x
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            chars[usize::try_from(x >> 33).unwrap() % chars.len()]
+        })
+        .collect()
+}
+
+const ALNUM: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+const UPPER: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+/// (provider shown in the message, fake secret) for every AI-SEC-003 format.
+fn fake_secrets() -> Vec<(&'static str, String)> {
+    vec![
+        ("AWS", ["AK", "IA", &noise(1, 16, UPPER)].concat()),
+        ("GitHub", ["gh", "p_", &noise(2, 36, ALNUM)].concat()),
+        ("GitHub", ["github", "_pat_", &noise(3, 40, ALNUM)].concat()),
+        (
+            "Anthropic",
+            ["sk-", "ant-api03-", &noise(4, 40, ALNUM)].concat(),
+        ),
+        ("OpenAI", ["sk-", "proj-", &noise(5, 40, ALNUM)].concat()),
+        ("Slack", ["xo", "xb-", &noise(6, 24, ALNUM)].concat()),
+        ("Google", ["AI", "za", &noise(7, 35, ALNUM)].concat()),
+        ("Stripe", ["sk_", "live_", &noise(8, 24, ALNUM)].concat()),
+        (
+            "private key",
+            ["-----BEGIN RSA ", "PRIVATE KEY-----"].concat(),
+        ),
+        (
+            "JWT",
+            [
+                "ey",
+                "J",
+                &noise(9, 20, ALNUM),
+                ".ey",
+                "J",
+                &noise(10, 20, ALNUM),
+                ".",
+                &noise(11, 20, ALNUM),
+            ]
+            .concat(),
+        ),
+        ("generic", noise(12, 24, ALNUM)),
+    ]
+}
+
+fn sec003(rel: &str, kind: AssetKind, text: &str) -> Vec<Finding> {
+    run("AI-SEC-003", &[asset(rel, kind, text.as_bytes().to_vec())])
+}
+
+#[test]
+fn sec003_every_provider_is_found_and_redacted() {
+    for (provider, secret) in fake_secrets() {
+        let line = if provider == "generic" {
+            format!("db_password = {secret}")
+        } else {
+            format!("Use `{secret}` for the API.")
+        };
+        let f = sec003(
+            "CLAUDE.md",
+            AssetKind::Instructions,
+            &format!("# Setup\n{line}\n"),
+        );
+        assert_eq!(f.len(), 1, "{provider}: {f:?}");
+        let first4: String = secret.chars().take(4).collect();
+        assert_eq!(
+            f[0].message,
+            format!("Possible {provider} secret \"{first4}…\""),
+        );
+        assert!(
+            !f[0].message.contains(&secret[..8]),
+            "{provider} not redacted"
+        );
+        assert_eq!(f[0].severity, Severity::Critical);
+        assert_eq!(f[0].location.line, 2);
+        let col = u32::try_from(line.find(&secret).unwrap() + 1).unwrap();
+        assert_eq!(f[0].location.col, col, "{provider}");
+    }
+}
+
+#[test]
+fn sec003_literal_in_mcp_env_is_found() {
+    let key = ["sk-", "proj-", &noise(20, 40, ALNUM)].concat();
+    let json = format!(
+        "{{\"mcpServers\": {{\"ai\": {{\"command\": \"npx\", \"env\": {{\n  \"OPENAI_API_KEY\": \"{key}\",\n  \"OTHER_KEY\": \"${{env:OPENAI_API_KEY}}\"\n}}}}}}}}"
+    );
+    let f = sec003(".mcp.json", AssetKind::McpConfig, &json);
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(loc(&f[0]), (2, 22));
+    assert!(f[0].message.starts_with("Possible OpenAI secret"));
+}
+
+#[test]
+fn sec003_generic_entropy_gate_and_json_keys() {
+    let strong = noise(30, 20, ALNUM);
+    let f = sec003(
+        "a.prompt.md",
+        AssetKind::Prompt,
+        &format!("\"apiKey\": \"{strong}\"\nmy_token: aaaabbbbccccdddd\n"),
+    );
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(loc(&f[0]), (1, 12));
+}
+
+#[test]
+fn sec003_placeholders_pass() {
+    let body = noise(40, 30, ALNUM);
+    for text in [
+        "OPENAI_API_KEY=${env:OPENAI_API_KEY}".to_owned(),
+        format!("sk-your-key-{body}"),
+        ["sk-", &"a".repeat(30)].concat(),
+        ["gh", "p_", &"x".repeat(36)].concat(),
+        format!("token = <{body}>"),
+        format!("password: {{{{ secrets.{body} }}}}"),
+    ] {
+        assert!(
+            sec003("CLAUDE.md", AssetKind::Instructions, &text).is_empty(),
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn sec003_provider_wins_over_generic_on_same_span() {
+    let key = ["sk-", "ant-api03-", &noise(50, 40, ALNUM)].concat();
+    let f = sec003(
+        "CLAUDE.md",
+        AssetKind::Instructions,
+        &format!("ANTHROPIC_API_KEY={key}\n"),
+    );
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(loc(&f[0]), (1, 19));
+    assert!(f[0].message.starts_with("Possible Anthropic secret"));
+}

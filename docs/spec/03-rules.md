@@ -69,7 +69,7 @@
 - **Sev** Critical · **Kinds** all · **Inline-suppressible** no
 - **Detect** Regex set (`RegexSet` prefilter, then individual regexes for spans): AWS `AKIA[0-9A-Z]{16}`, GitHub `gh[pousr]_[A-Za-z0-9]{36,}` / `github_pat_…`, OpenAI `sk-(proj-)?[A-Za-z0-9_-]{20,}`, Anthropic `sk-ant-[A-Za-z0-9_-]{20,}`, Slack `xox[abprs]-…`, Google `AIza[0-9A-Za-z_-]{35}`, Stripe `sk_live_…`, private-key PEM headers, JWT `eyJ…\.eyJ…\.…`, plus generic `(api[_-]?key|token|secret|password)\s*[:=]\s*["']?([^\s"']{12,})` gated by Shannon entropy ≥ 3.5 bits/char.
 - **Report** `Possible <provider> secret`, with the secret redacted (first 4 chars + `…`).
-- **FP guards** Ignore obvious placeholders (`xxx`, `<…>`, `${…}`, `your-`, `example`, `dummy`, `changeme`, all-same-char).
+- **FP guards** Ignore obvious placeholders (`xxx`, `<…>`, `${…}`, `your-`, `example`, `dummy`, `changeme`, all-same-char), plus `$VAR`, `{{…}}` and env lookups; see ADR-020). The generic key may have a `[a-z_]*` suffix and a closing quote before `:`/`=` (no newline across the separator), and its value needs a digit and must not look like code; OpenAI matches need mixed case and a digit; the span is the secret value; overlapping matches keep the earlier provider (ADR-020).
 
 ### AI-SEC-004 — MCP credential not externalized
 - **Sev** High · **Kinds** McpConfig

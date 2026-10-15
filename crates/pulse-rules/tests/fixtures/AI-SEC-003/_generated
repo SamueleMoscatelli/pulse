@@ -1,0 +1,1 @@
+Fail cases are built in tests/fixtures.rs (sec003_*) so no secret-shaped strings are committed.

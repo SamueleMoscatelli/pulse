@@ -25,7 +25,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [x] P2.9 End-to-end tests, benchmarks, v0.1.0
 
 ## Phase 3 — Security pack
-- [ ] P3.1 AI-SEC-003 hardcoded secrets
+- [x] P3.1 AI-SEC-003 hardcoded secrets
 - [ ] P3.2 AI-SEC-004/005/006 MCP config security
 - [ ] P3.3 AI-SEC-007 over-permissive permissions
 - [ ] P3.4 AI-SEC-008/009 hook command safety

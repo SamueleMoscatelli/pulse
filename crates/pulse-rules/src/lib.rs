@@ -15,6 +15,7 @@ pub static RULES: &[&dyn Rule] = &[
     &efficiency::budget::AssetBudget,
     &security::unicode::InvisibleUnicode,
     &security::injection::InjectionPhrase,
+    &security::secrets::HardcodedSecret,
     &structure::content::InvalidContent,
 ];
 
