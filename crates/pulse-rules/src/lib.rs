@@ -37,6 +37,7 @@ pub static PROJECT_RULES: &[&dyn ProjectRule] = &[
     &efficiency::budget::AlwaysOnBudget,
     &structure::refs::BrokenReference,
     &structure::tools::UnknownTool,
+    &structure::names::DuplicateName,
 ];
 
 /// Metadata of every registered rule, asset rules first, each group in ID order.

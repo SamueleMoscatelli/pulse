@@ -1098,3 +1098,116 @@ fn str003_skill_paths_resolve_from_skill_dir_or_root() {
         ["Broken path `scripts/deploy.sh`: no such file in the skill"]
     );
 }
+
+fn str007(files: &[(&str, AssetKind, &str)]) -> Vec<String> {
+    let assets: Vec<Asset> = files
+        .iter()
+        .map(|(rel, kind, src)| asset(rel, *kind, src.as_bytes().to_vec()))
+        .collect();
+    run("AI-STR-007", &assets)
+        .iter()
+        .map(|f| {
+            format!(
+                "{}:{}: {}",
+                f.location.path.display(),
+                f.location.line,
+                f.message
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn str007_duplicate_skill_names_in_different_dirs() {
+    let skill = |name: &str| format!("---\nname: {name}\ndescription: Review diffs.\n---\nBody.\n");
+    // Listed out of path order: the first in path order is the one kept.
+    let f = str007(&[
+        (
+            ".claude/skills/review/SKILL.md",
+            AssetKind::Skill,
+            &skill("review"),
+        ),
+        (
+            ".claude/skills/code-review/SKILL.md",
+            AssetKind::Skill,
+            &skill("review"),
+        ),
+    ]);
+    assert_eq!(
+        f,
+        [
+            ".claude/skills/review/SKILL.md:2: Duplicate skill name \"review\" \
+          (first: .claude/skills/code-review/SKILL.md)"
+        ]
+    );
+}
+
+#[test]
+fn str007_command_paths_collide_as_namespaced_names() {
+    let f = str007(&[
+        (
+            ".claude/commands/git/commit.md",
+            AssetKind::Prompt,
+            "Commit.\n",
+        ),
+        (
+            "pkg/.claude/commands/git/commit.md",
+            AssetKind::Prompt,
+            "Commit too.\n",
+        ),
+        (
+            ".claude/commands/git-commit.md",
+            AssetKind::Prompt,
+            "Not a clash.\n",
+        ),
+    ]);
+    assert_eq!(
+        f,
+        [
+            "pkg/.claude/commands/git/commit.md:1: Duplicate prompt name \"/git:commit\" \
+          (first: .claude/commands/git/commit.md)"
+        ]
+    );
+}
+
+#[test]
+fn str007_agents_without_name_use_the_file_stem() {
+    let f = str007(&[
+        (
+            ".github/agents/planner.agent.md",
+            AssetKind::Agent,
+            "Plan.\n",
+        ),
+        (
+            ".github/chatmodes/x.chatmode.md",
+            AssetKind::Agent,
+            "---\nname: planner\n---\nPlan.\n",
+        ),
+    ]);
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert!(
+        f[0].starts_with(".github/chatmodes/x.chatmode.md:2: "),
+        "{f:?}"
+    );
+}
+
+#[test]
+fn str007_same_name_across_platforms_or_plugins_passes() {
+    let skill = "---\nname: review\ndescription: Review diffs.\n---\nBody.\n";
+    let f = str007(&[
+        (".claude/skills/review/SKILL.md", AssetKind::Skill, skill),
+        (".github/skills/review/SKILL.md", AssetKind::Skill, skill),
+        (".cursor/skills/review/SKILL.md", AssetKind::Skill, skill),
+        ("plugins/a/skills/review/SKILL.md", AssetKind::Skill, skill),
+        ("plugins/b/skills/review/SKILL.md", AssetKind::Skill, skill),
+        (".claude/commands/review.md", AssetKind::Prompt, "Review.\n"),
+        (
+            ".github/prompts/review.prompt.md",
+            AssetKind::Prompt,
+            "Review.\n",
+        ),
+        ("flows/review.prompty", AssetKind::Prompt, "Review.\n"),
+        ("other/review.prompty", AssetKind::Prompt, "Review.\n"),
+    ]);
+    assert!(f.is_empty(), "{f:?}");
+}

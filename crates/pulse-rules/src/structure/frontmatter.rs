@@ -163,7 +163,7 @@ fn unknown_key_message(schema: &Schema, key: &str) -> String {
 }
 
 /// The line of top-level `key`, else the opening `---` line.
-fn key_span(asset: &Asset, fm: &Frontmatter, key: &str) -> Span {
+pub(crate) fn key_span(asset: &Asset, fm: &Frontmatter, key: &str) -> Span {
     let line = fm
         .key_lines
         .get(key)
