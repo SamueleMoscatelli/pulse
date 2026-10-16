@@ -1,5 +1,7 @@
 //! Small helpers shared by rules.
 
+use pulse_core::text::levenshtein_within;
+
 /// `s` cut to at most `max` chars, with `…` appended when cut.
 pub fn truncate(s: &str, max: usize) -> std::borrow::Cow<'_, str> {
     match s.char_indices().nth(max) {
@@ -14,9 +16,40 @@ pub fn truncate(s: &str, max: usize) -> std::borrow::Cow<'_, str> {
     }
 }
 
+/// Levenshtein distance between `a` and `b` (ASCII case-insensitive) when at most `max`.
+pub fn distance_within(a: &str, b: &str, max: usize) -> Option<usize> {
+    levenshtein_within(&a.to_ascii_lowercase(), &b.to_ascii_lowercase(), max)
+}
+
+/// The closest of `known` to `word` within a third of its length (at least 1, at most 3
+/// edits), ignoring ASCII case; ties keep the first in `known`.
+pub fn suggest<'a>(word: &str, known: &[&'a str]) -> Option<&'a str> {
+    let max = (word.chars().count() / 3).clamp(1, 3);
+    known
+        .iter()
+        .filter_map(|k| Some((distance_within(word, k, max)?, *k)))
+        .min_by_key(|&(d, _)| d)
+        .map(|(_, k)| k)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn distance_ignores_ascii_case() {
+        assert_eq!(distance_within("Reed", "Read", 1), Some(1));
+        assert_eq!(distance_within("read", "Read", 0), Some(0));
+        assert_eq!(distance_within("kitten", "sitting", 2), None);
+    }
+
+    #[test]
+    fn suggest_picks_closest_within_budget() {
+        let known = ["Read", "Write", "WebFetch"];
+        assert_eq!(suggest("Reed", &known), Some("Read"));
+        assert_eq!(suggest("WebFech", &known), Some("WebFetch"));
+        assert_eq!(suggest("Deploy", &known), None);
+    }
 
     #[test]
     fn truncate_counts_chars() {

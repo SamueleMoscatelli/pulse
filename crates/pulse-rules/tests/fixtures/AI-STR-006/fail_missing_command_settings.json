@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "timeout": 30 },
+          { "type": "script", "command": "make test" },
+          { "type": "command", "command": "make lint", "timeout": 0 },
+          { "type": "command", "command": "make e2e", "timeout": 3600 }
+        ]
+      }
+    ]
+  }
+}

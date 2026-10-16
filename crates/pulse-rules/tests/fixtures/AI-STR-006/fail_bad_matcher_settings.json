@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit(Write",
+        "hooks": [{ "type": "command", "command": "npx prettier --check ." }]
+      },
+      {
+        "matcher": "*Bash",
+        "hooks": [{ "type": "command", "command": "echo ran" }]
+      }
+    ]
+  }
+}

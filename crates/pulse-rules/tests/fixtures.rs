@@ -956,3 +956,53 @@ fn str004_name_dir_mismatch_and_lengths() {
     assert_eq!(f.len(), 1);
     assert!(f[0].message.starts_with("Description too long: 1049 chars"));
 }
+
+#[test]
+fn str005_mcp_tool_needs_its_server() {
+    let agent = || {
+        asset(
+            ".claude/agents/filer.md",
+            AssetKind::Agent,
+            b"---\nname: filer\ndescription: Files issues.\ntools: Reed, mcp__github__create_issue\n---\nFile issues.\n".to_vec(),
+        )
+    };
+    let mcp = |server: &str| {
+        let json = format!("{{\"mcpServers\": {{\"{server}\": {{\"command\": \"gh-mcp\"}}}}}}");
+        asset(".mcp.json", AssetKind::McpConfig, json.into_bytes())
+    };
+    let messages = |assets: &[Asset]| -> Vec<String> {
+        run("AI-STR-005", assets)
+            .into_iter()
+            .map(|f| f.message)
+            .collect()
+    };
+    let typo = "Unknown tool `Reed` (did you mean `Read`?)";
+    assert_eq!(messages(&[agent(), mcp("github")]), [typo]);
+    assert_eq!(
+        messages(&[agent(), mcp("gitlab")]),
+        [
+            typo,
+            "Undefined MCP server `github` in tool name (did you mean `gitlab`?)"
+        ]
+    );
+    // No McpConfig at all: the server may be user-scoped.
+    assert_eq!(messages(&[agent()]), [typo]);
+}
+
+#[test]
+fn str006_cursor_hooks_use_cursor_events() {
+    let hooks = asset(
+        ".cursor/hooks.json",
+        AssetKind::Hooks,
+        br#"{"version": 1, "hooks": {"beforeShellExecution": [{"command": "./hooks/audit.sh"}], "PreToolUse": [{"command": "echo hi"}]}}"#.to_vec(),
+    );
+    let f = run("AI-STR-006", &[hooks]);
+    let messages: Vec<&str> = f.iter().map(|f| f.message.as_str()).collect();
+    assert_eq!(
+        messages,
+        [
+            "Hook script `./hooks/audit.sh` does not exist",
+            "Unknown hook event `PreToolUse` (did you mean `preToolUse`?)"
+        ]
+    );
+}

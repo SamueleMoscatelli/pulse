@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "PreToolUser": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "echo checking" }]
+      }
+    ],
+    "OnSave": [
+      { "hooks": [{ "type": "command", "command": "echo saved" }] }
+    ]
+  }
+}
