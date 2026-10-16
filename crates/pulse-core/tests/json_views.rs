@@ -118,8 +118,9 @@ fn cursor_hooks_file_uses_flat_commands() {
     assert_eq!(hooks[0].event, "beforeShellExecution");
     assert_eq!(hooks[0].hooks[0].command, "./hooks/audit.sh");
     assert_eq!(line(&a, hooks[0].hooks[0].command_span), 4);
-    assert!(hooks[2].hooks.is_empty());
-    assert_eq!(a.settings().errors.len(), 1);
+    // A command hook without `command` is kept for AI-STR-006, not a shape error.
+    assert!(hooks[2].hooks[0].command.is_empty());
+    assert!(a.settings().errors.is_empty(), "{:?}", a.settings().errors);
 }
 
 #[test]
@@ -185,10 +186,11 @@ fn hook_types_without_command_are_not_errors() {
         ]}]}}"#,
     );
     let s = a.settings();
-    assert_eq!(s.hooks[0].hooks.len(), 1);
+    assert_eq!(s.hooks[0].hooks.len(), 2);
     assert_eq!(s.hooks[0].hooks[0].kind, "http");
     assert!(s.hooks[0].hooks[0].command.is_empty());
-    assert_eq!(s.errors.len(), 1, "command hook without command");
+    assert!(s.hooks[0].hooks[1].command.is_empty());
+    assert!(s.errors.is_empty(), "AI-STR-006 reports a missing command");
 }
 
 #[test]

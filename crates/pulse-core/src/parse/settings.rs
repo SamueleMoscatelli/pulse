@@ -36,12 +36,17 @@ pub struct HookEntry {
 pub struct HookCmd {
     /// `type` (`command`, `prompt`, …); `command` when absent.
     pub kind: String,
-    /// The `command`, or the `prompt` text of a prompt hook; empty for other types.
+    /// The `type` value, when present.
+    pub kind_span: Option<Span>,
+    /// The `command`, or the `prompt` text of a prompt hook; empty for other types and when
+    /// missing (AI-STR-006 reports a missing one).
     pub command: String,
     /// The command text, or the whole hook object when there is none.
     pub command_span: Span,
     /// Seconds.
     pub timeout: Option<f64>,
+    /// The `timeout` value, when it is a number.
+    pub timeout_span: Option<Span>,
 }
 
 impl SettingsView {
@@ -115,28 +120,25 @@ fn hooks(sh: &mut Shape, node: &JsonNode, out: &mut Vec<HookEntry>) {
 }
 
 fn cmd(sh: &mut Shape, node: &JsonNode) -> Option<HookCmd> {
-    let kind = node
-        .get("type")
-        .and_then(|n| sh.string(n, "type"))
-        .map_or_else(|| "command".to_owned(), |t| t.0);
+    let kind = node.get("type").and_then(|n| sh.string(n, "type"));
+    let kind_span = kind.as_ref().map(|k| k.1);
+    let kind = kind.map_or_else(|| "command".to_owned(), |t| t.0);
     let text = node.get("command").or_else(|| node.get("prompt"));
     let (command, command_span) = match text {
         Some(t) => sh.string(t, "command")?,
-        // Other hook types (`http`, `agent`, …) carry no command text.
-        None if !matches!(kind.as_str(), "command" | "prompt") => (String::new(), node.span),
-        None => {
-            sh.errors.push(ViewError::new(
-                node.span,
-                format!("`{kind}` hook has no `{kind}`"),
-            ));
-            return None;
-        }
+        // No command text: other hook types (`http`, `agent`, …) carry none; a missing one
+        // is AI-STR-006's to report.
+        None => (String::new(), node.span),
     };
-    let timeout = node.get("timeout").and_then(|n| sh.number(n, "timeout"));
+    let timeout = node
+        .get("timeout")
+        .and_then(|n| sh.number(n, "timeout").map(|t| (t, n.span)));
     Some(HookCmd {
         kind,
+        kind_span,
         command,
         command_span,
-        timeout,
+        timeout: timeout.map(|t| t.0),
+        timeout_span: timeout.map(|t| t.1),
     })
 }

@@ -1,0 +1,6 @@
+{
+  "permissions": {
+    "allow": ["Bash(npm test)", "WebFecth(domain:docs.rs)", "mcp__slack__post_message"],
+    "deny": ["Read(./.env)", "mcp__github__delete_repo"]
+  }
+}

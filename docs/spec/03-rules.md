@@ -148,10 +148,11 @@
 ### AI-STR-005 — Unknown tool in allow-list
 - **Sev** Medium · **Kinds** Agent, Prompt, Settings
 - **Detect** `tools`/`allowed-tools`/permission entries naming a tool that is neither a known built-in (list in `lexicon::KNOWN_TOOLS`, per platform) nor `mcp__<server>__<tool>` with `<server>` defined in a discovered McpConfig. Levenshtein suggestion in the message.
+- **Scope** Project rule. Claude Code (settings, `.claude/agents`, `.claude/commands`): closed built-in list (`lexicon::platform::CLAUDE_TOOLS`); Copilot (`.github/…`): only one-edit typos of `COPILOT_TOOLS`. **FP guards** `mcp__` entries are not checked when the project has no McpConfig, nor for implicit servers (`ide`, `claude_ai_*`, `plugin_*`) or wildcards (ADR-026).
 
 ### AI-STR-006 — Invalid hook definition
 - **Sev** High · **Kinds** Settings, Hooks
-- **Detect** Unknown event name (vs `lexicon::HOOK_EVENTS`), missing `command`, `type` not in {`command`, `prompt`}, matcher that is not a valid regex, `timeout` ≤ 0 or > 600 s (Medium), a referenced script path (relative / `$CLAUDE_PROJECT_DIR/...`) that does not exist (Medium).
+- **Detect** Unknown event name (vs `lexicon::platform::{CLAUDE,CURSOR}_HOOK_EVENTS`, Cursor for `.cursor/hooks.json`), missing `command`/`prompt` on a command/prompt hook, `type` not in the platform's list (Claude: `command`, `prompt`, `http`, `mcp_tool`, `agent`; Cursor: `command`, `prompt`), matcher that is not a valid regex (`*`, `""` and plain `A|B` lists are not regexes; JS look-around/backreferences are skipped), `timeout` ≤ 0 or > 600 s (Medium), a referenced script path (`./…`, `$CLAUDE_PROJECT_DIR/…`, `${CLAUDE_PLUGIN_ROOT}/…`, or relative with a script extension) that does not exist (Medium, ADR-026).
 
 ### AI-STR-007 — Duplicate asset name
 - **Sev** High · **Kinds** Skill, Agent, Prompt · **Scope** project

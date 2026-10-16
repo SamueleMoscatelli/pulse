@@ -1,0 +1,22 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/tests/fixtures/AI-STR-006/check.sh", "timeout": 30 }
+        ]
+      },
+      {
+        "matcher": "mcp__github__.*",
+        "hooks": [{ "type": "command", "command": "echo mcp >> ./logs/hooks.log" }]
+      }
+    ],
+    "SessionStart": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "npx eslint src/app --cache" }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "prompt", "prompt": "Check that the tests pass." }] }
+    ]
+  }
+}

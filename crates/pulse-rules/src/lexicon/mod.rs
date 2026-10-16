@@ -6,6 +6,7 @@ pub mod injection;
 pub mod mcp;
 pub mod paths;
 pub mod permissions;
+pub mod platform;
 pub mod poisoning;
 pub mod secrets;
 pub mod shell;

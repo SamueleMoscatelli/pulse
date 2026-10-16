@@ -29,10 +29,14 @@ pub static RULES: &[&dyn Rule] = &[
     &structure::frontmatter::InvalidFrontmatter,
     &structure::content::InvalidContent,
     &structure::frontmatter::NameDescription,
+    &structure::hooks::InvalidHook,
 ];
 
 /// Project-scoped rules, in ID order.
-pub static PROJECT_RULES: &[&dyn ProjectRule] = &[&efficiency::budget::AlwaysOnBudget];
+pub static PROJECT_RULES: &[&dyn ProjectRule] = &[
+    &efficiency::budget::AlwaysOnBudget,
+    &structure::tools::UnknownTool,
+];
 
 /// Metadata of every registered rule, asset rules first, each group in ID order.
 pub fn all_meta() -> impl Iterator<Item = &'static RuleMeta> {

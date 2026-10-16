@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "^(?!Read).*",
+        "hooks": [
+          { "type": "http", "url": "http://localhost:8080/hooks" },
+          { "type": "mcp_tool", "server": "audit", "tool": "record" },
+          { "type": "agent", "prompt": "Verify the edit compiles." }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/inject.sh" }] }
+    ]
+  }
+}
