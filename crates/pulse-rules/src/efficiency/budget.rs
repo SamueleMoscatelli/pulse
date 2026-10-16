@@ -1,5 +1,8 @@
 //! Token budgets: per asset (AI-EFF-001) and for the always-on context (AI-EFF-002).
 
+use std::collections::{HashMap, HashSet};
+
+use pulse_core::refs::resolve;
 use pulse_core::{
     Asset, AssetKind, Category, Finding, KindSet, ProjectRule, Rule, RuleCtx, RuleMeta, Severity,
     Span, config::Budgets,
@@ -97,37 +100,80 @@ impl ProjectRule for AlwaysOnBudget {
     }
 
     fn check_project(&self, assets: &[Asset], ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
-        // P4.3: add the tokens of resolved `@imports` of root instructions.
         let budget = ctx.config.budgets.always_on;
-        let total: u64 = assets.iter().map(|a| u64::from(a.always_tokens())).sum();
+        let mut top: Vec<Contributor<'_>> = assets
+            .iter()
+            .map(|a| (a.always_tokens(), a.rel_path.as_str(), a, Span::new(0, 0)))
+            .filter(|&(t, ..)| t > 0)
+            .collect();
+        imported(assets, ctx, &mut top);
+        let total: u64 = top.iter().map(|c| u64::from(c.0)).sum();
         if total <= budget {
             return;
         }
-        let mut top: Vec<(u32, &Asset)> = assets
-            .iter()
-            .map(|a| (a.always_tokens(), a))
-            .filter(|&(t, _)| t > 0)
-            .collect();
         // Largest first; ties by path, so the result is deterministic.
-        top.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.rel_path.cmp(&b.1.rel_path)));
-        let Some(&(_, largest)) = top.first() else {
+        top.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(b.1)));
+        let Some(&(_, _, anchor, span)) = top.first() else {
             return;
         };
         let list = top
             .iter()
             .take(TOP)
-            .map(|(t, a)| format!("{} {t}", truncate(&a.rel_path, 30)))
+            .map(|(t, rel, ..)| format!("{} {t}", truncate(rel, 30)))
             .collect::<Vec<_>>()
             .join(", ");
         let more = if top.len() > TOP { ", …" } else { "" };
         let mut f = Finding::new(
             &META_ALWAYS,
-            largest,
-            Span::new(0, 0),
+            anchor,
+            span,
             format!("Always-on context {total} tokens > {budget}; top: {list}{more}"),
         );
         f.token_waste = u32::try_from(total - budget).unwrap_or(u32::MAX);
         out.push(f);
+    }
+}
+
+/// Always-on tokens of one file: `(tokens, path, asset the finding points at, span)`.
+type Contributor<'a> = (u32, &'a str, &'a Asset, Span);
+
+/// Adds the files that always-loaded instructions `@import` (transitively), each once,
+/// minus what they already contribute as assets. An imported file is reported at the
+/// import of the first root that reaches it.
+fn imported<'a>(assets: &'a [Asset], ctx: &RuleCtx<'a>, out: &mut Vec<Contributor<'a>>) {
+    let by_path: HashMap<&str, &Asset> = assets.iter().map(|a| (a.rel_path.as_str(), a)).collect();
+    let mut roots: Vec<&Asset> = assets
+        .iter()
+        .filter(|a| {
+            matches!(
+                a.kind,
+                AssetKind::Instructions | AssetKind::ScopedInstructions
+            ) && a.always_tokens() > 0
+        })
+        .collect();
+    roots.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
+    let mut seen: HashSet<&str> = roots.iter().map(|a| a.rel_path.as_str()).collect();
+    for root in roots {
+        for (rel, via) in ctx.imports.reachable(&root.rel_path) {
+            if !seen.insert(rel) {
+                continue;
+            }
+            let tokens = match (by_path.get(rel), ctx.imports.file(rel)) {
+                (Some(a), _) => a.tokens().saturating_sub(a.always_tokens()),
+                (None, Some(f)) => f.tokens(),
+                (None, None) => 0,
+            };
+            if tokens == 0 {
+                continue;
+            }
+            let span = root
+                .markdown()
+                .imports
+                .iter()
+                .find(|i| resolve(&root.rel_path, &i.path).as_deref() == Some(via))
+                .map_or(Span::new(0, 0), |i| i.span);
+            out.push((tokens, rel, root, span));
+        }
     }
 }
 

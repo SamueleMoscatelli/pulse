@@ -11,7 +11,9 @@ use std::collections::{BTreeSet, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use pulse_core::{Asset, AssetKind, Config, Finding, LoadMode, OptionsStore, RuleCtx, Severity};
+use pulse_core::{
+    Asset, AssetKind, Config, Finding, ImportGraph, LoadMode, OptionsStore, RuleCtx, Severity,
+};
 use pulse_rules::{PROJECT_RULES, RULES, all_meta};
 
 fn crate_dir() -> &'static Path {
@@ -72,11 +74,25 @@ fn run_cfg(
     config: &Config,
 ) -> Vec<Finding> {
     let files: HashSet<String> = assets.iter().map(|a| a.rel_path.clone()).collect();
+    run_in(rule_id, assets, options, config, Path::new("."), &files)
+}
+
+/// Like [`run_cfg`], with an explicit scan root and walked-file set.
+fn run_in(
+    rule_id: &str,
+    assets: &[Asset],
+    options: &OptionsStore,
+    config: &Config,
+    root: &Path,
+    files: &HashSet<String>,
+) -> Vec<Finding> {
+    let imports = ImportGraph::build(assets, files, root, config.scan.max_file_bytes, 1.0);
     let ctx = RuleCtx {
         config,
         options,
-        root: Path::new("."),
-        files: &files,
+        root,
+        files,
+        imports: &imports,
     };
     let mut out = Vec::new();
     if let Some(rule) = RULES.iter().find(|r| r.meta().id == rule_id) {
@@ -1004,5 +1020,81 @@ fn str006_cursor_hooks_use_cursor_events() {
             "Hook script `./hooks/audit.sh` does not exist",
             "Unknown hook event `PreToolUse` (did you mean `preToolUse`?)"
         ]
+    );
+}
+
+#[test]
+fn str003_import_cycle_is_high() {
+    let a = asset("a.md", AssetKind::Instructions, b"@b.md\n".to_vec());
+    let b = asset("b.md", AssetKind::Instructions, b"@a.md\n".to_vec());
+    let f = run("AI-STR-003", &[a, b]);
+    assert_eq!(f.len(), 2, "{f:?}");
+    assert!(f.iter().all(|f| f.severity == Severity::High), "{f:?}");
+    assert_eq!(f[0].message, "Import cycle: `@b.md` imports this file back");
+}
+
+#[test]
+fn eff002_counts_resolved_imports() {
+    let root = fixtures_dir().join("AI-EFF-002");
+    let config = Config::parse("[budgets]\nalways_on = 40\n", Path::new("pulse.toml")).unwrap();
+    let claude = || {
+        asset(
+            "CLAUDE.md",
+            AssetKind::Instructions,
+            b"Read @docs/imported.md first.\n".to_vec(),
+        )
+    };
+    let files = |v: &[&str]| v.iter().map(|s| (*s).to_owned()).collect::<HashSet<_>>();
+    let run_eff = |f: &HashSet<String>| {
+        run_in(
+            "AI-EFF-002",
+            &[claude()],
+            &OptionsStore::empty(),
+            &config,
+            &root,
+            f,
+        )
+    };
+    // The import target isn't walked: only CLAUDE.md counts.
+    assert!(run_eff(&files(&["CLAUDE.md"])).is_empty());
+    let f = run_eff(&files(&["CLAUDE.md", "docs/imported.md"]));
+    assert_eq!(f.len(), 1, "{f:?}");
+    // The largest contributor is the imported file, reported at its `@import`.
+    assert_eq!(loc(&f[0]), (1, 6));
+    assert!(
+        f[0].message.contains("top: docs/imported.md "),
+        "{}",
+        f[0].message
+    );
+    assert!(f[0].message.contains(", CLAUDE.md "), "{}", f[0].message);
+}
+
+#[test]
+fn str003_skill_paths_resolve_from_skill_dir_or_root() {
+    let skill = asset(
+        ".claude/skills/ship/SKILL.md",
+        AssetKind::Skill,
+        b"Run `scripts/check.sh`, then `scripts/deploy.sh` and see references/ops.md.\n".to_vec(),
+    );
+    let files: HashSet<String> = [
+        ".claude/skills/ship/SKILL.md",
+        ".claude/skills/ship/references/ops.md",
+        "scripts/check.sh",
+    ]
+    .map(str::to_owned)
+    .into();
+    let config = Config::default();
+    let f = run_in(
+        "AI-STR-003",
+        &[skill],
+        &OptionsStore::empty(),
+        &config,
+        Path::new("/nonexistent"),
+        &files,
+    );
+    let messages: Vec<_> = f.iter().map(|f| f.message.as_str()).collect();
+    assert_eq!(
+        messages,
+        ["Broken path `scripts/deploy.sh`: no such file in the skill"]
     );
 }

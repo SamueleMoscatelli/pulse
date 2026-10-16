@@ -139,7 +139,7 @@
 
 ### AI-STR-003 — Broken reference or import
 - **Sev** Medium · **Kinds** md · **Scope** project
-- **Detect** `@path` imports (CLAUDE.md), relative Markdown links, and paths in skill bodies (`scripts/x.py`, `references/y.md`) that do not exist relative to the asset (or to the root for `@/`). Skip URLs, anchors-only links and paths in code fences that look like examples (contain `<`, `your-`, `example`). Import cycles → High.
+- **Detect** `@path` imports (CLAUDE.md), relative Markdown links, and paths in skill bodies (`scripts/x.py`, `references/y.md`) that do not exist relative to the asset (or to the root for `@/`). Skip URLs, anchors-only links and paths in code fences that look like examples (contain `<`, `your-`, `example`). Import cycles (≤ 5 hops) → High. `@` tokens without `/` or `.` are mentions, not imports (ADR-027).
 
 ### AI-STR-004 — Name / description constraint violated
 - **Sev** Medium · **Kinds** Skill, Agent, Prompt

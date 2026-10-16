@@ -8,7 +8,7 @@ Some context is loaded into every session before you type anything: root instruc
 ## What triggers it
 - The sum of always-on tokens exceeds `budgets.always_on` (default 8000). It counts always-loaded instructions and rules (including `alwaysApply: true` / `applyTo: "**"` scoped rules), tool definitions, and only the `name`/`description` of skills and agents.
 - The finding points at the largest contributor and lists the top 5 contributors with their tokens. The excess is reported as token waste.
-- `@imports` in root instructions are not counted yet.
+- Files that always-loaded instructions `@import` (up to 5 hops) are counted once each; when one is the largest contributor, the finding points at its `@import`.
 
 ## Noncompliant
 ```text
