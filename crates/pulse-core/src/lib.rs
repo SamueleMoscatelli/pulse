@@ -5,6 +5,7 @@ pub mod config;
 pub mod discover;
 pub mod model;
 pub mod parse;
+pub mod refs;
 pub mod rule;
 pub mod text;
 
@@ -16,5 +17,6 @@ pub use model::{
     Severity, Span,
 };
 pub use parse::{JsonDoc, MarkdownView, McpView, SettingsView, ToolsView};
+pub use refs::ImportGraph;
 pub use rule::{OptionsStore, ProjectRule, Rule, RuleCtx, RuleOptions};
 pub use text::LineIndex;

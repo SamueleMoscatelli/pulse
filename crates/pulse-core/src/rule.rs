@@ -10,6 +10,7 @@ use serde::de::DeserializeOwned;
 use crate::asset::Asset;
 use crate::config::{CONFIG_FILE, Config, ConfigError};
 use crate::model::{Finding, RuleMeta};
+use crate::refs::ImportGraph;
 
 /// A rule that inspects one asset at a time.
 pub trait Rule: Sync {
@@ -109,6 +110,8 @@ pub struct RuleCtx<'a> {
     pub root: &'a Path,
     /// Every walked file, as a scan-root-relative path with `/` separators.
     pub files: &'a HashSet<String>,
+    /// Resolved `@imports` (built after reading; empty while validating options).
+    pub imports: &'a ImportGraph,
 }
 
 impl RuleCtx<'_> {
@@ -155,6 +158,7 @@ mod tests {
             options: &s,
             root: Path::new("."),
             files: &files,
+            imports: &ImportGraph::default(),
         };
         let o: Opts = ctx.options("AI-X-001").unwrap();
         assert_eq!(

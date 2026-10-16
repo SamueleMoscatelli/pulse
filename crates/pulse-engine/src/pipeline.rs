@@ -8,8 +8,8 @@ use std::time::Instant;
 
 use pulse_core::config::{CONFIG_FILE, RuleSetting, did_you_mean};
 use pulse_core::{
-    Asset, Config, ConfigError, DiscoveredFile, Finding, OptionsStore, ProjectRule, Rule, RuleCtx,
-    RuleOptions, Severity, discover,
+    Asset, Config, ConfigError, DiscoveredFile, Finding, ImportGraph, KindSet, OptionsStore,
+    ProjectRule, Rule, RuleCtx, RuleOptions, Severity, discover,
 };
 use pulse_rules::{PROJECT_RULES, RULES, all_meta, structure};
 use rayon::prelude::*;
@@ -28,11 +28,13 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
 
     // Options are checked before the walk, so a bad `pulse.toml` fails fast.
     let no_files = HashSet::new();
+    let no_imports = ImportGraph::default();
     let early = RuleCtx {
         config,
         options: &rules.options,
         root,
         files: &no_files,
+        imports: &no_imports,
     };
     for rule in &rules.asset {
         rule.validate(&early)?;
@@ -49,8 +51,16 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
     let assets: Vec<Asset> = discovery
         .assets
         .par_iter()
-        .map(|f| read(f, max_bytes, calibration))
+        .map(|f| {
+            let asset = read(f, max_bytes, calibration);
+            // Parsed here, in parallel: the serial import graph below needs every view.
+            if KindSet::MARKDOWN.contains(asset.kind) {
+                asset.markdown();
+            }
+            asset
+        })
         .collect();
+    let imports = ImportGraph::build(&assets, &discovery.all_paths, root, max_bytes, calibration);
     let read_at = Instant::now();
 
     let ctx = RuleCtx {
@@ -58,6 +68,7 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
         options: &rules.options,
         root,
         files: &discovery.all_paths,
+        imports: &imports,
     };
 
     let mut findings: Vec<Finding> = assets
