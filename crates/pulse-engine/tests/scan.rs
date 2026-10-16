@@ -63,7 +63,7 @@ fn scan_reports_invalid_content_and_skipped_files() {
     write(
         root,
         ".claude/agents/ok.md",
-        b"---\ndescription: fine\n---\nBody\n",
+        b"---\nname: a\ndescription: d\n---\n",
     );
     let mut config = Config::default();
     config.scan.max_file_bytes = 32;
@@ -113,7 +113,7 @@ fn scan_reports_invalid_content_and_skipped_files() {
 
 #[test]
 fn scan_rejects_unknown_rule_in_config() {
-    let config = Config::parse("[rules]\nAI-STR-020 = \"off\"\n", Path::new("pulse.toml")).unwrap();
+    let config = Config::parse("[rules]\nAI-STR-02 = \"off\"\n", Path::new("pulse.toml")).unwrap();
     let err = scan(&mixed(), &config, &ScanOptions::default()).unwrap_err();
     assert!(
         err.to_string().contains("did you mean `AI-STR-002`"),

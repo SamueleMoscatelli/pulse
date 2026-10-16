@@ -37,6 +37,8 @@ fn kind_of(dir: &Path, name: &str) -> AssetKind {
         AssetKind::Agent
     } else if name.ends_with("command.md") || name.ends_with("prompt.md") {
         AssetKind::Prompt
+    } else if name.ends_with(".instructions.md") {
+        AssetKind::ScopedInstructions
     } else if name.ends_with("hooks.json") {
         AssetKind::Hooks
     } else if name.ends_with("tools.json") {
@@ -886,4 +888,71 @@ fn sec013_deny_sentences_and_lists_are_info() {
             Severity::Medium
         ]
     );
+}
+
+fn md(rule: &str, rel: &str, kind: AssetKind, src: &str) -> Vec<Finding> {
+    run(rule, &[asset(rel, kind, src.as_bytes().to_vec())])
+}
+
+#[test]
+fn str001_platform_comes_from_path() {
+    let agent = "---\ndescription: d\n---\nbody\n";
+    let claude = md("AI-STR-001", ".claude/agents/r.md", AssetKind::Agent, agent);
+    assert_eq!(claude.len(), 1);
+    assert!(claude[0].message.contains("\"name\" (Claude agent)"));
+    let copilot = md(
+        "AI-STR-001",
+        ".github/agents/r.agent.md",
+        AssetKind::Agent,
+        agent,
+    );
+    assert!(copilot.is_empty(), "{copilot:?}");
+    let typo = md(
+        "AI-STR-001",
+        ".github/prompts/p.prompt.md",
+        AssetKind::Prompt,
+        "---\ndescripton: x\n---\n",
+    );
+    assert_eq!(typo[0].severity, Severity::Low);
+    assert_eq!(
+        typo[0].message,
+        "Unknown frontmatter key \"descripton\" (did you mean \"description\"?)"
+    );
+    let invalid_yaml = md(
+        "AI-STR-001",
+        ".cursor/rules/r.mdc",
+        AssetKind::ScopedInstructions,
+        "---\nglobs: [\n---\n",
+    );
+    assert!(invalid_yaml.is_empty(), "AI-STR-002 owns YAML errors");
+}
+
+#[test]
+fn str004_name_dir_mismatch_and_lengths() {
+    let skill = |rel: &str, src: &str| md("AI-STR-004", rel, AssetKind::Skill, src);
+    let ok = "---\nname: pdf-tools\ndescription: d\n---\n";
+    assert!(skill(".claude/skills/pdf-tools/SKILL.md", ok).is_empty());
+    let f = skill(".claude/skills/pdf/SKILL.md", ok);
+    assert_eq!(f.len(), 1);
+    assert_eq!((f[0].location.line, f[0].location.col), (2, 1));
+    assert_eq!(
+        f[0].message,
+        "Skill name \"pdf-tools\" differs from its directory \"pdf\""
+    );
+    let long_name = "a".repeat(65);
+    let f = skill(
+        "SKILL.md",
+        &format!("---\nname: {long_name}\ndescription: d\n---\n"),
+    );
+    assert_eq!(f.len(), 1);
+    assert!(f[0].message.starts_with("Skill name too long: 65 chars"));
+    let long_desc = "word ".repeat(210);
+    let f = md(
+        "AI-STR-004",
+        ".claude/agents/a.md",
+        AssetKind::Agent,
+        &format!("---\nname: a\ndescription: {long_desc}\n---\n"),
+    );
+    assert_eq!(f.len(), 1);
+    assert!(f[0].message.starts_with("Description too long: 1049 chars"));
 }
