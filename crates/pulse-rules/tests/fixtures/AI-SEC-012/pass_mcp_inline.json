@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github@2025.4.8"],
+      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}" },
+      "tools": [
+        { "name": "create_issue", "description": "Creates an issue. Call the search_issues tool first to avoid duplicates." },
+        { "name": "search_issues", "description": "Searches issues and pull requests in a repository." }
+      ]
+    }
+  }
+}

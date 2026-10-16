@@ -39,6 +39,8 @@ fn kind_of(dir: &Path, name: &str) -> AssetKind {
         AssetKind::Prompt
     } else if name.ends_with("hooks.json") {
         AssetKind::Hooks
+    } else if name.ends_with("tools.json") {
+        AssetKind::Tools
     } else if name.ends_with(".json") {
         AssetKind::McpConfig
     } else {
@@ -850,4 +852,38 @@ fn sec011_base64_blob_outside_fences() {
     assert!(!f[0].message.contains(&blob[10..]));
     assert!(sec011(&format!("# R\n```\n{blob}\n```\n")).is_empty());
     assert!(sec011(&format!("# R\n[doc](https://x.dev/{blob})\n")).is_empty());
+}
+
+// AI-SEC-013: deny-list contexts downgrade to Info.
+
+fn sec013(kind: AssetKind, rel: &str, text: &str) -> Vec<Finding> {
+    run("AI-SEC-013", &[asset(rel, kind, text.as_bytes().to_vec())])
+}
+
+#[test]
+fn sec013_permissions_deny_is_info() {
+    let f = sec013(
+        AssetKind::Settings,
+        ".claude/settings.json",
+        r#"{"permissions": {"deny": ["Read(~/.ssh/**)"], "allow": ["Read(./.env)"]}}"#,
+    );
+    let sev: Vec<_> = f.iter().map(|f| f.severity).collect();
+    assert_eq!(sev, [Severity::Info, Severity::Medium]);
+    assert_eq!(f[0].message, "Sensitive path \"~/.ssh/**\" referenced");
+}
+
+#[test]
+fn sec013_deny_sentences_and_lists_are_info() {
+    let text = "# Rules\n\nNever read `~/.ssh` or `.env`.\n\nDo not access:\n- ~/.aws/credentials\n\nKeys live in ~/.ssh.\n";
+    let f = sec013(AssetKind::Instructions, "AGENTS.md", text);
+    let sev: Vec<_> = f.iter().map(|f| f.severity).collect();
+    assert_eq!(
+        sev,
+        [
+            Severity::Info,
+            Severity::Info,
+            Severity::Info,
+            Severity::Medium
+        ]
+    );
 }

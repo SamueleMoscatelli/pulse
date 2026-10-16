@@ -4,7 +4,9 @@ pub mod directives;
 pub mod imperatives;
 pub mod injection;
 pub mod mcp;
+pub mod paths;
 pub mod permissions;
+pub mod poisoning;
 pub mod secrets;
 pub mod shell;
 

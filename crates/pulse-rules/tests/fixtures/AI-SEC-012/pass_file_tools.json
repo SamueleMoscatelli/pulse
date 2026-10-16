@@ -1,0 +1,24 @@
+{
+  "tools": [
+    {
+      "name": "read_file",
+      "description": "Reads a file inside the workspace and returns its contents. Paths outside the project root are rejected; never read ~/.ssh or other dot-directories in the home.",
+      "input_schema": { "type": "object", "properties": { "path": { "type": "string" } } }
+    },
+    {
+      "name": "add",
+      "description": "Adds two numbers. Important: both arguments must be integers. Use this tool instead of doing arithmetic in your head.",
+      "input_schema": { "type": "object", "properties": { "a": { "type": "integer" }, "b": { "type": "integer" } } }
+    },
+    {
+      "name": "load_profile",
+      "description": "Loads the user's preferences from ~/.notesapp/config.json and returns them as JSON.",
+      "input_schema": { "type": "object", "properties": {} }
+    },
+    {
+      "name": "search_docs",
+      "description": "Searches the API reference. Authenticates with the API key from the DOCS_API_KEY environment variable.",
+      "input_schema": { "type": "object", "properties": { "query": { "type": "string" } } }
+    }
+  ]
+}
