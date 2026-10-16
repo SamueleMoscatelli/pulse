@@ -131,7 +131,7 @@
 
 ### AI-STR-001 — Invalid or missing frontmatter
 - **Sev** High · **Kinds** Skill, Agent, Prompt, ScopedInstructions
-- **Detect** YAML parse errors (report the YAML error line), unterminated `---`, or missing required keys. Required: Skill → `name`, `description`; Claude Agent → `name`, `description`; `.mdc` → at least one of `description`/`globs`/`alwaysApply`; `.instructions.md` → `applyTo`. Unknown keys → Low (typo hint via Levenshtein ≤ 2 against the known keys).
+- **Detect** YAML parse errors (report the YAML error line), unterminated `---`, or missing required keys. Required: Skill → `name`, `description`; Claude Agent → `name`, `description`; `.mdc` → at least one of `description`/`globs`/`alwaysApply`; `.instructions.md` → `applyTo`. Unknown keys → Low (typo hint via Levenshtein ≤ 2 against the known keys). YAML parse errors are reported once, by AI-STR-002 (ADR-025). Platform comes from the path; Claude commands, `.prompt.md` and `.agent.md` have no required keys but are checked for unknown ones; `.prompty`, `.claude/rules`, Windsurf and Cline have no schema.
 
 ### AI-STR-002 — Invalid file content
 - **Sev** High · **Kinds** all

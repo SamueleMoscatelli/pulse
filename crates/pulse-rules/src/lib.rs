@@ -26,7 +26,9 @@ pub static RULES: &[&dyn Rule] = &[
     &security::hidden::HiddenInstructions,
     &security::poisoning::ToolPoisoning,
     &security::paths::SensitivePath,
+    &structure::frontmatter::InvalidFrontmatter,
     &structure::content::InvalidContent,
+    &structure::frontmatter::NameDescription,
 ];
 
 /// Project-scoped rules, in ID order.
