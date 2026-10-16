@@ -156,7 +156,7 @@
 
 ### AI-STR-007 — Duplicate asset name
 - **Sev** High · **Kinds** Skill, Agent, Prompt · **Scope** project
-- **Detect** Two assets of the same kind and platform resolving to the same invocation name (skill `name`, agent `name`, command path → `/name`). Report on the second occurrence, pointing at the first.
+- **Detect** Two assets of the same kind and platform resolving to the same invocation name (skill `name`, agent `name`, command path → `/name`). Report on the second occurrence, pointing at the first. Platform = first platform dir in the path (`.claude`, `.github`, …), else the asset folder's parent (plugin `skills/`); without frontmatter `name`, the folder or file stem (ADR-028).
 
 ---
 

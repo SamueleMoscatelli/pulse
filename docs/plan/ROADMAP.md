@@ -36,7 +36,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [x] P4.1 AI-STR-001 & AI-STR-004 frontmatter schemas
 - [x] P4.2 AI-STR-006 & AI-STR-005 hooks & tool names
 - [x] P4.3 AI-STR-003 references & import graph
-- [ ] P4.4 AI-STR-007 duplicate asset names
+- [x] P4.4 AI-STR-007 duplicate asset names
 
 ## Phase 5 — Efficiency & cognitive pack
 - [ ] P5.1 AI-EFF-003 duplicated content (SimHash)
