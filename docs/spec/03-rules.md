@@ -176,7 +176,8 @@ Every EFF finding sets `token_waste`, which feeds context debt (`04-scoring-gate
 
 ### AI-EFF-003 — Duplicated content
 - **Sev** Medium · **Kinds** md · **Scope** project
-- **Detect** Paragraph-level near-duplicates within and across assets: 5-word shingles → xxh3 → 64-bit SimHash per paragraph (≥ 25 words); Hamming distance ≤ 3 means a duplicate. Exact duplicate lines (≥ 8 words) across always-on assets are also reported.
+- **Detect** Paragraph-level near-duplicates within and across assets: 5-word shingles (xxh3 over normalized words) → 32-bin one-permutation MinHash per paragraph (≥ 25 words); LSH over 8 single-bin bands finds candidates, and ≥ 16 agreeing bins (estimated Jaccard ≥ 0.5) means a duplicate (ADR-029). Exact duplicate lines (≥ 8 words, outside code and reported paragraphs) across always-on assets are also reported. Reported on the later occurrence in path order.
+- **FP guards** Two assets are compared only when one's context root (folder above a platform dir or `skills/`, else the asset's folder) contains the other's.
 - **token_waste** Tokens of the duplicate occurrence(s).
 
 ### AI-EFF-004 — Inlined bulk content
