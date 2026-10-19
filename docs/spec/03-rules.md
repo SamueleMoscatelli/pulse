@@ -182,17 +182,18 @@ Every EFF finding sets `token_waste`, which feeds context debt (`04-scoring-gate
 
 ### AI-EFF-004 — Inlined bulk content
 - **Sev** Medium · **Kinds** md
-- **Detect** In Always/Conditional assets: a fenced code block > 40 lines, a table > 25 rows, or a JSON/YAML dump > 60 lines. Suggest moving it to a referenced file (it is then loaded on demand).
+- **Detect** In Always/Conditional assets (not skill/agent bodies): a code block > 40 content lines, a table > 25 body rows, or a JSON/YAML dump (a `json`/`jsonc`/`json5`/`yaml`/`yml` block) > 60 content lines. Suggest moving it to a referenced file (it is then loaded on demand). See ADR-030.
 - **token_waste** Block tokens minus 20 (the cost of a reference line).
 
 ### AI-EFF-005 — MCP server/tool sprawl
 - **Sev** Medium · **Scope** project
-- **Detect** Enabled MCP servers > `budgets.mcp_servers` (default 8), or tools in Tools assets > `budgets.tools` (default 40). Duplicate server definitions (same command+args or URL under different names) → High.
+- **Detect** Enabled MCP servers (distinct names across configs; `disabled: true`/`enabled: false` excluded) > `budgets.mcp_servers` (default 8), or tools in Tools assets > `budgets.tools_count` (default 40). Duplicate server definitions (same command+args or URL under different names) → High. See ADR-030.
+- **token_waste** Tokens of the tool definitions past the budget (0 for server findings).
 
 ### AI-EFF-006 — Oversized skill or agent
 - **Sev** Medium · **Kinds** Skill, Agent
 - **Detect** Skill body > 500 lines, or skill/agent `description` > `budgets.description` tokens (default 150). The description is always-on.
-- **token_waste** Description tokens over budget.
+- **token_waste** Description tokens over budget; for a long body, the tokens past line 500.
 
 ### AI-EFF-007 — Filler phrasing
 - **Sev** Low · **Kinds** md

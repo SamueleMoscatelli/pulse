@@ -25,6 +25,7 @@ pub struct MarkdownView {
     pub links: Vec<Link>,
     pub imports: Vec<Import>,
     pub paragraphs: Vec<Span>,
+    pub tables: Vec<Table>,
 }
 
 /// A `---`-delimited YAML block at the very start of the file.
@@ -74,6 +75,14 @@ pub struct CodeBlock {
     pub span: Span,
     /// 1-based inclusive `(first, last)` file lines.
     pub lines: (u32, u32),
+}
+
+/// A GFM table.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Table {
+    pub span: Span,
+    /// Body rows (the header row excluded).
+    pub rows: u32,
 }
 
 /// A link or image (inline, reference or autolink).
@@ -156,6 +165,15 @@ impl MarkdownView {
                     code.push(span);
                 }
                 Event::Start(Tag::Paragraph) => view.paragraphs.push(sp(range)),
+                Event::Start(Tag::Table(_)) => view.tables.push(Table {
+                    span: sp(range),
+                    rows: 0,
+                }),
+                Event::Start(Tag::TableRow) => {
+                    if let Some(t) = view.tables.last_mut() {
+                        t.rows += 1;
+                    }
+                }
                 Event::Start(Tag::HtmlBlock) | Event::InlineHtml(_) => {
                     let span = sp(range);
                     scan_comments(source, span, &mut view.html_comments);
@@ -452,6 +470,15 @@ mod tests {
             .map(|&p| lines.line_of(p.start))
             .collect();
         assert_eq!(paras, [10, 19]);
+    }
+
+    #[test]
+    fn tables_count_body_rows() {
+        let src = "| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n\ntext\n\n| h |\n|---|\n";
+        let md = parse(src);
+        let rows: Vec<_> = md.tables.iter().map(|t| t.rows).collect();
+        assert_eq!(rows, [2, 0]);
+        assert!(text(src, md.tables[0].span).starts_with("| a |"));
     }
 
     #[test]

@@ -207,3 +207,22 @@ fn mcp_type_without_its_endpoint_is_an_error() {
     );
     assert_eq!(mcp.errors.len(), 1, "{:?}", mcp.errors);
 }
+
+#[test]
+fn mcp_disabled_and_enabled_flags() {
+    let src = r#"{"mcpServers": {
+        "a": {"command": "x", "disabled": true},
+        "b": {"command": "x", "enabled": false},
+        "c": {"command": "x", "disabled": false},
+        "d": {"command": "x"}
+    }}"#;
+    let a = Asset::new(
+        PathBuf::from(".mcp.json"),
+        ".mcp.json",
+        AssetKind::McpConfig,
+        LoadMode::Always,
+        src.to_owned(),
+    );
+    let off: Vec<_> = a.mcp().servers.iter().map(|s| s.disabled).collect();
+    assert_eq!(off, [true, true, false, false]);
+}

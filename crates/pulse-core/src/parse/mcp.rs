@@ -25,6 +25,8 @@ pub struct McpServer {
     pub env: Vec<(String, String, Span)>,
     /// `(key, value, value span)`.
     pub headers: Vec<(String, String, Span)>,
+    /// `"disabled": true` or `"enabled": false`.
+    pub disabled: bool,
     /// The whole server object.
     pub span: Span,
 }
@@ -124,6 +126,8 @@ fn server(sh: &mut Shape, name: &str, name_span: Span, node: &JsonNode) -> Optio
     let headers = get("headers")
         .map(|n| sh.string_map(n, "headers"))
         .unwrap_or_default();
+    let flag = |k: &str| get(k).and_then(JsonNode::as_bool);
+    let disabled = flag("disabled") == Some(true) || flag("enabled") == Some(false);
     Some(McpServer {
         name: name.to_owned(),
         name_span,
@@ -131,6 +135,7 @@ fn server(sh: &mut Shape, name: &str, name_span: Span, node: &JsonNode) -> Optio
         args,
         env,
         headers,
+        disabled,
         span: node.span,
     })
 }

@@ -13,6 +13,8 @@ pub mod util;
 pub static RULES: &[&dyn Rule] = &[
     &cognitive::contradiction::ContradictoryDirectives,
     &efficiency::budget::AssetBudget,
+    &efficiency::bloat::InlinedBulk,
+    &efficiency::bloat::Oversized,
     &security::unicode::InvisibleUnicode,
     &security::injection::InjectionPhrase,
     &security::secrets::HardcodedSecret,
@@ -36,6 +38,7 @@ pub static RULES: &[&dyn Rule] = &[
 pub static PROJECT_RULES: &[&dyn ProjectRule] = &[
     &efficiency::budget::AlwaysOnBudget,
     &efficiency::duplicates::DuplicatedContent,
+    &efficiency::bloat::McpSprawl,
     &structure::refs::BrokenReference,
     &structure::tools::UnknownTool,
     &structure::names::DuplicateName,
