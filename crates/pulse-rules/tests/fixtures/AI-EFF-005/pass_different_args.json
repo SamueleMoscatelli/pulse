@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "pg-prod": { "command": "npx", "args": ["-y", "@acme/mcp-postgres@1.2.0", "--db", "prod"] },
+    "pg-dev": { "command": "npx", "args": ["-y", "@acme/mcp-postgres@1.2.0", "--db", "dev"] },
+    "github-old": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github@2025.4.8"], "disabled": true }
+  }
+}

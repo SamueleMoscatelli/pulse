@@ -1336,3 +1336,142 @@ fn eff003_sibling_package_copies_do_not_hide_related_ones() {
     assert_eq!(got[0].0, "packages/a/CLAUDE.md");
     assert!(got[1].1.contains("packages/b/AGENTS.md:3"), "{got:?}");
 }
+
+// AI-EFF-004/005/006: count and size boundaries.
+
+#[test]
+fn eff004_waste_is_block_minus_reference_and_scoped_rules_count() {
+    let body: String = (0..41).map(|i| format!("echo {i}\n")).collect();
+    let src = format!("```sh\n{body}```\n");
+    let f = run(
+        "AI-EFF-004",
+        &[asset(
+            "CLAUDE.md",
+            AssetKind::Instructions,
+            src.clone().into_bytes(),
+        )],
+    );
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert!(f[0].token_waste > 0 && f[0].token_waste < 200, "{f:?}");
+    // Conditional (path-scoped) rules are loaded too; on-demand files are not.
+    let scoped = asset(
+        ".cursor/rules/build.mdc",
+        AssetKind::ScopedInstructions,
+        format!("---\nglobs: src/**\n---\n{src}").into_bytes(),
+    );
+    assert_eq!(run("AI-EFF-004", &[scoped]).len(), 1);
+}
+
+fn mcp_config(rel: &str, n: usize, prefix: &str) -> Asset {
+    let servers: Vec<String> = (0..n)
+        .map(|i| {
+            format!(r#""{prefix}{i}": {{"command": "npx", "args": ["{prefix}-server-{i}@1.0.0"]}}"#)
+        })
+        .collect();
+    asset(
+        rel,
+        AssetKind::McpConfig,
+        format!(r#"{{"mcpServers": {{{}}}}}"#, servers.join(",")).into_bytes(),
+    )
+}
+
+#[test]
+fn eff005_server_count_boundary() {
+    assert!(run("AI-EFF-005", &[mcp_config(".mcp.json", 8, "s")]).is_empty());
+    let f = run("AI-EFF-005", &[mcp_config(".mcp.json", 9, "s")]);
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(f[0].message, "MCP server sprawl: 9 enabled servers > 8");
+    assert_eq!(f[0].severity, Severity::Medium);
+    // The same names in another client's config count once.
+    let both = [
+        mcp_config(".mcp.json", 8, "s"),
+        mcp_config(".vscode/mcp.json", 8, "s"),
+    ];
+    assert!(run("AI-EFF-005", &both).is_empty());
+    let config = Config::parse("[budgets]\nmcp_servers = 2\n", Path::new("pulse.toml")).unwrap();
+    let f = run_cfg(
+        "AI-EFF-005",
+        &[mcp_config(".mcp.json", 3, "s")],
+        &OptionsStore::empty(),
+        &config,
+    );
+    assert_eq!(f.len(), 1, "{f:?}");
+}
+
+#[test]
+fn eff005_disabled_servers_are_not_counted() {
+    let mut servers: Vec<String> = (0..8)
+        .map(|i| format!(r#""s{i}": {{"command": "uvx", "args": ["s{i}"]}}"#))
+        .collect();
+    servers.push(r#""off": {"command": "uvx", "args": ["off"], "disabled": true}"#.to_owned());
+    let a = asset(
+        ".mcp.json",
+        AssetKind::McpConfig,
+        format!(r#"{{"mcpServers": {{{}}}}}"#, servers.join(",")).into_bytes(),
+    );
+    assert!(run("AI-EFF-005", &[a]).is_empty());
+}
+
+fn tools_file(n: usize) -> Asset {
+    let tools: Vec<String> = (0..n)
+        .map(|i| format!(r#"{{"name": "tool_{i}", "description": "Does thing {i}.", "input_schema": {{"type": "object"}}}}"#))
+        .collect();
+    asset(
+        "agent.tools.json",
+        AssetKind::Tools,
+        format!("[{}]", tools.join(",\n")).into_bytes(),
+    )
+}
+
+#[test]
+fn eff005_tool_count_boundary() {
+    assert!(run("AI-EFF-005", &[tools_file(40)]).is_empty());
+    let f = run("AI-EFF-005", &[tools_file(41)]);
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(f[0].message, "Tool sprawl: 41 tools > 40");
+    assert_eq!(loc(&f[0]), (41, 10));
+    assert!(f[0].token_waste > 0, "{f:?}");
+}
+
+fn skill_with_body(lines: usize) -> Asset {
+    let body: String = (1..=lines)
+        .map(|i| format!("{i}. Do step {i}.\n"))
+        .collect();
+    asset(
+        "skills/release/SKILL.md",
+        AssetKind::Skill,
+        format!("---\nname: release\ndescription: Use when cutting a release.\n---\n{body}")
+            .into_bytes(),
+    )
+}
+
+#[test]
+fn eff006_skill_body_line_boundary() {
+    assert!(run("AI-EFF-006", &[skill_with_body(500)]).is_empty());
+    let f = run("AI-EFF-006", &[skill_with_body(501)]);
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(loc(&f[0]), (505, 1));
+    assert_eq!(
+        f[0].message,
+        "Skill body is 501 lines (> 500); split it into referenced files"
+    );
+    assert!(f[0].token_waste > 0);
+}
+
+#[test]
+fn eff006_description_waste_and_budget_option() {
+    let config = Config::parse("[budgets]\ndescription = 5\n", Path::new("pulse.toml")).unwrap();
+    let a = asset(
+        "reviewer.agent.md",
+        AssetKind::Agent,
+        b"---\nname: reviewer\ndescription: Use this agent to review pull requests for bugs.\n---\nx\n"
+            .to_vec(),
+    );
+    let f = run_cfg("AI-EFF-006", &[a], &OptionsStore::empty(), &config);
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(
+        f[0].message,
+        "Description is 12 tokens > 5 (always loaded; +7)"
+    );
+    assert_eq!(f[0].token_waste, 7);
+}

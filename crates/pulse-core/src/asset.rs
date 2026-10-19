@@ -106,6 +106,11 @@ impl Asset {
         self
     }
 
+    /// The token calibration factor (`context.calibration`).
+    pub fn calibration(&self) -> f64 {
+        self.calibration
+    }
+
     /// The Markdown view, parsed on first use. Any kind can be viewed; rules ask only for
     /// Markdown kinds (plain-text `.cursorrules` included).
     pub fn markdown(&self) -> &MarkdownView {

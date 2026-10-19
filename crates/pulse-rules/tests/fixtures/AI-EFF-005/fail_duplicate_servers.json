@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "github": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github@2025.4.8"] },
+    "gh": { "command": "/usr/local/bin/npx", "args": ["@modelcontextprotocol/server-github@2025.4.8"] },
+    "docs": { "type": "http", "url": "https://Docs.Example.com/mcp/" },
+    "docs-mirror": { "type": "http", "url": "https://docs.example.com/mcp" }
+  }
+}
