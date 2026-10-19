@@ -16,6 +16,16 @@ pub fn truncate(s: &str, max: usize) -> std::borrow::Cow<'_, str> {
     }
 }
 
+/// The last `max` chars of `s`, with a leading `…` when cut.
+pub fn tail(s: &str, max: usize) -> std::borrow::Cow<'_, str> {
+    let n = s.chars().count();
+    if n <= max {
+        return s.into();
+    }
+    let start = s.char_indices().nth(n - max + 1).map_or(0, |(i, _)| i);
+    format!("…{}", &s[start..]).into()
+}
+
 /// Levenshtein distance between `a` and `b` (ASCII case-insensitive) when at most `max`.
 pub fn distance_within(a: &str, b: &str, max: usize) -> Option<usize> {
     levenshtein_within(&a.to_ascii_lowercase(), &b.to_ascii_lowercase(), max)
@@ -35,6 +45,12 @@ pub fn suggest<'a>(word: &str, known: &[&'a str]) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tail_keeps_the_end() {
+        assert_eq!(tail("abc", 5), "abc");
+        assert_eq!(tail("abcdefgh", 5), "…efgh");
+    }
 
     #[test]
     fn distance_ignores_ascii_case() {

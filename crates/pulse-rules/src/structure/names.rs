@@ -9,7 +9,7 @@ use pulse_core::{
 };
 
 use crate::structure::frontmatter::key_span;
-use crate::util::truncate;
+use crate::util::{tail, truncate};
 
 pub static META: RuleMeta = RuleMeta {
     id: "AI-STR-007",
@@ -141,16 +141,6 @@ fn namespace(rel: &str) -> &str {
     parent.rsplit_once('/').map_or("", |(d, _)| d)
 }
 
-/// The last `max` chars of `s`, with a leading `…` when cut.
-fn tail(s: &str, max: usize) -> Cow<'_, str> {
-    let n = s.chars().count();
-    if n <= max {
-        return s.into();
-    }
-    let start = s.char_indices().nth(n - max + 1).map_or(0, |(i, _)| i);
-    format!("…{}", &s[start..]).into()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -161,11 +151,5 @@ mod tests {
         assert_eq!(namespace("pkg/.github/prompts/x.prompt.md"), ".github");
         assert_eq!(namespace("plugins/p/skills/a/SKILL.md"), "plugins/p/skills");
         assert_eq!(namespace("a/SKILL.md"), "");
-    }
-
-    #[test]
-    fn tail_keeps_the_end() {
-        assert_eq!(tail("abc", 5), "abc");
-        assert_eq!(tail("abcdefgh", 5), "…efgh");
     }
 }

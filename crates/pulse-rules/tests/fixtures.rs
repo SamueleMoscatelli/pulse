@@ -1211,3 +1211,128 @@ fn str007_same_name_across_platforms_or_plugins_passes() {
     ]);
     assert!(f.is_empty(), "{f:?}");
 }
+
+fn eff003(files: &[(&str, AssetKind, &str)]) -> Vec<Finding> {
+    let assets: Vec<Asset> = files
+        .iter()
+        .map(|&(rel, kind, src)| asset(rel, kind, src.as_bytes().to_vec()))
+        .collect();
+    run("AI-EFF-003", &assets)
+}
+
+const EFF003_PARA: &str = "Before opening a pull request, run the full test suite locally, \
+    update the changelog with every user-facing change, and ask a maintainer from the owning \
+    team to review any change to the public API or the database schema.";
+
+#[test]
+fn eff003_same_paragraph_in_claude_and_agents() {
+    let claude = format!("# Rules\n\n{EFF003_PARA}\n");
+    let agents = format!("# Agents\n\nIntro line.\n\n{EFF003_PARA}\n");
+    let f = eff003(&[
+        ("CLAUDE.md", AssetKind::Instructions, &claude),
+        ("AGENTS.md", AssetKind::Instructions, &agents),
+    ]);
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(f[0].location.path.as_ref(), Path::new("CLAUDE.md"));
+    assert_eq!((f[0].location.line, f[0].location.col), (3, 1));
+    assert!(
+        f[0].message
+            .starts_with("Duplicate paragraph of AGENTS.md:5: \"Before"),
+        "{}",
+        f[0].message
+    );
+    assert!(f[0].message.chars().count() <= 100);
+    assert!(f[0].token_waste > 30, "{}", f[0].token_waste);
+}
+
+#[test]
+fn eff003_lightly_reworded_paragraph() {
+    let reworded = EFF003_PARA
+        .replace("run the full test suite", "run the complete test suite")
+        .replace("Before opening", "Before you open");
+    let f = eff003(&[
+        ("AGENTS.md", AssetKind::Instructions, EFF003_PARA),
+        (
+            ".github/copilot-instructions.md",
+            AssetKind::Instructions,
+            &reworded,
+        ),
+    ]);
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert!(
+        f[0].message
+            .starts_with("Near-duplicate paragraph of …copilot-instructions.md:1"),
+        "{}",
+        f[0].message
+    );
+}
+
+#[test]
+fn eff003_unrelated_packages_and_skills_pass() {
+    // FP guard: sibling monorepo packages are never loaded together.
+    let f = eff003(&[
+        ("packages/a/CLAUDE.md", AssetKind::Instructions, EFF003_PARA),
+        ("packages/b/CLAUDE.md", AssetKind::Instructions, EFF003_PARA),
+    ]);
+    assert!(f.is_empty(), "{f:?}");
+    // A package nested under the root shares the root's context.
+    let f = eff003(&[
+        ("CLAUDE.md", AssetKind::Instructions, EFF003_PARA),
+        (
+            "packages/a/.claude/skills/x/SKILL.md",
+            AssetKind::Skill,
+            EFF003_PARA,
+        ),
+    ]);
+    assert_eq!(f.len(), 1, "{f:?}");
+}
+
+#[test]
+fn eff003_duplicate_lines_across_always_on_assets() {
+    let line = "- Never commit generated files or secrets to the repository.";
+    let claude = format!("# Rules\n\n- Use tabs.\n{line}\n");
+    let agents = format!("# Agents\n\n{line}\n- Keep commits small.\n");
+    let f = eff003(&[
+        ("CLAUDE.md", AssetKind::Instructions, &claude),
+        ("AGENTS.md", AssetKind::Instructions, &agents),
+    ]);
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!((f[0].location.line, f[0].location.col), (4, 1));
+    assert!(
+        f[0].message.starts_with("Duplicate line of AGENTS.md:3"),
+        "{}",
+        f[0].message
+    );
+    // Skills are on demand: their lines are not always-on context.
+    let skill = format!("---\nname: x\ndescription: d\n---\n{line}\n");
+    let f = eff003(&[
+        ("CLAUDE.md", AssetKind::Instructions, &claude),
+        (".claude/skills/x/SKILL.md", AssetKind::Skill, &skill),
+    ]);
+    assert!(f.is_empty(), "{f:?}");
+}
+
+#[test]
+fn eff003_sibling_package_copies_do_not_hide_related_ones() {
+    let line = "- Never commit generated files or secrets to the repository.";
+    let text = format!("# Rules\n\n{line}\n");
+    let f = eff003(&[
+        ("packages/a/AGENTS.md", AssetKind::Instructions, &text),
+        ("packages/a/CLAUDE.md", AssetKind::Instructions, &text),
+        ("packages/b/AGENTS.md", AssetKind::Instructions, &text),
+        ("packages/b/CLAUDE.md", AssetKind::Instructions, &text),
+    ]);
+    let mut got: Vec<_> = f
+        .iter()
+        .map(|f| {
+            (
+                f.location.path.to_string_lossy().into_owned(),
+                f.message.clone(),
+            )
+        })
+        .collect();
+    got.sort();
+    assert_eq!(got.len(), 2, "{got:?}");
+    assert_eq!(got[0].0, "packages/a/CLAUDE.md");
+    assert!(got[1].1.contains("packages/b/AGENTS.md:3"), "{got:?}");
+}

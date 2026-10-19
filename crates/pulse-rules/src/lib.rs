@@ -35,6 +35,7 @@ pub static RULES: &[&dyn Rule] = &[
 /// Project-scoped rules, in ID order.
 pub static PROJECT_RULES: &[&dyn ProjectRule] = &[
     &efficiency::budget::AlwaysOnBudget,
+    &efficiency::duplicates::DuplicatedContent,
     &structure::refs::BrokenReference,
     &structure::tools::UnknownTool,
     &structure::names::DuplicateName,

@@ -29,5 +29,8 @@ divan (`cargo bench -p pulse-engine`), medians:
 | `estimator` (64 KB) | 85.5 µs | 766 MB/s |
 | `normalize` (64 KB) | 1.30 ms | 50 MB/s |
 | `scan_large` (1,000 assets, 10k files, in-process) | 61.2 ms | n/a |
+| `duplicated_content` (AI-EFF-003, 1,000 assets × 20 paragraphs, views warm; P5.1, 2026-10-19) | 10.9 ms (34 ms on 1 thread) | n/a |
+
+With AI-EFF-003 (P5.1), the `large` fixture reports 1,600 duplicate paragraphs (each package repeats its paragraphs across CLAUDE.md, AGENTS.md, agent, command and skill). The rule adds about 10–15 ms to `rules` there, and handling its findings adds about 15 ms more (i5-8257U, `--timings`).
 
 Dogfooding: `pulse ci` on this repo scans 42 assets in about 12 ms and the gate passes. Our own `.claude/` assets have no findings. The two deliberately malformed test fixtures are ignored in `pulse.toml`.

@@ -39,7 +39,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [x] P4.4 AI-STR-007 duplicate asset names
 
 ## Phase 5 — Efficiency & cognitive pack
-- [ ] P5.1 AI-EFF-003 duplicated content (SimHash)
+- [x] P5.1 AI-EFF-003 duplicated content (SimHash)
 - [ ] P5.2 AI-EFF-004/005/006 bulk, sprawl, oversized
 - [ ] P5.3 AI-EFF-007, AI-COG-002, AI-COG-004 lexicon rules
 - [ ] P5.4 AI-COG-003/006/007 negative, routing, structure

@@ -463,6 +463,7 @@ dependencies = [
  "thiserror",
  "toml",
  "unicode-normalization",
+ "xxhash-rust",
 ]
 
 [[package]]
@@ -496,6 +497,7 @@ dependencies = [
  "aho-corasick",
  "memchr",
  "pulse-core",
+ "rayon",
  "regex",
  "serde",
  "toml",
