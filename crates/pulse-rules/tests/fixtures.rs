@@ -1475,3 +1475,60 @@ fn eff006_description_waste_and_budget_option() {
     );
     assert_eq!(f[0].token_waste, 7);
 }
+
+fn claude_md(text: &str) -> Asset {
+    asset(
+        "CLAUDE.md",
+        AssetKind::Instructions,
+        text.as_bytes().to_vec(),
+    )
+}
+
+#[test]
+fn eff007_per_hit_info_with_token_waste() {
+    let f = run(
+        "AI-EFF-007",
+        &[claude_md("Run it in order to build.\nFeel free to ask.\n")],
+    );
+    let got: Vec<_> = f
+        .iter()
+        .map(|f| (f.severity, f.token_waste, f.message.as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            (Severity::Info, 3, "Filler \"in order to\": write \"to\""),
+            (Severity::Info, 4, "Filler \"feel free to\": drop it"),
+        ]
+    );
+}
+
+#[test]
+fn eff007_aggregates_and_sums_token_waste() {
+    let text = "In order to test, run it in order to build. Basically, feel free to ask.\n";
+    let f = run("AI-EFF-007", &[claude_md(text)]);
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(f[0].severity, Severity::Low);
+    assert_eq!(
+        f[0].message,
+        "4 filler phrases: \"in order to\" ×2, \"basically\", \"feel free to\""
+    );
+    assert_eq!(f[0].token_waste, 3 + 3 + 2 + 4);
+    assert!(f[0].message.chars().count() <= 100);
+}
+
+#[test]
+fn cog002_and_cog004_messages() {
+    let f = run("AI-COG-002", &[claude_md("Use reasonable timeouts.\n")]);
+    assert_eq!(
+        f[0].message,
+        "Vague directive \"reasonable\": say what it means here"
+    );
+    let text = "- IMPORTANT: run tests.\n- You MUST lint.\n- NEVER push.\n- **Always rebase.**\n- Use pnpm.\n";
+    let f = run("AI-COG-004", &[claude_md(text)]);
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(
+        f[0].message,
+        "4 of 5 directives (80%) are emphasized; none stands out"
+    );
+}

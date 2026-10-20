@@ -12,9 +12,12 @@ pub mod util;
 /// Asset-scoped rules, in ID order.
 pub static RULES: &[&dyn Rule] = &[
     &cognitive::contradiction::ContradictoryDirectives,
+    &cognitive::style::VagueDirective,
+    &cognitive::style::EmphasisInflation,
     &efficiency::budget::AssetBudget,
     &efficiency::bloat::InlinedBulk,
     &efficiency::bloat::Oversized,
+    &efficiency::filler::FillerPhrasing,
     &security::unicode::InvisibleUnicode,
     &security::injection::InjectionPhrase,
     &security::secrets::HardcodedSecret,
