@@ -1,10 +1,13 @@
-//! Directive style: vague directives (AI-COG-002) and emphasis inflation (AI-COG-004).
+//! Directive style: vague directives (AI-COG-002), negative-only constraints (AI-COG-003)
+//! and emphasis inflation (AI-COG-004).
 
 use pulse_core::{Asset, Category, Finding, KindSet, Rule, RuleCtx, RuleMeta, Severity, Span};
 
-use super::directives::{Word, is_directive, lemma, sentences, words};
-use crate::lexicon::style::{ACRONYMS, ANCHORS, EMPHASIS, VAGUE};
-use crate::util::{Hit, aggregate};
+use super::directives::{Polarity, Word, extract, is, is_directive, lemma, sentences, words};
+use crate::lexicon::directives::{ALTERNATIVES, NEGATIVE_FIRST, NEGATORS, QUALIFIERS};
+use crate::lexicon::imperatives::IMPERATIVES;
+use crate::lexicon::style::{ACRONYMS, ANCHORS, DIRECTIVE_VERBS, EMPHASIS, VAGUE};
+use crate::util::{Hit, aggregate, truncate};
 
 pub static META_VAGUE: RuleMeta = RuleMeta {
     id: "AI-COG-002",
@@ -80,6 +83,106 @@ fn anchored(text: &str, w: &[Word<'_>]) -> bool {
         .any(|b| b.is_ascii_digit() || b == b'`' || b == b'/')
         || w.iter().any(|x| x.text.contains('.'))
         || (0..w.len()).any(|i| ANCHORS.iter().any(|a| phrase_at(w, i, a)))
+}
+
+pub static META_NEGATIVE: RuleMeta = RuleMeta {
+    id: "AI-COG-003",
+    name: "Negative-only constraint",
+    category: Category::Cognitive,
+    default_severity: Severity::Info,
+    kinds: KindSet::MARKDOWN,
+    summary: "A directive says what not to do without saying what to do instead.",
+    remediation: "State what to do instead. Models follow positive instructions more reliably.",
+    inline_suppressible: true,
+};
+
+/// Words before an [`ALTERNATIVES`] cue searched for a negator (`do not ever use`).
+const NEGATOR_WINDOW: usize = 2;
+
+pub struct NegativeOnly;
+
+impl Rule for NegativeOnly {
+    fn meta(&self) -> &'static RuleMeta {
+        &META_NEGATIVE
+    }
+
+    fn check(&self, asset: &Asset, _ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
+        let src = asset.source.as_str();
+        let negatives: Vec<_> = extract(asset)
+            .into_iter()
+            .filter(|d| d.polarity == Polarity::Negative)
+            .collect();
+        if negatives.is_empty() {
+            return;
+        }
+        let mut sents = Vec::new();
+        sentences(src, asset.markdown(), |r| sents.push(r));
+        let mut ws = Vec::new();
+        let mut hits = Vec::new();
+        for d in &negatives {
+            // AI-COG-003: an alternative in the same or the next sentence.
+            let i = sents.partition_point(|r| r.start < d.span.start as usize);
+            let offers = sents.iter().skip(i).take(2).enumerate().any(|(k, r)| {
+                let text = src.get(r.clone()).unwrap_or_default();
+                words(text, &mut ws);
+                alternative(&ws) || k == 0 && positive_clause(text, &ws)
+            });
+            if !offers {
+                hits.push(Hit {
+                    span: d.span,
+                    quote: src
+                        .get(d.span.start as usize..d.span.end as usize)
+                        .unwrap_or_default(),
+                    token_waste: 0,
+                });
+            }
+        }
+        aggregate(
+            &META_NEGATIVE,
+            asset,
+            &hits,
+            |h| {
+                let q = truncate(h.quote, 40);
+                format!("Negative-only constraint \"{q}\": say what to do instead")
+            },
+            |n, top| format!("{n} negative-only constraints: {top}"),
+            out,
+        );
+    }
+}
+
+/// Whether `w` offers a positive alternative: an [`ALTERNATIVES`] word with no negator in
+/// the [`NEGATOR_WINDOW`] words before it.
+fn alternative(w: &[Word<'_>]) -> bool {
+    w.iter().enumerate().any(|(i, x)| {
+        is(x.text, ALTERNATIVES)
+            && !w[i.saturating_sub(NEGATOR_WINDOW)..i]
+                .iter()
+                .any(|p| is(p.text, NEGATORS))
+    })
+}
+
+/// AI-COG-003 FP guards within the directive's own sentence: a contrast that already states
+/// the positive (`A bad asset becomes a finding, never a panic`), or a later clause opening
+/// with an imperative (`Never put secrets in messages: redact them`).
+fn positive_clause(text: &str, w: &[Word<'_>]) -> bool {
+    let Some(n) = w
+        .iter()
+        .enumerate()
+        .position(|(i, x)| is(x.text, NEGATORS) || i == 0 && is(x.text, NEGATIVE_FIRST))
+    else {
+        return false;
+    };
+    let before = text.get(..offset(text, w[n].text)).unwrap_or_default();
+    let contrast =
+        n > 0 && before.trim_end().ends_with([',', '—', '–']) && !is(w[0].text, QUALIFIERS);
+    contrast
+        || w.iter().enumerate().skip(n + 1).any(|(j, x)| {
+            x.brk
+                && !is(x.text, NEGATORS)
+                && (is(x.text, IMPERATIVES) || is(x.text, DIRECTIVE_VERBS))
+                && !w.get(j + 1).is_some_and(|y| is(y.text, NEGATORS))
+        })
 }
 
 pub static META_EMPHASIS: RuleMeta = RuleMeta {
@@ -175,4 +278,24 @@ fn offset(text: &str, word: &str) -> usize {
 fn span(start: usize, end: usize) -> Span {
     let c = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
     Span::new(c(start), c(end))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn guarded(s: &str) -> bool {
+        let mut w = Vec::new();
+        words(s, &mut w);
+        positive_clause(s, &w)
+    }
+
+    #[test]
+    fn positive_clause_guards() {
+        assert!(guarded("A bad asset becomes a finding, never a panic."));
+        assert!(guarded("Never put secrets in messages: redact them."));
+        assert!(!guarded("In tests, never hit the network."));
+        assert!(!guarded("Never push to main, avoid force pushes."));
+        assert!(!guarded("IMPORTANT: never push to main."));
+    }
 }

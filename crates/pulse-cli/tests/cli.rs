@@ -66,7 +66,13 @@ fn quiet_min_severity_and_skip_rule_filter_output() {
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert_eq!(
         stdout,
-        "tools/fetch.json:1:1: HIGH AI-STR-002 Invalid shape: `tools` must be an array, found object\n"
+        concat!(
+            ".claude/agents/planner.md:3:1: MEDIUM AI-COG-006 Weak routing description \"Plans work.\": 2 words (< 20), no trigger cue\n",
+            ".claude/skills/review/SKILL.md:3:1: MEDIUM AI-COG-006 Weak routing description \"Review code.\": 2 words (< 20), no trigger cue\n",
+            ".github/agents/triage.agent.md:2:1: MEDIUM AI-COG-006 Weak routing description \"Triage.\": 1 word (< 20), no trigger cue\n",
+            ".github/chatmodes/debug.chatmode.md:2:1: MEDIUM AI-COG-006 Weak routing description \"Debug.\": 1 word (< 20), no trigger cue\n",
+            "tools/fetch.json:1:1: HIGH AI-STR-002 Invalid shape: `tools` must be an array, found object\n",
+        )
     );
     let out = pulse(&[
         "-q",

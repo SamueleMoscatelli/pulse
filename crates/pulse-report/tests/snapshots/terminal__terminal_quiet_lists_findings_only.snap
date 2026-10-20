@@ -2,4 +2,8 @@
 source: crates/pulse-report/tests/terminal.rs
 expression: "render(\"mixed\", true, false)"
 ---
+.claude/agents/planner.md:3:1: MEDIUM AI-COG-006 Weak routing description "Plans work.": 2 words (< 20), no trigger cue
+.claude/skills/review/SKILL.md:3:1: MEDIUM AI-COG-006 Weak routing description "Review code.": 2 words (< 20), no trigger cue
+.github/agents/triage.agent.md:2:1: MEDIUM AI-COG-006 Weak routing description "Triage.": 1 word (< 20), no trigger cue
+.github/chatmodes/debug.chatmode.md:2:1: MEDIUM AI-COG-006 Weak routing description "Debug.": 1 word (< 20), no trigger cue
 tools/fetch.json:1:1: HIGH AI-STR-002 Invalid shape: `tools` must be an array, found object

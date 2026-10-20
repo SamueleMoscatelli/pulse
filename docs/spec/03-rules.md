@@ -220,7 +220,7 @@ Every EFF finding sets `token_waste`, which feeds context debt (`04-scoring-gate
 
 ### AI-COG-003 — Negative-only constraint
 - **Sev** Info · **Kinds** md
-- **Detect** A negative directive (`don't`/`never`/`avoid` + object) with no positive alternative in the same or the next sentence (`instead`, `use`, `prefer`, `rather`).
+- **Detect** A negative directive (`don't`/`never`/`avoid` + object) with no positive alternative in the same or the next sentence (`instead`, `use`, `prefer`, `rather`; `use` directly after a negator doesn't count). FP guards (ADR-032): a contrast after `,`/`—` that already states the positive ("becomes a finding, never a panic"), or a later clause of the same sentence opening with an imperative ("…: redact them").
 - **Fix** State what to do instead. Models follow positive instructions more reliably.
 
 ### AI-COG-004 — Emphasis inflation
@@ -233,7 +233,7 @@ Every EFF finding sets `token_waste`, which feeds context debt (`04-scoring-gate
 
 ### AI-COG-006 — Weak routing description
 - **Sev** Medium · **Kinds** Skill, Agent
-- **Detect** Description < 20 words, or lacking a trigger cue (`use when`, `use for`, `when the user`, `proactively`, `trigger`, `invoke`), or written in first person ("I can…"). The model routes on descriptions, so weak ones cause missed or wrong invocations.
+- **Detect** Description < 20 words, or lacking a trigger cue (`use when`, `use for`, `when the user`, `proactively`, `trigger`, `invoke`; see ADR-032 for the matched forms), or written in first person ("I can…"). The model routes on descriptions, so weak ones cause missed or wrong invocations.
 
 ### AI-COG-007 — Unstructured long instructions
 - **Sev** Low · **Kinds** Instructions, ScopedInstructions, Agent, Skill

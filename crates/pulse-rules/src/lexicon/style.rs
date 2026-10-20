@@ -112,12 +112,15 @@ pub const DIRECTIVE_VERBS: &[&str] = &[
     "make",
     "name",
     "prefer",
+    "redact",
     "refactor",
+    "replace",
     "structure",
     "test",
     "update",
     "validate",
     "verify",
+    "wrap",
 ];
 
 /// Caps words that are emphasis markers whatever their length (AI-COG-004); matched
