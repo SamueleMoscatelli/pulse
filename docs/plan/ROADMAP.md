@@ -43,7 +43,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [x] P5.2 AI-EFF-004/005/006 bulk, sprawl, oversized
 - [x] P5.3 AI-EFF-007, AI-COG-002, AI-COG-004 lexicon rules
 - [x] P5.4 AI-COG-003/006/007 negative, routing, structure
-- [ ] P5.5 AI-COG-005 cross-file contradictions
+- [x] P5.5 AI-COG-005 cross-file contradictions
 
 ## Phase 6 — Reports & workflow (v0.2.0)
 - [ ] P6.1 JSON & SARIF reporters

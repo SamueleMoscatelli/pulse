@@ -1,0 +1,1 @@
+Fail cases need nested paths (packages/x/CLAUDE.md) and imports: generated in tests/fixtures.rs (cog005_* tests).
