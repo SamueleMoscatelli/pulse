@@ -40,6 +40,8 @@ pub struct Directive<'a> {
     pub span: Span,
     /// Text of the nearest heading above, if any.
     pub section: Option<&'a str>,
+    /// That heading is the document title: the file's first heading, at level 1.
+    pub titled: bool,
 }
 
 /// Every directive in `asset`'s Markdown body, in source order.
@@ -243,11 +245,11 @@ impl<'a> Extractor<'a> {
         words(text, &mut ws);
         if let Some((polarity, verb, object, context)) = parse(&ws) {
             let md = self.md;
-            let section = md.headings[..md
+            let n = md
                 .headings
-                .partition_point(|h| h.span.start as usize <= start)]
-                .last()
-                .map(|h| h.text.as_str());
+                .partition_point(|h| h.span.start as usize <= start);
+            let section = md.headings[..n].last().map(|h| h.text.as_str());
+            let titled = n == 1 && md.headings[0].level == 1;
             self.out.push(Directive {
                 polarity,
                 verb,
@@ -255,6 +257,7 @@ impl<'a> Extractor<'a> {
                 context,
                 span: span(start, start + text.len()),
                 section,
+                titled,
             });
         }
         self.words = ws;

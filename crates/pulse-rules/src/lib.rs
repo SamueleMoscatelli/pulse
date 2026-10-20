@@ -42,6 +42,7 @@ pub static RULES: &[&dyn Rule] = &[
 
 /// Project-scoped rules, in ID order.
 pub static PROJECT_RULES: &[&dyn ProjectRule] = &[
+    &cognitive::contradiction::CrossFileContradiction,
     &efficiency::budget::AlwaysOnBudget,
     &efficiency::duplicates::DuplicatedContent,
     &efficiency::bloat::McpSprawl,

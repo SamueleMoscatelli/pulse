@@ -1532,3 +1532,128 @@ fn cog002_and_cog004_messages() {
         "4 of 5 directives (80%) are emphasized; none stands out"
     );
 }
+
+fn instr(rel: &str, load: LoadMode, text: &str) -> Asset {
+    let kind = if rel.ends_with(".mdc") {
+        AssetKind::ScopedInstructions
+    } else {
+        AssetKind::Instructions
+    };
+    Asset::from_bytes(
+        PathBuf::from(rel),
+        rel,
+        kind,
+        load,
+        text.as_bytes().to_vec(),
+    )
+}
+
+fn cog005(assets: &[Asset]) -> Vec<(String, (u32, u32), String)> {
+    run("AI-COG-005", assets)
+        .iter()
+        .map(|f| {
+            let path = f.location.path.to_str().unwrap().to_owned();
+            (path, loc(f), f.message.clone())
+        })
+        .collect()
+}
+
+#[test]
+fn cog005_nested_file_contradicting_root_is_reported_on_nested() {
+    let f = cog005(&[
+        instr("CLAUDE.md", LoadMode::Always, "# Tools\n\n- Use pnpm.\n"),
+        instr(
+            "packages/x/CLAUDE.md",
+            LoadMode::Conditional,
+            "# X\n\nUse npm.\n",
+        ),
+    ]);
+    assert_eq!(
+        f,
+        [(
+            "packages/x/CLAUDE.md".to_owned(),
+            (3, 1),
+            "Contradicts CLAUDE.md:3: \"Use pnpm\" vs \"Use npm\"".to_owned()
+        )]
+    );
+}
+
+#[test]
+fn cog005_unrelated_nested_dirs_pass() {
+    let f = cog005(&[
+        instr(
+            "CLAUDE.md",
+            LoadMode::Always,
+            "# Guide\n\nKeep changes small.\n",
+        ),
+        instr("packages/a/CLAUDE.md", LoadMode::Conditional, "Use pnpm.\n"),
+        instr(
+            "packages/ab/AGENTS.md",
+            LoadMode::Conditional,
+            "Use yarn.\n",
+        ),
+        instr("packages/b/CLAUDE.md", LoadMode::Conditional, "Use npm.\n"),
+    ]);
+    assert!(f.is_empty(), "{f:?}");
+}
+
+#[test]
+fn cog005_nested_ancestor_chain_without_root() {
+    let f = cog005(&[
+        instr("packages/CLAUDE.md", LoadMode::Conditional, "Use yarn.\n"),
+        instr("packages/x/CLAUDE.md", LoadMode::Conditional, "Use npm.\n"),
+        instr("packagesx/CLAUDE.md", LoadMode::Conditional, "Use pnpm.\n"),
+    ]);
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(f[0].0, "packages/x/CLAUDE.md");
+}
+
+#[test]
+fn cog005_always_set_includes_imports_and_always_apply_rules() {
+    let style = Asset::from_bytes(
+        PathBuf::from("docs/style.md"),
+        "docs/style.md",
+        AssetKind::Custom,
+        LoadMode::OnDemand,
+        b"Indent with tabs.\nAlways use spaces.\n".to_vec(),
+    );
+    let f = cog005(&[
+        instr(
+            "CLAUDE.md",
+            LoadMode::Always,
+            "@docs/style.md\n\nUse tabs.\n",
+        ),
+        style,
+        instr(
+            ".cursor/rules/a.mdc",
+            LoadMode::Conditional,
+            "---\nalwaysApply: true\n---\nAlways use Vitest.\n",
+        ),
+        instr(
+            ".cursor/rules/b.mdc",
+            LoadMode::Conditional,
+            "---\nglobs: '*.test.ts'\n---\nUse Jest.\n",
+        ),
+        instr(
+            ".cursor/rules/c.mdc",
+            LoadMode::Conditional,
+            "---\nalwaysApply: true\n---\nUse Jest.\n",
+        ),
+    ]);
+    let got: Vec<_> = f.iter().map(|(p, l, _)| (p.as_str(), *l)).collect();
+    // b.mdc is glob-scoped: not always loaded. Load order: a.mdc, c.mdc, CLAUDE.md, style.md.
+    assert_eq!(
+        got,
+        [(".cursor/rules/c.mdc", (4, 1)), ("docs/style.md", (2, 1))]
+    );
+}
+
+#[test]
+fn cog005_same_file_pairs_are_left_to_cog001() {
+    let f = cog005(&[instr(
+        "CLAUDE.md",
+        LoadMode::Always,
+        "Use npm.\n\nUse pnpm.\n",
+    )]);
+    assert!(f.is_empty(), "{f:?}");
+}

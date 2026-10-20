@@ -230,6 +230,7 @@ Every EFF finding sets `token_waste`, which feeds context debt (`04-scoring-gate
 ### AI-COG-005 — Cross-file contradiction
 - **Sev** Medium · **Scope** project
 - **Detect** AI-COG-001 logic applied across assets that load together: root Always instructions + `@imports` + alwaysApply rules, and per-directory chains (a nested `CLAUDE.md` with its ancestors). Reuses the directive extraction from AI-COG-001 (shared module `cognitive::directives`).
+- **Report** On the directive in the file loaded later (the nested file; in the always-on set, the later path or the imported file), referencing the earlier one: `Contradicts CLAUDE.md:3: "Use pnpm" vs "Use npm"`. Pairs within one file are AI-COG-001's. A document title (first heading, level 1) is not a section scope across files (ADR-033).
 
 ### AI-COG-006 — Weak routing description
 - **Sev** Medium · **Kinds** Skill, Agent
