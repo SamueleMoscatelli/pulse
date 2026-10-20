@@ -13,6 +13,8 @@ use crate::lexicon::directives::{
     MODALS, NEGATIVE, NEGATIVE_FIRST, NEGATORS, POSITIVE, POSITIVE_FIRST, QUALIFIERS, STOP,
     TERMINATORS, USE_VERBS,
 };
+use crate::lexicon::imperatives::IMPERATIVES;
+use crate::lexicon::style::DIRECTIVE_VERBS;
 
 /// Most content words kept in an object or a context.
 const MAX_WORDS: usize = 4;
@@ -85,6 +87,22 @@ pub fn contains_phrase(words: &[&str], phrase: &str) -> bool {
                 .zip(phrase.split_whitespace())
                 .all(|(w, p)| same(w, lemma(p)))
         })
+}
+
+/// Whether a sentence's words make it a directive for the style rules (AI-COG-002,
+/// AI-COG-004): an AI-COG-001 marker anywhere, or an imperative verb opening a clause
+/// (`Write …`, `IMPORTANT: run …`).
+pub fn is_directive(w: &[Word<'_>]) -> bool {
+    w.iter().enumerate().any(|(i, x)| {
+        let t = x.text;
+        is(t, POSITIVE)
+            || is(t, NEGATIVE)
+            || (i == 0 || x.brk)
+                && (is(t, POSITIVE_FIRST)
+                    || is(t, NEGATIVE_FIRST)
+                    || is(t, IMPERATIVES)
+                    || is(t, DIRECTIVE_VERBS))
+    })
 }
 
 /// A word of a sentence; `brk` marks punctuation (`,` `:` `(` …) right before it.
@@ -345,7 +363,7 @@ fn list_marker(line: &str) -> Option<usize> {
 }
 
 /// Whether one of `items` (sorted, non-overlapping spans) covers byte `pos`.
-fn covers<T>(items: &[T], pos: usize, span: impl Fn(&T) -> Span) -> bool {
+pub(crate) fn covers<T>(items: &[T], pos: usize, span: impl Fn(&T) -> Span) -> bool {
     let i = items.partition_point(|x| span(x).start as usize <= pos);
     i > 0 && span(&items[i - 1]).end as usize > pos
 }
@@ -495,6 +513,20 @@ mod tests {
         ));
         assert!(!contains_phrase(&["single"], "single quote"));
         assert!(!contains_phrase(&["x"], ""));
+    }
+
+    #[test]
+    fn style_directives() {
+        let d = |s: &str| {
+            let mut w = Vec::new();
+            words(s, &mut w);
+            is_directive(&w)
+        };
+        assert!(d("Write clean code."));
+        assert!(d("IMPORTANT: run the tests"));
+        assert!(d("You must keep it short"));
+        assert!(!d("This project is a CLI."));
+        assert!(!d("The test suite is slow"));
     }
 
     #[test]

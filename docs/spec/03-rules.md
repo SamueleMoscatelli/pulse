@@ -216,6 +216,7 @@ Every EFF finding sets `token_waste`, which feeds context debt (`04-scoring-gate
 ### AI-COG-002 — Vague directive
 - **Sev** Low · **Kinds** md
 - **Detect** Directive sentences containing `lexicon::VAGUE` terms ("appropriate(ly)", "as needed", "properly", "best practices", "clean code", "etc.", "and so on", "some", "reasonable", "if necessary", "good", "nice") without a concrete anchor (number, code span, path or example) in the same sentence. Aggregated per asset like AI-EFF-007.
+- **Directive** (AI-COG-002, AI-COG-004) A sentence with an AI-COG-001 marker anywhere, or a verb from `lexicon::IMPERATIVES` / `lexicon::style::DIRECTIVE_VERBS` opening a clause (`Write …`, `IMPORTANT: run …`) (ADR-031).
 
 ### AI-COG-003 — Negative-only constraint
 - **Sev** Info · **Kinds** md

@@ -1,0 +1,178 @@
+//! Directive style: vague directives (AI-COG-002) and emphasis inflation (AI-COG-004).
+
+use pulse_core::{Asset, Category, Finding, KindSet, Rule, RuleCtx, RuleMeta, Severity, Span};
+
+use super::directives::{Word, is_directive, lemma, sentences, words};
+use crate::lexicon::style::{ACRONYMS, ANCHORS, EMPHASIS, VAGUE};
+use crate::util::{Hit, aggregate};
+
+pub static META_VAGUE: RuleMeta = RuleMeta {
+    id: "AI-COG-002",
+    name: "Vague directive",
+    category: Category::Cognitive,
+    default_severity: Severity::Low,
+    kinds: KindSet::MARKDOWN,
+    summary: "A directive uses a vague term with nothing concrete to pin it down.",
+    remediation: "Say exactly what you mean: a number, a command, a path or an example.",
+    inline_suppressible: true,
+};
+
+pub struct VagueDirective;
+
+impl Rule for VagueDirective {
+    fn meta(&self) -> &'static RuleMeta {
+        &META_VAGUE
+    }
+
+    fn check(&self, asset: &Asset, _ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
+        let src = asset.source.as_str();
+        let mut ws = Vec::new();
+        let mut hits = Vec::new();
+        sentences(src, asset.markdown(), |r| {
+            let Some(text) = src.get(r.clone()) else {
+                return;
+            };
+            words(text, &mut ws);
+            let Some((i, term)) = vague(&ws) else {
+                return;
+            };
+            if !is_directive(&ws) || anchored(text, &ws) {
+                return;
+            }
+            let start = r.start + offset(text, ws[i].text);
+            hits.push(Hit {
+                span: span(start, start + ws[i].text.len()),
+                quote: term,
+                token_waste: 0,
+            });
+        });
+        aggregate(
+            &META_VAGUE,
+            asset,
+            &hits,
+            |h| format!("Vague directive \"{}\": say what it means here", h.quote),
+            |n, top| format!("{n} vague directives: {top}"),
+            out,
+        );
+    }
+}
+
+/// Index of the first word of the first [`VAGUE`] term in `w`, with the term.
+fn vague(w: &[Word<'_>]) -> Option<(usize, &'static str)> {
+    (0..w.len()).find_map(|i| VAGUE.iter().find(|t| phrase_at(w, i, t)).map(|&t| (i, t)))
+}
+
+/// Whether the words of `phrase` occur in `w` from index `i` (lemmas compared).
+fn phrase_at(w: &[Word<'_>], i: usize, phrase: &str) -> bool {
+    let mut k = i;
+    for p in phrase.split_whitespace() {
+        match w.get(k) {
+            Some(x) if lemma(x.text).eq_ignore_ascii_case(lemma(p)) => k += 1,
+            _ => return false,
+        }
+    }
+    k > i
+}
+
+/// AI-COG-002 anchor: a digit, a code span, a path or file name, or an example.
+fn anchored(text: &str, w: &[Word<'_>]) -> bool {
+    text.bytes()
+        .any(|b| b.is_ascii_digit() || b == b'`' || b == b'/')
+        || w.iter().any(|x| x.text.contains('.'))
+        || (0..w.len()).any(|i| ANCHORS.iter().any(|a| phrase_at(w, i, a)))
+}
+
+pub static META_EMPHASIS: RuleMeta = RuleMeta {
+    id: "AI-COG-004",
+    name: "Emphasis inflation",
+    category: Category::Cognitive,
+    default_severity: Severity::Low,
+    kinds: KindSet::MARKDOWN,
+    summary: "Too many directives are emphasized, so emphasis no longer stands out.",
+    remediation: "Keep caps, bold and \"!!\" for the one or two rules that truly matter.",
+    inline_suppressible: true,
+};
+
+/// Emphasized directives needed before the share is checked.
+const MIN_EMPHASIZED: usize = 4;
+
+pub struct EmphasisInflation;
+
+impl Rule for EmphasisInflation {
+    fn meta(&self) -> &'static RuleMeta {
+        &META_EMPHASIS
+    }
+
+    fn check(&self, asset: &Asset, _ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
+        let src = asset.source.as_str();
+        let mut ws = Vec::new();
+        let (mut directives, mut emphasized) = (0usize, 0usize);
+        let mut first = None;
+        sentences(src, asset.markdown(), |r| {
+            let Some(text) = src.get(r.clone()) else {
+                return;
+            };
+            words(text, &mut ws);
+            if !is_directive(&ws) {
+                return;
+            }
+            directives += 1;
+            if emphasis(text, &ws) {
+                emphasized += 1;
+                first.get_or_insert(span(r.start, r.end));
+            }
+        });
+        // AI-COG-004: > 25% of directives and at least 4 of them.
+        if emphasized < MIN_EMPHASIZED || emphasized * 4 <= directives {
+            return;
+        }
+        let Some(at) = first else {
+            return;
+        };
+        let pct = emphasized * 100 / directives;
+        let msg = format!(
+            "{emphasized} of {directives} directives ({pct}%) are emphasized; none stands out"
+        );
+        out.push(Finding::new(&META_EMPHASIS, asset, at, msg));
+    }
+}
+
+/// Whether a directive sentence carries an AI-COG-004 emphasis marker.
+fn emphasis(text: &str, w: &[Word<'_>]) -> bool {
+    text.bytes().filter(|&b| b == b'!').count() >= 2
+        || fully_bold(text)
+        || w.iter().any(|x| {
+            let t = x.text;
+            let caps = t.len() >= 4 && t.bytes().all(|b| b.is_ascii_uppercase());
+            (EMPHASIS.contains(&t) || caps && !ACRONYMS.contains(&t))
+                && !in_code(text, offset(text, t))
+        })
+}
+
+/// `**Whole sentence.**` (or `__…__`), not `**a** and **b**`.
+fn fully_bold(text: &str) -> bool {
+    let t = text.trim_end_matches(['.', '!', '?', ':']);
+    ["**", "__"].iter().any(|d| {
+        t.len() > 2 * d.len()
+            && t.starts_with(d)
+            && t.ends_with(d)
+            && t.get(d.len()..t.len() - d.len())
+                .is_some_and(|inner| !inner.contains(d))
+    })
+}
+
+/// Whether byte `off` of `text` is inside an inline code span.
+fn in_code(text: &str, off: usize) -> bool {
+    text.get(..off)
+        .is_some_and(|b| b.bytes().filter(|&c| c == b'`').count() % 2 == 1)
+}
+
+/// Byte offset of `word` (a slice of `text`) in `text`.
+fn offset(text: &str, word: &str) -> usize {
+    (word.as_ptr() as usize).saturating_sub(text.as_ptr() as usize)
+}
+
+fn span(start: usize, end: usize) -> Span {
+    let c = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+    Span::new(c(start), c(end))
+}
