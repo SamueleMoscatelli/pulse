@@ -62,7 +62,7 @@ fn scan_reports_invalid_content_and_skipped_files() {
     write(root, "AGENTS.md", &[b'a'; 64]);
     write(
         root,
-        ".claude/agents/ok.md",
+        ".claude/commands/ok.md",
         b"---\nname: a\ndescription: d\n---\n",
     );
     let mut config = Config::default();

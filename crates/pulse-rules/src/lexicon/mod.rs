@@ -8,6 +8,7 @@ pub mod paths;
 pub mod permissions;
 pub mod platform;
 pub mod poisoning;
+pub mod routing;
 pub mod secrets;
 pub mod shell;
 pub mod style;

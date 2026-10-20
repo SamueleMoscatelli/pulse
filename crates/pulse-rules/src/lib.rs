@@ -13,7 +13,10 @@ pub mod util;
 pub static RULES: &[&dyn Rule] = &[
     &cognitive::contradiction::ContradictoryDirectives,
     &cognitive::style::VagueDirective,
+    &cognitive::style::NegativeOnly,
     &cognitive::style::EmphasisInflation,
+    &cognitive::routing::WeakRouting,
+    &cognitive::layout::Unstructured,
     &efficiency::budget::AssetBudget,
     &efficiency::bloat::InlinedBulk,
     &efficiency::bloat::Oversized,

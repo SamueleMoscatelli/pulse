@@ -10,11 +10,23 @@ expression: "render(\"mixed\", false, false)"
 
    Security      A   0 vulnerabilities
    Reliability   D   1 bug
-   Clarity       A   0 smells
+   Clarity       C   4 smells
    Efficiency    A   context debt 0%
    Context load      70 always-on tokens · 0% of 200k window
 
-   CRITICAL 0   HIGH 1   MEDIUM 0   LOW 0   INFO 0
+   CRITICAL 0   HIGH 1   MEDIUM 4   LOW 0   INFO 0
+
+ .claude/agents/planner.md
+   3:1     MEDIUM    AI-COG-006  Weak routing description "Plans work.": 2 words (< 20), no trigger cue
+
+ .claude/skills/review/SKILL.md
+   3:1     MEDIUM    AI-COG-006  Weak routing description "Review code.": 2 words (< 20), no trigger cue
+
+ .github/agents/triage.agent.md
+   2:1     MEDIUM    AI-COG-006  Weak routing description "Triage.": 1 word (< 20), no trigger cue
+
+ .github/chatmodes/debug.chatmode.md
+   2:1     MEDIUM    AI-COG-006  Weak routing description "Debug.": 1 word (< 20), no trigger cue
 
  tools/fetch.json
    1:1     HIGH      AI-STR-002  Invalid shape: `tools` must be an array, found object

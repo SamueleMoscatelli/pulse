@@ -110,3 +110,7 @@ pub const EXCLUSIVE_SETS: &[&[&str]] = &[
     &["lf", "crlf"],
     &["maven", "gradle"],
 ];
+
+/// Words that offer a positive alternative to a negative directive (AI-COG-003), when no
+/// negator directly precedes them (`never use` is not one).
+pub const ALTERNATIVES: &[&str] = &["instead", "use", "using", "prefer", "rather"];
