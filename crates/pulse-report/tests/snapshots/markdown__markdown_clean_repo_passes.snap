@@ -1,0 +1,22 @@
+---
+source: crates/pulse-report/tests/markdown.rs
+expression: "render(&root, &report(&root), Severity::Info)"
+---
+## Pulse Quality Gate: ✅ PASSED
+
+2 assets · 107 tokens · 69 always-on
+
+| | Condition | Actual | Limit |
+|:-:|---|---|---|
+| ✅ | severity ≥ high | 0 issues | allowed 0 |
+| ✅ | context debt | 0% | max 10% |
+
+| Security | Reliability | Clarity | Efficiency |
+|:-:|:-:|:-:|:-:|
+| **A** 0 vulnerabilities | **A** 0 bugs | **A** 0 smells | **A** context debt 0% |
+
+| CRITICAL | HIGH | MEDIUM | LOW | INFO |
+|:-:|:-:|:-:|:-:|:-:|
+| 0 | 0 | 0 | 0 | 0 |
+
+No issues found.

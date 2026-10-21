@@ -265,7 +265,7 @@ fn quiet<W: Write + ?Sized>(
 }
 
 /// Label, actual value and limit of a gate condition.
-fn describe(cond: &Condition, report: &Report) -> (String, String, String) {
+pub(crate) fn describe(cond: &Condition, report: &Report) -> (String, String, String) {
     let ratio = |v: &GateValue| match *v {
         GateValue::Ratio(r) => pct(r),
         ref other => other.to_string(),
@@ -309,16 +309,16 @@ fn describe(cond: &Condition, report: &Report) -> (String, String, String) {
     }
 }
 
-fn upper(s: Severity) -> String {
+pub(crate) fn upper(s: Severity) -> String {
     s.as_str().to_ascii_uppercase()
 }
 
-fn plural(n: usize, one: &str, many: &str) -> String {
+pub(crate) fn plural(n: usize, one: &str, many: &str) -> String {
     format!("{n} {}", if n == 1 { one } else { many })
 }
 
 /// `842`, `61.2k`, `200k`, `1.5M`.
-fn tokens(n: u64) -> String {
+pub(crate) fn tokens(n: u64) -> String {
     let (v, unit) = match n {
         0..1_000 => return n.to_string(),
         1_000..1_000_000 => (n as f64 / 1e3, "k"),
@@ -328,7 +328,7 @@ fn tokens(n: u64) -> String {
 }
 
 /// A fraction as a percentage with one decimal: `6.1%`, `10%`.
-fn pct(r: f64) -> String {
+pub(crate) fn pct(r: f64) -> String {
     format!("{}%", trim_zero(format!("{:.1}", r * 100.0)))
 }
 

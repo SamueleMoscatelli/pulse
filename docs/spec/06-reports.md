@@ -59,8 +59,8 @@ For GitHub Code Scanning. `tool.driver.rules[]` comes from `RuleMeta` (id, name,
 
 ## Markdown (`--format markdown`)
 
-For PR comments: a gate badge line, a ratings table, an issue-count table, then findings grouped by file in a collapsible `<details>` per file. Capped at 50 findings, with a "+N more" line.
+For PR comments: a gate badge line, a ratings table, an issue-count table, then findings grouped by file in a collapsible `<details>` per file. Capped at 50 findings, with a "+N more" line. Cells are HTML-escaped with `|` escaped and line breaks folded; `--min-severity` filters the listed findings only.
 
 ## GitHub (`--format github`)
 
-GitHub Actions workflow commands, one per finding: `::error file=CLAUDE.md,line=12,col=5,title=AI-SEC-001::Invisible character…`. Critical/High → `error`, Medium → `warning`, Low/Info → `notice`. Then a plain-text gate summary. If `GITHUB_STEP_SUMMARY` is set, the Markdown report is also appended to that file.
+GitHub Actions workflow commands, one per finding: `::error file=CLAUDE.md,line=12,col=5,title=AI-SEC-001::Invisible character…`. Critical/High → `error`, Medium → `warning`, Low/Info → `notice`. Then a plain-text gate summary. If `GITHUB_STEP_SUMMARY` is set, the Markdown report is also appended to that file. Messages escape `%`, CR and LF (`%25`, `%0D`, `%0A`); property values also escape `:` and `,` (`%3A`, `%2C`).

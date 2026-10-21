@@ -1,6 +1,8 @@
 //! Pulse report renderers: terminal, JSON, SARIF, Markdown, GitHub.
 
+mod github;
 mod json;
+mod markdown;
 mod sarif;
 mod terminal;
 
@@ -8,7 +10,9 @@ use std::path::Path;
 
 use pulse_core::Finding;
 
+pub use github::{GithubOptions, render as render_github};
 pub use json::{JsonOptions, SCHEMA as JSON_SCHEMA, render as render_json};
+pub use markdown::{MarkdownOptions, render as render_markdown};
 pub use sarif::{SarifOptions, render as render_sarif};
 pub use terminal::{TerminalOptions, render as render_terminal};
 

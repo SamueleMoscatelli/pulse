@@ -16,6 +16,7 @@ fn pulse(args: &[&str]) -> assert_cmd::assert::Assert {
     Command::cargo_bin("pulse")
         .unwrap()
         .env_remove("GITHUB_ACTIONS")
+        .env_remove("GITHUB_STEP_SUMMARY")
         .args(args)
         .assert()
 }
@@ -49,8 +50,14 @@ fn bad_config_exits_two() {
 }
 
 #[test]
-fn unimplemented_format_exits_two() {
-    pulse(&["scan", "-C", &root("clean"), "-f", "markdown"]).code(2);
+fn markdown_format_renders_a_pr_comment() {
+    let out = pulse(&["scan", "-C", &root("mixed"), "-f", "markdown"]).code(0);
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(
+        stdout.starts_with("## Pulse Quality Gate: ❌ FAILED"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("<details><summary><code>tools/fetch.json</code>"));
 }
 
 #[test]
@@ -74,10 +81,41 @@ fn json_and_sarif_formats_write_their_schema() {
 }
 
 #[test]
-fn github_format_falls_back_to_terminal() {
-    let out = pulse(&["ci", "-C", &root("clean"), "-f", "github"]).code(0);
+fn ci_on_github_actions_annotates_and_appends_step_summary() {
+    let dir = tempfile::tempdir().unwrap();
+    let summary = dir.path().join("summary.md");
+    std::fs::write(&summary, "previous step\n").unwrap();
+    let out = Command::cargo_bin("pulse")
+        .unwrap()
+        .env("GITHUB_ACTIONS", "true")
+        .env("GITHUB_STEP_SUMMARY", &summary)
+        .args(["ci", "-C", &root("mixed")])
+        .assert()
+        .code(1);
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert!(stdout.contains("QUALITY GATE   PASSED"), "{stdout}");
+    assert!(
+        stdout.contains("::error file=tools/fetch.json,line=1,col=1,title=AI-STR-002::"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("Pulse Quality Gate: FAILED"), "{stdout}");
+    let md = std::fs::read_to_string(&summary).unwrap();
+    assert!(
+        md.starts_with("previous step\n## Pulse Quality Gate: ❌ FAILED"),
+        "{md}"
+    );
+}
+
+#[test]
+fn github_format_without_step_summary_writes_no_file() {
+    let out = Command::cargo_bin("pulse")
+        .unwrap()
+        .env_remove("GITHUB_ACTIONS")
+        .env_remove("GITHUB_STEP_SUMMARY")
+        .args(["scan", "-C", &root("clean"), "-f", "github"])
+        .assert()
+        .code(0);
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(stdout.starts_with("Pulse Quality Gate: PASSED"), "{stdout}");
 }
 
 #[test]
