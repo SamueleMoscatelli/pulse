@@ -50,7 +50,27 @@ fn bad_config_exits_two() {
 
 #[test]
 fn unimplemented_format_exits_two() {
-    pulse(&["scan", "-C", &root("clean"), "-f", "json"]).code(2);
+    pulse(&["scan", "-C", &root("clean"), "-f", "markdown"]).code(2);
+}
+
+#[test]
+fn json_and_sarif_formats_write_their_schema() {
+    let out = pulse(&["ci", "-C", &root("mixed"), "-f", "json"]).code(1);
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(
+        stdout.starts_with("{\n  \"schema\": \"pulse/report@1\""),
+        "{stdout}"
+    );
+
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("pulse.sarif");
+    let f = file.to_string_lossy().into_owned();
+    pulse(&["scan", "-C", &root("mixed"), "-f", "sarif", "-o", &f])
+        .code(0)
+        .stdout("");
+    let sarif = std::fs::read_to_string(&file).unwrap();
+    assert!(sarif.contains("\"version\": \"2.1.0\""), "{sarif}");
+    assert!(sarif.contains("\"ruleId\": \"AI-STR-002\""), "{sarif}");
 }
 
 #[test]

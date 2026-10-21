@@ -1,0 +1,127 @@
+---
+source: crates/pulse-report/tests/json.rs
+expression: "render(\"mixed\", Severity::Info)"
+---
+{
+  "schema": "pulse/report@1",
+  "meta": {
+    "version": "0.1.0",
+    "root": "<root>",
+    "duration_ms": 8,
+    "generated_at": "2026-10-12T10:00:00Z"
+  },
+  "gate": {
+    "status": "failed",
+    "conditions": [
+      {
+        "name": "fail_on_severity",
+        "actual": "high",
+        "threshold": "high",
+        "passed": false
+      },
+      {
+        "name": "max_context_debt",
+        "actual": 0.0,
+        "threshold": 0.1,
+        "passed": true
+      }
+    ]
+  },
+  "ratings": {
+    "security": "A",
+    "reliability": "D",
+    "clarity": "C",
+    "efficiency": "A"
+  },
+  "metrics": {
+    "assets": 33,
+    "total_tokens": 204,
+    "always_on_tokens": 70,
+    "context_load": 0.00035,
+    "context_debt": 0.0,
+    "issues": {
+      "critical": 0,
+      "high": 1,
+      "medium": 4,
+      "low": 0,
+      "info": 0
+    }
+  },
+  "findings": [
+    {
+      "rule": "AI-COG-006",
+      "severity": "medium",
+      "category": "cognitive",
+      "path": ".claude/agents/planner.md",
+      "line": 3,
+      "col": 1,
+      "end_line": 3,
+      "end_col": 25,
+      "message": "Weak routing description \"Plans work.\": 2 words (< 20), no trigger cue",
+      "remediation": "Say what it does and when to use it, in the third person: \"Use when the user …\".",
+      "token_waste": 0,
+      "fingerprint": "e9e361a11277d08b",
+      "new": true
+    },
+    {
+      "rule": "AI-COG-006",
+      "severity": "medium",
+      "category": "cognitive",
+      "path": ".claude/skills/review/SKILL.md",
+      "line": 3,
+      "col": 1,
+      "end_line": 3,
+      "end_col": 26,
+      "message": "Weak routing description \"Review code.\": 2 words (< 20), no trigger cue",
+      "remediation": "Say what it does and when to use it, in the third person: \"Use when the user …\".",
+      "token_waste": 0,
+      "fingerprint": "655889c56bafdbe9",
+      "new": true
+    },
+    {
+      "rule": "AI-COG-006",
+      "severity": "medium",
+      "category": "cognitive",
+      "path": ".github/agents/triage.agent.md",
+      "line": 2,
+      "col": 1,
+      "end_line": 2,
+      "end_col": 21,
+      "message": "Weak routing description \"Triage.\": 1 word (< 20), no trigger cue",
+      "remediation": "Say what it does and when to use it, in the third person: \"Use when the user …\".",
+      "token_waste": 0,
+      "fingerprint": "a78528c60652a961",
+      "new": true
+    },
+    {
+      "rule": "AI-COG-006",
+      "severity": "medium",
+      "category": "cognitive",
+      "path": ".github/chatmodes/debug.chatmode.md",
+      "line": 2,
+      "col": 1,
+      "end_line": 2,
+      "end_col": 20,
+      "message": "Weak routing description \"Debug.\": 1 word (< 20), no trigger cue",
+      "remediation": "Say what it does and when to use it, in the third person: \"Use when the user …\".",
+      "token_waste": 0,
+      "fingerprint": "2e5d087b7c24e18a",
+      "new": true
+    },
+    {
+      "rule": "AI-STR-002",
+      "severity": "high",
+      "category": "structure",
+      "path": "tools/fetch.json",
+      "line": 1,
+      "col": 1,
+      "end_line": 1,
+      "end_col": 56,
+      "message": "Invalid shape: `tools` must be an array, found object",
+      "remediation": "Fix the syntax or shape so the agent (and Pulse) can read the whole file.",
+      "token_waste": 0,
+      "fingerprint": "4bd064c48595a8be",
+      "new": true
+    }
+  ]
+}

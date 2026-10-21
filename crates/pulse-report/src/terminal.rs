@@ -8,6 +8,8 @@ use anstyle::{Ansi256Color, AnsiColor, Color, Style};
 use pulse_core::{Finding, Rating, Severity};
 use pulse_engine::{Condition, GateStatus, GateValue, Report};
 
+use crate::rel_path;
+
 /// How to render a [`Report`] for the terminal.
 #[derive(Debug, Clone, Copy)]
 pub struct TerminalOptions<'a> {
@@ -305,14 +307,6 @@ fn describe(cond: &Condition, report: &Report) -> (String, String, String) {
             format!("min {}", cond.threshold),
         ),
     }
-}
-
-/// `path` relative to `root`, with `/` separators.
-fn rel_path(path: &Path, root: &Path) -> String {
-    path.strip_prefix(root)
-        .unwrap_or(path)
-        .to_string_lossy()
-        .replace('\\', "/")
 }
 
 fn upper(s: Severity) -> String {

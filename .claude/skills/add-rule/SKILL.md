@@ -12,7 +12,7 @@ The rule's spec is in `scripts/spec.sh "<RULE-ID>"`. Implement exactly that: det
 2. `crates/pulse-rules/src/lib.rs`: register it in `RULES` (asset scope) or `PROJECT_RULES` (project scope), keeping ID order.
 3. Shared word lists go in `crates/pulse-rules/src/lexicon/<name>.rs` as `pub const` slices, plus a `LazyLock` automaton if needed. Never inline big lists in rule files.
 4. `crates/pulse-rules/tests/fixtures/<RULE-ID>/`: ≥ 1 `fail_*` and ≥ 2 `pass_*` (realistic near-misses). Use `.expect` files (`line:col` per line) when location matters. Use `_kind` when the kind can't be inferred.
-5. `docs/rules/<RULE-ID>.md` from [doc-template.md](doc-template.md).
+5. `docs/rules/<RULE-ID>.md` from [doc-template.md](doc-template.md), and add the ID to the `rule_docs!` list in `crates/pulse-rules/src/docs.rs` (embedded for SARIF help and `explain`).
 6. Invisible characters, secrets and other content that would trip editors or push protection: build it in a test in `crates/pulse-rules/tests/fixtures.rs` (string concatenation / `\u{...}` escapes), not in fixture files.
 
 ## Implementation rules

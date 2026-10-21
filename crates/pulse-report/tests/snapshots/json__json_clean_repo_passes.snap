@@ -1,0 +1,51 @@
+---
+source: crates/pulse-report/tests/json.rs
+expression: "render(\"clean\", Severity::Info)"
+---
+{
+  "schema": "pulse/report@1",
+  "meta": {
+    "version": "0.1.0",
+    "root": "<root>",
+    "duration_ms": 8,
+    "generated_at": "2026-10-12T10:00:00Z"
+  },
+  "gate": {
+    "status": "passed",
+    "conditions": [
+      {
+        "name": "fail_on_severity",
+        "actual": null,
+        "threshold": "high",
+        "passed": true
+      },
+      {
+        "name": "max_context_debt",
+        "actual": 0.0,
+        "threshold": 0.1,
+        "passed": true
+      }
+    ]
+  },
+  "ratings": {
+    "security": "A",
+    "reliability": "A",
+    "clarity": "A",
+    "efficiency": "A"
+  },
+  "metrics": {
+    "assets": 2,
+    "total_tokens": 107,
+    "always_on_tokens": 69,
+    "context_load": 0.000345,
+    "context_debt": 0.0,
+    "issues": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 0
+    }
+  },
+  "findings": []
+}

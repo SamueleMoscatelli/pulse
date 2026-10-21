@@ -46,7 +46,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [x] P5.5 AI-COG-005 cross-file contradictions
 
 ## Phase 6 — Reports & workflow (v0.2.0)
-- [ ] P6.1 JSON & SARIF reporters
+- [x] P6.1 JSON & SARIF reporters
 - [ ] P6.2 Markdown & GitHub reporters
 - [ ] P6.3 Baseline, `--new-only`, `--changed-since`
 - [ ] P6.4 `pulse rules` & `pulse explain`

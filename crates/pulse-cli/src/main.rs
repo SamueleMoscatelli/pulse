@@ -6,14 +6,16 @@ use std::io::{self, BufWriter, IsTerminal as _, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::str::FromStr as _;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use anyhow::{Context as _, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use pulse_core::config::CONFIG_FILE;
 use pulse_core::{Config, DEFAULT_TOML, Severity};
 use pulse_engine::{GateStatus, Report, ScanOptions};
-use pulse_report::{TerminalOptions, render_terminal};
+use pulse_report::{
+    JsonOptions, SarifOptions, TerminalOptions, render_json, render_sarif, render_terminal,
+};
 
 /// Exit code for a failed Quality Gate.
 const EXIT_GATE: u8 = 1;
@@ -167,7 +169,7 @@ fn run_scan(global: &Global, args: &ScanArgs, ci: bool) -> anyhow::Result<ExitCo
     });
     match format {
         // `github` renders as terminal until its reporter lands (P6.2).
-        Format::Terminal | Format::Github => {}
+        Format::Terminal | Format::Github | Format::Json | Format::Sarif => {}
         other => bail!(
             "format `{}` is not implemented yet",
             other
@@ -202,14 +204,35 @@ fn run_scan(global: &Global, args: &ScanArgs, ci: bool) -> anyhow::Result<ExitCo
         min_severity: args.min_severity,
         window: config.context.window,
     };
+    let write = |w: &mut dyn Write| -> io::Result<()> {
+        match format {
+            Format::Json => {
+                let opts = JsonOptions {
+                    root,
+                    min_severity: args.min_severity,
+                    generated_at: SystemTime::now(),
+                };
+                render_json(w, &report, &opts)?;
+            }
+            Format::Sarif => {
+                let opts = SarifOptions {
+                    root,
+                    min_severity: args.min_severity,
+                };
+                render_sarif(w, &report, &opts)?;
+            }
+            _ => render_terminal(w, &report, &term)?,
+        }
+        w.flush()
+    };
     let written = match &args.output {
         Some(path) => {
             let file =
                 File::create(path).with_context(|| format!("cannot create {}", path.display()))?;
-            write_report(BufWriter::new(file), &report, &term)
+            write(&mut BufWriter::new(file))
                 .with_context(|| format!("cannot write {}", path.display()))
         }
-        None => match write_report(BufWriter::new(io::stdout().lock()), &report, &term) {
+        None => match write(&mut BufWriter::new(io::stdout().lock())) {
             // A closed pipe (`pulse scan | head`) is not an error.
             Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
             other => other.context("cannot write to stdout"),
@@ -223,11 +246,6 @@ fn run_scan(global: &Global, args: &ScanArgs, ci: bool) -> anyhow::Result<ExitCo
     } else {
         ExitCode::SUCCESS
     })
-}
-
-fn write_report<W: Write>(mut w: W, report: &Report, opts: &TerminalOptions<'_>) -> io::Result<()> {
-    render_terminal(&mut w, report, opts)?;
-    w.flush()
 }
 
 /// Whether to emit ANSI styles; an explicit `--color` wins over `NO_COLOR`.
