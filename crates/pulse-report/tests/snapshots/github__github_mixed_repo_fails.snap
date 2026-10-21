@@ -1,0 +1,13 @@
+---
+source: crates/pulse-report/tests/github.rs
+expression: "render(\"mixed\")"
+---
+::warning file=.claude/agents/planner.md,line=3,col=1,title=AI-COG-006::Weak routing description "Plans work.": 2 words (< 20), no trigger cue
+::warning file=.claude/skills/review/SKILL.md,line=3,col=1,title=AI-COG-006::Weak routing description "Review code.": 2 words (< 20), no trigger cue
+::warning file=.github/agents/triage.agent.md,line=2,col=1,title=AI-COG-006::Weak routing description "Triage.": 1 word (< 20), no trigger cue
+::warning file=.github/chatmodes/debug.chatmode.md,line=2,col=1,title=AI-COG-006::Weak routing description "Debug.": 1 word (< 20), no trigger cue
+::error file=tools/fetch.json,line=1,col=1,title=AI-STR-002::Invalid shape: `tools` must be an array, found object
+Pulse Quality Gate: FAILED
+  ✖ severity ≥ high: 1 issue (allowed 0)
+  ✔ context debt: 0% (max 10%)
+  CRITICAL 0   HIGH 1   MEDIUM 4   LOW 0   INFO 0

@@ -14,7 +14,8 @@ use pulse_core::config::CONFIG_FILE;
 use pulse_core::{Config, DEFAULT_TOML, Severity};
 use pulse_engine::{GateStatus, Report, ScanOptions};
 use pulse_report::{
-    JsonOptions, SarifOptions, TerminalOptions, render_json, render_sarif, render_terminal,
+    GithubOptions, JsonOptions, MarkdownOptions, SarifOptions, TerminalOptions, render_github,
+    render_json, render_markdown, render_sarif, render_terminal,
 };
 
 /// Exit code for a failed Quality Gate.
@@ -167,17 +168,6 @@ fn run_scan(global: &Global, args: &ScanArgs, ci: bool) -> anyhow::Result<ExitCo
     } else {
         Format::Terminal
     });
-    match format {
-        // `github` renders as terminal until its reporter lands (P6.2).
-        Format::Terminal | Format::Github | Format::Json | Format::Sarif => {}
-        other => bail!(
-            "format `{}` is not implemented yet",
-            other
-                .to_possible_value()
-                .map_or_else(String::new, |v| v.get_name().to_owned())
-        ),
-    }
-
     let root = &global.root;
     let config = Config::load(root, global.config.as_deref())?;
     let opts = ScanOptions {
@@ -221,7 +211,21 @@ fn run_scan(global: &Global, args: &ScanArgs, ci: bool) -> anyhow::Result<ExitCo
                 };
                 render_sarif(w, &report, &opts)?;
             }
-            _ => render_terminal(w, &report, &term)?,
+            Format::Markdown => {
+                let opts = MarkdownOptions {
+                    root,
+                    min_severity: args.min_severity,
+                };
+                render_markdown(w, &report, &opts)?;
+            }
+            Format::Github => {
+                let opts = GithubOptions {
+                    root,
+                    min_severity: args.min_severity,
+                };
+                render_github(w, &report, &opts)?;
+            }
+            Format::Terminal => render_terminal(w, &report, &term)?,
         }
         w.flush()
     };
@@ -239,6 +243,9 @@ fn run_scan(global: &Global, args: &ScanArgs, ci: bool) -> anyhow::Result<ExitCo
         },
     };
     written?;
+    if format == Format::Github {
+        append_step_summary(&report, root, args.min_severity)?;
+    }
 
     let gate_failed = report.gate.status == GateStatus::Failed;
     Ok(if (ci || args.fail_on_gate) && gate_failed {
@@ -246,6 +253,22 @@ fn run_scan(global: &Global, args: &ScanArgs, ci: bool) -> anyhow::Result<ExitCo
     } else {
         ExitCode::SUCCESS
     })
+}
+
+/// Appends the Markdown report to `$GITHUB_STEP_SUMMARY`, when set.
+fn append_step_summary(report: &Report, root: &Path, min_severity: Severity) -> anyhow::Result<()> {
+    let Some(path) = std::env::var_os("GITHUB_STEP_SUMMARY").filter(|p| !p.is_empty()) else {
+        return Ok(());
+    };
+    let path = PathBuf::from(path);
+    let write = || -> io::Result<()> {
+        let file = OpenOptions::new().create(true).append(true).open(&path)?;
+        let mut w = BufWriter::new(file);
+        let opts = MarkdownOptions { root, min_severity };
+        render_markdown(&mut w, report, &opts)?;
+        w.flush()
+    };
+    write().with_context(|| format!("cannot write step summary {}", path.display()))
 }
 
 /// Whether to emit ANSI styles; an explicit `--color` wins over `NO_COLOR`.

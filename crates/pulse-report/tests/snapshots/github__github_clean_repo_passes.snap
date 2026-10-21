@@ -1,0 +1,8 @@
+---
+source: crates/pulse-report/tests/github.rs
+expression: "render(\"clean\")"
+---
+Pulse Quality Gate: PASSED
+  ✔ severity ≥ high: 0 issues (allowed 0)
+  ✔ context debt: 0% (max 10%)
+  CRITICAL 0   HIGH 0   MEDIUM 0   LOW 0   INFO 0

@@ -1,0 +1,56 @@
+---
+source: crates/pulse-report/tests/markdown.rs
+expression: "render(&root, &report(&root), Severity::Info)"
+---
+## Pulse Quality Gate: ❌ FAILED
+
+33 assets · 204 tokens · 70 always-on
+
+| | Condition | Actual | Limit |
+|:-:|---|---|---|
+| ❌ | severity ≥ high | 1 issue | allowed 0 |
+| ✅ | context debt | 0% | max 10% |
+
+| Security | Reliability | Clarity | Efficiency |
+|:-:|:-:|:-:|:-:|
+| **A** 0 vulnerabilities | **D** 1 bug | **C** 4 smells | **A** context debt 0% |
+
+| CRITICAL | HIGH | MEDIUM | LOW | INFO |
+|:-:|:-:|:-:|:-:|:-:|
+| 0 | 1 | 4 | 0 | 0 |
+
+<details><summary><code>.claude/agents/planner.md</code> (1 issue)</summary>
+
+| Location | Severity | Rule | Message |
+|---|---|---|---|
+| 3:1 | MEDIUM | `AI-COG-006` | Weak routing description "Plans work.": 2 words (&lt; 20), no trigger cue |
+
+</details>
+<details><summary><code>.claude/skills/review/SKILL.md</code> (1 issue)</summary>
+
+| Location | Severity | Rule | Message |
+|---|---|---|---|
+| 3:1 | MEDIUM | `AI-COG-006` | Weak routing description "Review code.": 2 words (&lt; 20), no trigger cue |
+
+</details>
+<details><summary><code>.github/agents/triage.agent.md</code> (1 issue)</summary>
+
+| Location | Severity | Rule | Message |
+|---|---|---|---|
+| 2:1 | MEDIUM | `AI-COG-006` | Weak routing description "Triage.": 1 word (&lt; 20), no trigger cue |
+
+</details>
+<details><summary><code>.github/chatmodes/debug.chatmode.md</code> (1 issue)</summary>
+
+| Location | Severity | Rule | Message |
+|---|---|---|---|
+| 2:1 | MEDIUM | `AI-COG-006` | Weak routing description "Debug.": 1 word (&lt; 20), no trigger cue |
+
+</details>
+<details><summary><code>tools/fetch.json</code> (1 issue)</summary>
+
+| Location | Severity | Rule | Message |
+|---|---|---|---|
+| 1:1 | HIGH | `AI-STR-002` | Invalid shape: `tools` must be an array, found object |
+
+</details>
