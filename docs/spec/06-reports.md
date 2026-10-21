@@ -41,7 +41,7 @@ Stable, versioned schema (`"schema": "pulse/report@1"`):
 {
   "schema": "pulse/report@1",
   "meta": { "version": "0.1.0", "root": ".", "duration_ms": 8, "generated_at": "2026-10-12T10:00:00Z" },
-  "gate": { "status": "failed", "conditions": [ { "name": "severity", "actual": 3, "threshold": 0, "passed": false } ] },
+  "gate": { "status": "failed", "conditions": [ { "name": "fail_on_severity", "actual": "critical", "threshold": "high", "passed": false } ] },
   "ratings": { "security": "E", "reliability": "B", "clarity": "C", "efficiency": "B" },
   "metrics": { "assets": 42, "total_tokens": 61230, "always_on_tokens": 18400, "context_load": 0.092, "context_debt": 0.061,
                "issues": { "critical": 2, "high": 1, "medium": 4, "low": 7, "info": 0 } },
@@ -51,9 +51,11 @@ Stable, versioned schema (`"schema": "pulse/report@1"`):
 }
 ```
 
+Gate values: severities and ratings are strings, ratios and token counts numbers, "no open finding" is `null`. `metrics.issues` and the gate count every open finding; `--min-severity` only filters `findings`. `category` is `null` for custom rules; `fingerprint` is 16 hex digits; `new` is `true` for every finding until baselines exist (P6.3). Object keys keep the order above.
+
 ## SARIF 2.1.0 (`--format sarif`)
 
-For GitHub Code Scanning. `tool.driver.rules[]` comes from `RuleMeta` (id, name, shortDescription, help.markdown from the embedded docs, `properties.tags = [category]`, `defaultConfiguration.level`). Mapping: Critical/High → `error`, Medium → `warning`, Low/Info → `note`. Also emit `properties.security-severity` (Critical 9.5, High 8.0, Medium 5.5, Low 3.0) for security rules. `partialFingerprints.pulse/v1` = fingerprint.
+For GitHub Code Scanning. `tool.driver.rules[]` comes from `RuleMeta` (id, name, shortDescription, help.markdown from the embedded docs, `properties.tags = [category]`, `defaultConfiguration.level`). Mapping: Critical/High → `error`, Medium → `warning`, Low/Info → `note`. Also emit `properties.security-severity` (Critical 9.5, High 8.0, Medium 5.5, Low 3.0) for security rules. `partialFingerprints.pulse/v1` = fingerprint. `rules[]` lists only the rules that have results, in ID order (`ruleIndex` points into it); `help.text` is the remediation; custom rules carry only their `id`. Results use `artifactLocation.uri` relative to the root (percent-encoded, `uriBaseId: "%SRCROOT%"`) and `columnKind: "unicodeCodePoints"`; object keys are sorted. Validated in tests against the vendored schema `crates/pulse-report/tests/schemas/sarif-schema-2.1.0.json` (ADR-034).
 
 ## Markdown (`--format markdown`)
 

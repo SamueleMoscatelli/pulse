@@ -3,11 +3,14 @@
 use pulse_core::{ProjectRule, Rule, RuleMeta};
 
 pub mod cognitive;
+mod docs;
 pub mod efficiency;
 pub mod lexicon;
 pub mod security;
 pub mod structure;
 pub mod util;
+
+pub use docs::docs;
 
 /// Asset-scoped rules, in ID order.
 pub static RULES: &[&dyn Rule] = &[

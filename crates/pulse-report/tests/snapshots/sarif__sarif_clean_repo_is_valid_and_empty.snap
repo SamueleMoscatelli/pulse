@@ -1,0 +1,22 @@
+---
+source: crates/pulse-report/tests/sarif.rs
+expression: out
+---
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "columnKind": "unicodeCodePoints",
+      "results": [],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/SamueleMoscatelli/pulse",
+          "name": "pulse",
+          "rules": [],
+          "version": "0.1.0"
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

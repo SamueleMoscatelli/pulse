@@ -11,9 +11,13 @@ rust-version.workspace = true
 anstyle = "1.0.14"
 pulse-core.workspace = true
 pulse-engine.workspace = true
+pulse-rules.workspace = true
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 
 [lints]
 workspace = true
 
 [dev-dependencies]
 insta = "1.49.0"
+jsonschema = { version = "0.59.0", default-features = false }
