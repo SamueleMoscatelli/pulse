@@ -9,7 +9,7 @@ use std::time::Instant;
 use pulse_core::config::{CONFIG_FILE, RuleSetting, did_you_mean};
 use pulse_core::{
     Asset, Config, ConfigError, DiscoveredFile, Finding, ImportGraph, KindSet, OptionsStore,
-    ProjectRule, Rule, RuleCtx, RuleOptions, Severity, discover,
+    ProjectRule, Rule, RuleCtx, RuleMeta, RuleOptions, Severity, discover,
 };
 use pulse_rules::{PROJECT_RULES, RULES, all_meta, structure};
 use rayon::prelude::*;
@@ -193,6 +193,33 @@ fn read(f: &DiscoveredFile, max_bytes: u64, calibration: f64) -> Asset {
     }
 }
 
+/// A built-in rule as `config` leaves it: effective severity and whether it runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuleStatus {
+    pub meta: &'static RuleMeta,
+    pub severity: Severity,
+    pub enabled: bool,
+}
+
+/// Every built-in rule with its config overrides applied, in ID order.
+pub fn rule_statuses(config: &Config) -> Result<Vec<RuleStatus>, ConfigError> {
+    let resolved = Resolved::new(config, &ScanOptions::default())?;
+    let mut statuses: Vec<_> = all_meta()
+        .map(|meta| RuleStatus {
+            meta,
+            severity: resolved
+                .severity
+                .get(meta.id)
+                .copied()
+                .unwrap_or(meta.default_severity),
+            enabled: resolved.asset.iter().any(|r| r.meta().id == meta.id)
+                || resolved.project.iter().any(|r| r.meta().id == meta.id),
+        })
+        .collect();
+    statuses.sort_unstable_by_key(|s| s.meta.id);
+    Ok(statuses)
+}
+
 /// Whether `rel` is one of `paths` or lies under one of them (empty `paths` keeps all).
 pub(crate) fn in_paths(rel: &str, paths: &[String]) -> bool {
     paths.is_empty()
@@ -346,5 +373,25 @@ mod tests {
         let sev = Config::parse("[rules]\nAI-STR-002 = \"low\"\n", Path::new("p")).unwrap();
         let r = Resolved::new(&sev, &ScanOptions::default()).unwrap();
         assert_eq!(r.severity.get("AI-STR-002"), Some(&Severity::Low));
+    }
+
+    #[test]
+    fn rule_statuses_apply_overrides_in_id_order() {
+        let cfg = Config::parse(
+            "[rules]\nAI-STR-002 = \"off\"\nAI-SEC-001 = \"low\"\n",
+            Path::new("p"),
+        )
+        .unwrap();
+        let statuses = rule_statuses(&cfg).unwrap();
+        assert_eq!(statuses.len(), all_meta().count());
+        assert!(statuses.windows(2).all(|w| w[0].meta.id < w[1].meta.id));
+        let get = |id: &str| statuses.iter().find(|s| s.meta.id == id).unwrap();
+        assert!(!get("AI-STR-002").enabled);
+        assert_eq!(get("AI-SEC-001").severity, Severity::Low);
+        assert!(get("AI-SEC-001").enabled);
+        let cog = get("AI-COG-001");
+        assert_eq!(cog.severity, cog.meta.default_severity);
+        let bad = Config::parse("[rules]\nAI-SEC-999 = \"off\"\n", Path::new("p")).unwrap();
+        assert!(rule_statuses(&bad).is_err());
     }
 }

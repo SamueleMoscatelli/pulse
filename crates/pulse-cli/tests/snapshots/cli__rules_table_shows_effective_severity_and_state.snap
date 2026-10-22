@@ -1,0 +1,20 @@
+---
+source: crates/pulse-cli/tests/cli.rs
+expression: stdout(&out)
+---
+ID          SEVERITY  ENABLED  NAME
+AI-SEC-001  critical  yes      Invisible or bidirectional Unicode
+AI-SEC-002  critical  no       Prompt-injection phrase
+AI-SEC-003  critical  yes      Hardcoded secret
+AI-SEC-004  high      yes      MCP credential not externalized
+AI-SEC-005  high      yes      Unpinned MCP server package
+AI-SEC-006  high      yes      Insecure MCP transport
+AI-SEC-007  high      yes      Over-permissive agent permissions
+AI-SEC-008  critical  yes      Remote code execution in hook
+AI-SEC-009  high      yes      Unsafe interpolation in hook command
+AI-SEC-010  high      yes      Data-exfiltration pattern
+AI-SEC-011  high      yes      Hidden instructions
+AI-SEC-012  critical  yes      Tool description poisoning
+AI-SEC-013  critical  yes      Sensitive path reference
+
+13 rules, 12 enabled

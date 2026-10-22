@@ -763,9 +763,12 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "clap",
+ "insta",
  "pulse-core",
  "pulse-engine",
  "pulse-report",
+ "pulse-rules",
+ "serde_json",
  "tempfile",
 ]
 

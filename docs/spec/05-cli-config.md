@@ -25,8 +25,10 @@ pulse scan [PATHS...] [OPTIONS]             analyze and report; exit 0 unless --
 pulse ci [same options as scan]             = scan --fail-on-gate; format defaults to `github` when GITHUB_ACTIONS=true,
                                               else terminal with color off
 pulse baseline [--output FILE]              write current fingerprints to .pulse/baseline.json
-pulse rules [--category <CAT>] [--format terminal|json]   list rules (id, severity, enabled, name)
-pulse explain <RULE-ID>                     print the rule's docs (embedded docs/rules/<ID>.md)
+pulse rules [--category <CAT>] [--format terminal|json]   list rules (id, effective severity, enabled, name);
+                                              CAT is a name or ID prefix (security|SEC, …)
+pulse explain <RULE-ID>                     print the rule's docs (embedded docs/rules/<ID>.md; ID is case-insensitive,
+                                              headings bold when colored); unknown ID → exit 2 with a suggestion
 ```
 
 `PATHS` are relative to the scan root (absolute paths under it are accepted) and restrict analysis to those files/dirs, but project rules still see the full discovered asset set for context (e.g. reference checks).

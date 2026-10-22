@@ -15,7 +15,7 @@ use pulse_core::{AssetKind, ConfigError, DiscoverError, Finding, LoadMode};
 
 pub use baseline::{BASELINE_FILE, Baseline, BaselineError};
 pub use gate::{Condition, Gate, GateStatus, GateValue};
-pub use pipeline::scan;
+pub use pipeline::{RuleStatus, rule_statuses, scan};
 pub use score::{Metrics, Ratings, category_of};
 
 /// Error that aborts a scan (bad assets never do: they become findings).

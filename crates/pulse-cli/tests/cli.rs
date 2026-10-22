@@ -1,4 +1,5 @@
-//! The `pulse` binary end to end: exit codes, `init`, `scan`/`ci` and output modes.
+//! The `pulse` binary end to end: exit codes, `init`, `scan`/`ci`, output modes, `rules`
+//! and `explain`.
 
 #![allow(clippy::unwrap_used)] // helpers outside #[test] fns
 
@@ -352,4 +353,79 @@ fn changed_since_outside_a_repo_exits_two() {
         .args(["scan", "-C", &tempdir_str(&dir), "--changed-since", "main"])
         .assert()
         .code(2);
+}
+
+// `rules` and `explain`
+
+fn stdout(out: &assert_cmd::assert::Assert) -> String {
+    String::from_utf8(out.get_output().stdout.clone()).unwrap()
+}
+
+fn stderr(out: &assert_cmd::assert::Assert) -> String {
+    String::from_utf8(out.get_output().stderr.clone()).unwrap()
+}
+
+#[test]
+fn rules_table_shows_effective_severity_and_state() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("pulse.toml"),
+        "[rules]\nAI-SEC-002 = \"off\"\nAI-SEC-013 = \"critical\"\n",
+    )
+    .unwrap();
+    let out = pulse(&["rules", "-C", &tempdir_str(&dir), "--category", "SEC"]).code(0);
+    insta::assert_snapshot!(stdout(&out));
+}
+
+#[test]
+fn rules_json_lists_every_rule() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = pulse(&["rules", "-C", &tempdir_str(&dir), "-f", "json"]).code(0);
+    let rules: serde_json::Value = serde_json::from_str(&stdout(&out)).unwrap();
+    assert_eq!(
+        rules.as_array().unwrap().len(),
+        pulse_rules::all_meta().count()
+    );
+    let out = pulse(&[
+        "rules",
+        "-C",
+        &tempdir_str(&dir),
+        "-f",
+        "json",
+        "--category",
+        "efficiency",
+    ])
+    .code(0);
+    insta::assert_snapshot!(stdout(&out));
+}
+
+#[test]
+fn rules_with_bad_config_exits_two() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("pulse.toml"),
+        "[rules]\nAI-SEC-02 = \"off\"\n",
+    )
+    .unwrap();
+    let out = pulse(&["rules", "-C", &tempdir_str(&dir)]).code(2);
+    assert!(
+        stderr(&out).contains("did you mean `AI-SEC-002`?"),
+        "{}",
+        stderr(&out)
+    );
+}
+
+#[test]
+fn explain_prints_the_embedded_docs() {
+    let out = pulse(&["explain", "ai-sec-005", "--color", "never"]).code(0);
+    insta::assert_snapshot!(stdout(&out));
+    let colored = pulse(&["explain", "AI-SEC-005", "--color", "always"]).code(0);
+    assert!(stdout(&colored).starts_with("\u{1b}[1m# AI-SEC-005"));
+}
+
+#[test]
+fn explain_unknown_rule_exits_two_with_a_suggestion() {
+    let out = pulse(&["explain", "AI-SEC-0011"]).code(2);
+    assert!(stdout(&out).is_empty());
+    insta::assert_snapshot!(stderr(&out));
 }
