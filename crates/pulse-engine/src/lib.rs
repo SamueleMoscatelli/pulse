@@ -1,16 +1,19 @@
 //! Pulse engine: discover, parse, run rules, suppress, baseline, score, gate.
 
+mod baseline;
 mod gate;
 mod pipeline;
 mod post;
 mod score;
 mod suppress;
 
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use pulse_core::{AssetKind, ConfigError, DiscoverError, Finding, LoadMode};
 
+pub use baseline::{BASELINE_FILE, Baseline, BaselineError};
 pub use gate::{Condition, Gate, GateStatus, GateValue};
 pub use pipeline::scan;
 pub use score::{Metrics, Ratings, category_of};
@@ -22,6 +25,8 @@ pub enum EngineError {
     Config(#[from] ConfigError),
     #[error(transparent)]
     Discover(#[from] DiscoverError),
+    #[error(transparent)]
+    Baseline(#[from] BaselineError),
 }
 
 /// Narrows a scan; every field empty means "everything".
@@ -33,6 +38,20 @@ pub struct ScanOptions {
     pub only_rules: Vec<String>,
     /// Skip rules whose ID starts with one of these prefixes.
     pub skip_rules: Vec<String>,
+    /// When set, only these scan-root-relative files are in scope (`--changed-since`).
+    pub changed: Option<BTreeSet<String>>,
+    /// Accepted findings; the rest are new. `None` means every finding is new.
+    pub baseline: Option<Baseline>,
+    /// Keep only new findings (`--new-only`); also turns on new-code ratings and gate.
+    pub new_only: bool,
+}
+
+impl ScanOptions {
+    /// Whether the asset at `rel` is in scope: under `paths` and, if set, in `changed`.
+    pub fn in_scope(&self, rel: &str) -> bool {
+        pipeline::in_paths(rel, &self.paths)
+            && self.changed.as_ref().is_none_or(|c| c.contains(rel))
+    }
 }
 
 /// Per-asset facts for metrics and reports.
@@ -64,9 +83,21 @@ pub struct Report {
     pub assets_meta: Vec<AssetMeta>,
     /// Entries the walker could not visit, with the reason.
     pub walk_errors: Vec<(PathBuf, String)>,
-    /// Metrics over the in-scope assets and open findings.
+    /// Metrics over the in-scope assets and every open finding (new or not).
     pub metrics: Metrics,
+    /// Metrics over new findings only, when new-code mode is on (`--new-only` or
+    /// `gate.new_code_only`); ratings and gate are then computed from these.
+    pub new_metrics: Option<Metrics>,
     pub ratings: Ratings,
     pub gate: Gate,
+    /// The baseline the findings were compared with.
+    pub baseline: Option<Baseline>,
     pub timings: Timings,
+}
+
+impl Report {
+    /// Whether `f` is not in the baseline (always true without one).
+    pub fn is_new(&self, f: &Finding) -> bool {
+        self.baseline.as_ref().is_none_or(|b| b.is_new(f))
+    }
 }

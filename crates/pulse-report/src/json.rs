@@ -94,6 +94,9 @@ struct Metrics {
     context_load: f64,
     context_debt: f64,
     issues: Issues,
+    /// Issues of new findings, in new-code mode only (ratings and gate use these).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    new_issues: Option<Issues>,
 }
 
 #[derive(Serialize)]
@@ -119,7 +122,7 @@ struct JsonFinding<'a> {
     remediation: Option<&'static str>,
     token_waste: u32,
     fingerprint: String,
-    /// Not in the baseline; every finding until baselines exist (P6.3).
+    /// Not in the baseline (always true without one).
     new: bool,
 }
 
@@ -130,7 +133,16 @@ pub fn render<W: Write + ?Sized>(
     opts: &JsonOptions<'_>,
 ) -> io::Result<()> {
     let m = &report.metrics;
-    let count = |s| m.issues_by_severity.get(&s).copied().unwrap_or(0);
+    let issues = |m: &pulse_engine::Metrics| {
+        let count = |s| m.issues_by_severity.get(&s).copied().unwrap_or(0);
+        Issues {
+            critical: count(Severity::Critical),
+            high: count(Severity::High),
+            medium: count(Severity::Medium),
+            low: count(Severity::Low),
+            info: count(Severity::Info),
+        }
+    };
     let r = &report.ratings;
     let doc = JsonReport {
         schema: SCHEMA,
@@ -169,26 +181,21 @@ pub fn render<W: Write + ?Sized>(
             always_on_tokens: m.always_on_tokens,
             context_load: m.context_load,
             context_debt: m.context_debt,
-            issues: Issues {
-                critical: count(Severity::Critical),
-                high: count(Severity::High),
-                medium: count(Severity::Medium),
-                low: count(Severity::Low),
-                info: count(Severity::Info),
-            },
+            issues: issues(m),
+            new_issues: report.new_metrics.as_ref().map(issues),
         },
         findings: report
             .findings
             .iter()
             .filter(|f| f.severity >= opts.min_severity)
-            .map(|f| finding(f, opts.root))
+            .map(|f| finding(f, opts.root, report.is_new(f)))
             .collect(),
     };
     serde_json::to_writer_pretty(&mut *w, &doc)?;
     writeln!(w)
 }
 
-fn finding<'a>(f: &'a Finding, root: &Path) -> JsonFinding<'a> {
+fn finding<'a>(f: &'a Finding, root: &Path, new: bool) -> JsonFinding<'a> {
     let l = &f.location;
     JsonFinding {
         rule: f.rule_id,
@@ -203,7 +210,7 @@ fn finding<'a>(f: &'a Finding, root: &Path) -> JsonFinding<'a> {
         remediation: f.remediation,
         token_waste: f.token_waste,
         fingerprint: crate::fingerprint(f),
-        new: true,
+        new,
     }
 }
 

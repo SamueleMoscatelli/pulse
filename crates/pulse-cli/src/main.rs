@@ -1,6 +1,7 @@
 //! `pulse`: static analyzer and Quality Gate for AI assets.
 #![allow(clippy::print_stdout)]
 
+use std::collections::BTreeSet;
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufWriter, IsTerminal as _, Write};
 use std::path::{Path, PathBuf};
@@ -12,7 +13,7 @@ use anyhow::{Context as _, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use pulse_core::config::CONFIG_FILE;
 use pulse_core::{Config, DEFAULT_TOML, Severity};
-use pulse_engine::{GateStatus, Report, ScanOptions};
+use pulse_engine::{BASELINE_FILE, Baseline, GateStatus, Report, ScanOptions};
 use pulse_report::{
     GithubOptions, JsonOptions, MarkdownOptions, SarifOptions, TerminalOptions, render_github,
     render_json, render_markdown, render_sarif, render_terminal,
@@ -88,8 +89,8 @@ enum Command {
     Scan(ScanArgs),
     /// Scan and enforce the Quality Gate (= scan --fail-on-gate)
     Ci(ScanArgs),
-    /// Manage the findings baseline
-    Baseline,
+    /// Write the current findings' fingerprints to the baseline
+    Baseline(BaselineArgs),
     /// List available rules
     Rules,
     /// Show the documentation of a rule
@@ -102,7 +103,7 @@ impl Command {
             Self::Init(_) => "init",
             Self::Scan(_) => "scan",
             Self::Ci(_) => "ci",
-            Self::Baseline => "baseline",
+            Self::Baseline(_) => "baseline",
             Self::Rules => "rules",
             Self::Explain => "explain",
         }
@@ -114,6 +115,13 @@ struct InitArgs {
     /// Overwrite an existing pulse.toml
     #[arg(long)]
     force: bool,
+}
+
+#[derive(Debug, Args)]
+struct BaselineArgs {
+    /// Baseline file [default: <root>/.pulse/baseline.json]
+    #[arg(short, long, value_name = "FILE")]
+    output: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -138,6 +146,12 @@ struct ScanArgs {
     /// Skip rules with this ID prefix (repeatable)
     #[arg(long = "skip-rule", value_name = "ID")]
     skip_rules: Vec<String>,
+    /// Only report findings not in the baseline (.pulse/baseline.json)
+    #[arg(long)]
+    new_only: bool,
+    /// Only analyze assets changed since this git ref (plus untracked files)
+    #[arg(long, value_name = "GIT-REF")]
+    changed_since: Option<String>,
 }
 
 fn main() -> ExitCode {
@@ -149,6 +163,10 @@ fn main() -> ExitCode {
         }),
         Command::Scan(args) => run_scan(&cli.global, args, false),
         Command::Ci(args) => run_scan(&cli.global, args, true),
+        Command::Baseline(args) => write_baseline(&cli.global, args).map(|(path, n)| {
+            println!("wrote {n} fingerprints to {}", path.display());
+            ExitCode::SUCCESS
+        }),
         other => Err(anyhow::anyhow!(
             "pulse {}: not implemented yet",
             other.name()
@@ -170,10 +188,25 @@ fn run_scan(global: &Global, args: &ScanArgs, ci: bool) -> anyhow::Result<ExitCo
     });
     let root = &global.root;
     let config = Config::load(root, global.config.as_deref())?;
+    let baseline_path = root.join(BASELINE_FILE);
+    let baseline = Baseline::load(&baseline_path)?;
+    if baseline.is_none() && (args.new_only || config.gate.new_code_only) {
+        eprintln!(
+            "warning: no baseline at {}; every finding is new (run `pulse baseline`)",
+            baseline_path.display()
+        );
+    }
+    let changed = match &args.changed_since {
+        Some(git_ref) => Some(changed_files(root, git_ref)?),
+        None => None,
+    };
     let opts = ScanOptions {
         paths: args.paths.iter().map(|p| scan_path(root, p)).collect(),
         only_rules: args.rules.clone(),
         skip_rules: args.skip_rules.clone(),
+        changed,
+        baseline,
+        new_only: args.new_only,
     };
     let report = pulse_engine::scan(root, &config, &opts)?;
     for (path, reason) in &report.walk_errors {
@@ -253,6 +286,66 @@ fn run_scan(global: &Global, args: &ScanArgs, ci: bool) -> anyhow::Result<ExitCo
     } else {
         ExitCode::SUCCESS
     })
+}
+
+/// `baseline`: scans everything and writes the fingerprints; returns the path and count.
+fn write_baseline(global: &Global, args: &BaselineArgs) -> anyhow::Result<(PathBuf, usize)> {
+    let root = &global.root;
+    let config = Config::load(root, global.config.as_deref())?;
+    let report = pulse_engine::scan(root, &config, &ScanOptions::default())?;
+    let baseline = Baseline::from_findings(&report.findings);
+    let path = args
+        .output
+        .clone()
+        .unwrap_or_else(|| root.join(BASELINE_FILE));
+    baseline.write(&path)?;
+    Ok((path, baseline.len()))
+}
+
+/// Root-relative paths changed between `git_ref` and `HEAD`, plus untracked files.
+fn changed_files(root: &Path, git_ref: &str) -> anyhow::Result<BTreeSet<String>> {
+    if git_ref.starts_with('-') {
+        bail!("invalid git ref `{git_ref}`");
+    }
+    let range = format!("{git_ref}...HEAD");
+    let mut files = git(
+        root,
+        &["diff", "--name-only", "-z", "--relative", &range, "--"],
+    )?;
+    files.extend(git(
+        root,
+        &["ls-files", "-z", "--others", "--exclude-standard"],
+    )?);
+    Ok(files)
+}
+
+/// Runs `git <args>` in `root`; returns its NUL-separated stdout entries.
+fn git(root: &Path, args: &[&str]) -> anyhow::Result<BTreeSet<String>> {
+    let out = std::process::Command::new("git")
+        .args(args)
+        .current_dir(root)
+        // Set by git hooks; they would point the diff at another repository.
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .output()
+        .map_err(|e| match e.kind() {
+            io::ErrorKind::NotFound => {
+                anyhow::anyhow!("--changed-since needs git, but `git` was not found on PATH")
+            }
+            _ => anyhow::Error::new(e).context("cannot run git"),
+        })?;
+    if !out.status.success() {
+        bail!(
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+    }
+    Ok(String::from_utf8_lossy(&out.stdout)
+        .split('\0')
+        .filter(|l| !l.is_empty())
+        .map(str::to_owned)
+        .collect())
 }
 
 /// Appends the Markdown report to `$GITHUB_STEP_SUMMARY`, when set.
@@ -394,6 +487,9 @@ mod tests {
             "--skip-rule",
             "AI-SEC-001",
             "--fail-on-gate",
+            "--new-only",
+            "--changed-since",
+            "origin/main",
             "-f",
             "github",
             "--color",
@@ -413,6 +509,8 @@ mod tests {
         assert_eq!(args.rules, ["AI-SEC", "AI-STR"]);
         assert_eq!(args.skip_rules, ["AI-SEC-001"]);
         assert!(args.fail_on_gate);
+        assert!(args.new_only);
+        assert_eq!(args.changed_since.as_deref(), Some("origin/main"));
         assert_eq!(args.format, Some(Format::Github));
     }
 

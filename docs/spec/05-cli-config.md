@@ -20,7 +20,8 @@ pulse scan [PATHS...] [OPTIONS]             analyze and report; exit 0 unless --
     --min-severity <info|low|medium|high|critical>   hide findings below this level (display only; the gate still sees all)
     --rule <ID>...  / --skip-rule <ID>...   run only / skip rules (repeatable; prefix match: AI-SEC)
     --new-only                              only findings not in the baseline
-    --changed-since <GIT-REF>               only assets changed vs ref (shells out to `git diff --name-only`)
+    --changed-since <GIT-REF>               only assets changed vs ref: `git diff --name-only --relative <ref>...HEAD`
+                                              plus untracked files (`git ls-files --others --exclude-standard`), run in the root
 pulse ci [same options as scan]             = scan --fail-on-gate; format defaults to `github` when GITHUB_ACTIONS=true,
                                               else terminal with color off
 pulse baseline [--output FILE]              write current fingerprints to .pulse/baseline.json

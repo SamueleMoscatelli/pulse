@@ -24,6 +24,11 @@ fn rel_path(path: &Path, root: &Path) -> String {
         .replace('\\', "/")
 }
 
+/// Total open findings in `m`.
+fn issue_count(m: &pulse_engine::Metrics) -> usize {
+    m.issues_by_severity.values().sum()
+}
+
 /// A finding's fingerprint as 16 lowercase hex digits.
 fn fingerprint(f: &Finding) -> String {
     format!("{:016x}", f.fingerprint)
