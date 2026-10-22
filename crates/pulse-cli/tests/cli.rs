@@ -226,3 +226,130 @@ fn unknown_rule_in_config_exits_two() {
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(stderr.contains("unknown rule `AI-STR-02`"), "{stderr}");
 }
+
+/// A CLAUDE.md line with a zero-width space (AI-SEC-001, critical), generated in code.
+fn zwsp_line() -> String {
+    format!("Always run{}the tests.\n", '\u{200B}')
+}
+
+#[test]
+fn baseline_then_new_only_hides_accepted_findings() {
+    let dir = tempfile::tempdir().unwrap();
+    let d = tempdir_str(&dir);
+    let md = dir.path().join("CLAUDE.md");
+    std::fs::write(&md, format!("# Project\n\n{}", zwsp_line())).unwrap();
+    // Without a baseline every finding is new, with a warning.
+    let out = pulse(&["ci", "-C", &d, "--new-only"]).code(1);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("no baseline"), "{stderr}");
+
+    let out = pulse(&["baseline", "-C", &d]).code(0);
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(stdout.contains("fingerprints to"), "{stdout}");
+    let file = std::fs::read_to_string(dir.path().join(".pulse/baseline.json")).unwrap();
+    assert!(file.starts_with("{\n  \"version\": 1,"), "{file}");
+
+    // Shifted lines keep the old finding baselined.
+    std::fs::write(
+        &md,
+        format!("# Project\n\nBuild with cargo.\n\n{}", zwsp_line()),
+    )
+    .unwrap();
+    let out = pulse(&["ci", "-C", &d, "--new-only"]).code(0);
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(!stdout.contains("AI-SEC-001"), "{stdout}");
+    assert!(stdout.contains("New code"), "{stdout}");
+    // JSON still lists it without --new-only, marked as not new.
+    let out = pulse(&["scan", "-C", &d, "-f", "json"]).code(0);
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(stdout.contains("\"new\": false"), "{stdout}");
+
+    // A new occurrence fails the gate again.
+    std::fs::write(&md, format!("# Project\n\n{0}{0}", zwsp_line())).unwrap();
+    pulse(&["ci", "-C", &d, "--new-only"]).code(1);
+}
+
+#[test]
+fn bad_baseline_exits_two() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir(dir.path().join(".pulse")).unwrap();
+    std::fs::write(
+        dir.path().join(".pulse/baseline.json"),
+        r#"{"version":9,"fingerprints":[]}"#,
+    )
+    .unwrap();
+    let out = pulse(&["scan", "-C", &tempdir_str(&dir)]).code(2);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("unsupported baseline version 9"),
+        "{stderr}"
+    );
+}
+
+fn git(dir: &Path, args: &[&str]) {
+    let ok = std::process::Command::new("git")
+        .args([
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "commit.gpgsign=false",
+        ])
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap()
+        .status
+        .success();
+    assert!(ok, "git {args:?}");
+}
+
+#[test]
+fn changed_since_scans_changed_and_untracked_files_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let d = tempdir_str(&dir);
+    let bad = format!("# Project\n\n{}", zwsp_line());
+    std::fs::write(root.join("CLAUDE.md"), &bad).unwrap();
+    std::fs::write(root.join("AGENTS.md"), "# Agents\n\nUse cargo to build.\n").unwrap();
+    git(root, &["init", "-q", "-b", "main"]);
+    git(root, &["add", "-A"]);
+    git(root, &["commit", "-q", "-m", "base"]);
+
+    // Nothing changed: the old finding in CLAUDE.md is out of scope.
+    let out = pulse(&["ci", "-C", &d, "--changed-since", "HEAD"]).code(0);
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(!stdout.contains("AI-SEC-001"), "{stdout}");
+
+    // A committed change and an untracked file are both in scope.
+    std::fs::write(root.join("AGENTS.md"), &bad).unwrap();
+    git(root, &["commit", "-q", "-am", "change"]);
+    std::fs::create_dir_all(root.join(".github")).unwrap();
+    std::fs::write(root.join(".github/copilot-instructions.md"), &bad).unwrap();
+    let out = pulse(&["scan", "-C", &d, "-q", "--changed-since", "HEAD~1"]).code(0);
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(stdout.contains("AGENTS.md:"), "{stdout}");
+    assert!(
+        stdout.contains(".github/copilot-instructions.md:"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("CLAUDE.md:"), "{stdout}");
+
+    // A bad ref is a usage error with git's message.
+    let out = pulse(&["scan", "-C", &d, "--changed-since", "no-such-ref"]).code(2);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("git diff"), "{stderr}");
+}
+
+#[test]
+fn changed_since_outside_a_repo_exits_two() {
+    let dir = tempfile::tempdir().unwrap();
+    // Keep git from finding a repository above the tempdir.
+    Command::cargo_bin("pulse")
+        .unwrap()
+        .env("GIT_CEILING_DIRECTORIES", dir.path().parent().unwrap())
+        .args(["scan", "-C", &tempdir_str(&dir), "--changed-since", "main"])
+        .assert()
+        .code(2);
+}

@@ -797,6 +797,8 @@ dependencies = [
  "pulse-core",
  "pulse-rules",
  "rayon",
+ "serde",
+ "serde_json",
  "tempfile",
  "thiserror",
  "xxhash-rust",

@@ -122,8 +122,19 @@ pub fn render<W: Write + ?Sized>(
     }
 
     writeln!(w)?;
+    // In new-code mode, ratings (and the counts beside them) cover new findings only.
+    if let Some(new) = &report.new_metrics {
+        writeln!(
+            w,
+            "   {:<14}{} of {} issues are new (ratings and gate)",
+            "New code",
+            crate::issue_count(new),
+            crate::issue_count(m)
+        )?;
+    }
     let r = &report.ratings;
-    let count = |cat| m.issues_by_category.get(&cat).copied().unwrap_or(0);
+    let rm = report.new_metrics.as_ref().unwrap_or(m);
+    let count = |cat| rm.issues_by_category.get(&cat).copied().unwrap_or(0);
     use pulse_core::Category::{Cognitive, Security, Structure};
     let dims = [
         (
@@ -144,7 +155,7 @@ pub fn render<W: Write + ?Sized>(
         (
             "Efficiency",
             r.efficiency,
-            format!("context debt {}", pct(m.context_debt)),
+            format!("context debt {}", pct(rm.context_debt)),
         ),
     ];
     for (name, rating, detail) in dims {

@@ -73,7 +73,7 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
 
     let mut findings: Vec<Finding> = assets
         .par_iter()
-        .filter(|a| in_paths(&a.rel_path, &opts.paths))
+        .filter(|a| opts.in_scope(&a.rel_path))
         .flat_map_iter(|asset| {
             let mut out = Vec::new();
             for rule in &rules.asset {
@@ -99,7 +99,7 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
             .path
             .strip_prefix(root)
             .unwrap_or(&f.location.path);
-        in_paths(&rel.to_string_lossy().replace('\\', "/"), &opts.paths)
+        opts.in_scope(&rel.to_string_lossy().replace('\\', "/"))
     }));
 
     for f in &mut findings {
@@ -109,7 +109,7 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
     }
     let in_scope: Vec<&Asset> = assets
         .iter()
-        .filter(|a| in_paths(&a.rel_path, &opts.paths))
+        .filter(|a| opts.in_scope(&a.rel_path))
         .collect();
     let ran = |id: &str| {
         rules.asset.iter().any(|r| r.meta().id == id)
@@ -133,19 +133,36 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
         .collect();
     let scoped: Vec<&AssetMeta> = assets_meta
         .iter()
-        .filter(|a| in_paths(&a.rel_path, &opts.paths))
+        .filter(|a| opts.in_scope(&a.rel_path))
         .collect();
-    let metrics = score::metrics(&findings, &scoped, config.context.window);
-    let ratings = score::ratings(&findings, metrics.context_debt);
-    let gate = gate::evaluate(&config.gate, &findings, &metrics, &ratings);
+    let window = config.context.window;
+    let metrics = score::metrics(&findings, &scoped, window);
+    let baseline = opts.baseline.clone();
+    let is_new = |f: &Finding| baseline.as_ref().is_none_or(|b| b.is_new(f));
+    let new_code = opts.new_only || config.gate.new_code_only;
+    let new: Vec<Finding> = if new_code {
+        findings.iter().filter(|f| is_new(f)).cloned().collect()
+    } else {
+        Vec::new()
+    };
+    let new_metrics = new_code.then(|| score::metrics(&new, &scoped, window));
+    let (judged, judged_metrics) = match &new_metrics {
+        Some(m) => (&new, m),
+        None => (&findings, &metrics),
+    };
+    let ratings = score::ratings(judged, judged_metrics.context_debt);
+    let gate = gate::evaluate(&config.gate, judged, judged_metrics, &ratings);
+    let findings = if opts.new_only { new } else { findings };
     Ok(Report {
         findings,
         suppressed,
         assets_meta,
         walk_errors: discovery.skipped,
         metrics,
+        new_metrics,
         ratings,
         gate,
+        baseline,
         timings: Timings {
             discover: discovered_at - start,
             read: read_at - discovered_at,
@@ -177,7 +194,7 @@ fn read(f: &DiscoveredFile, max_bytes: u64, calibration: f64) -> Asset {
 }
 
 /// Whether `rel` is one of `paths` or lies under one of them (empty `paths` keeps all).
-fn in_paths(rel: &str, paths: &[String]) -> bool {
+pub(crate) fn in_paths(rel: &str, paths: &[String]) -> bool {
     paths.is_empty()
         || paths.iter().any(|p| {
             let p = p.trim_start_matches("./").trim_end_matches('/');

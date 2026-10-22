@@ -41,7 +41,7 @@ Efficiency uses the **Context debt ratio**:
 
 Metrics cover the in-scope assets (after `paths` narrowing). Findings of custom (`X-`) rules have no category: they count in `issues_by_severity` and the severity gate condition, not in ratings or `issues_by_category`. Overlap = same file and intersecting half-open ranges (line, col)..(end_line, end_col); identical start points always overlap.
 
-Open findings = findings after suppressions. When `--new-only`/baseline is active, ratings are computed on new findings only and the overall numbers are shown alongside them. (Baseline-aware ratings land with P6.3; until then ratings use all open findings.)
+Open findings = findings after suppressions. New-code mode is on with `--new-only` or `gate.new_code_only = true`: ratings and the gate are computed on new findings only (not in the baseline; without a baseline file every finding is new, with a warning). `metrics` always covers every open finding; the new-code metrics are reported alongside them (terminal/Markdown "New code" line, JSON `metrics.new_issues`). `--new-only` also drops baselined findings from the report; `gate.new_code_only` alone keeps them, marked `new: false` (ADR-035).
 
 ## Quality Gate
 
@@ -56,8 +56,8 @@ min_ratings = {}              # e.g. { security = "A", reliability = "B" }
 new_code_only = false         # evaluate conditions on new findings only (needs a baseline or --changed-since)
 ```
 
-Evaluation produces `Gate { status: Passed | Failed, conditions: Vec<Condition { name, actual, threshold, passed }> }`. Every enabled condition is listed in the report, passed or failed; disabled ones (`fail_on_severity = "none"`, `max_always_on_tokens = 0`, unset `min_ratings` keys) are omitted. `max_context_debt` is always enabled. `fail_on_severity` passes when the worst open severity is below the threshold; a rating passes when it is equal to or better than its minimum. `new_code_only` is applied by P6.3 (baseline).
+Evaluation produces `Gate { status: Passed | Failed, conditions: Vec<Condition { name, actual, threshold, passed }> }`. Every enabled condition is listed in the report, passed or failed; disabled ones (`fail_on_severity = "none"`, `max_always_on_tokens = 0`, unset `min_ratings` keys) are omitted. `max_context_debt` is always enabled. `fail_on_severity` passes when the worst open severity is below the threshold; a rating passes when it is equal to or better than its minimum. `new_code_only` evaluates every condition on the new-code metrics (see Ratings).
 
 ## Fingerprints (baseline / new code)
 
-`fingerprint = xxh3(rule_id, normalized relative path, trimmed text of the finding's first line, occurrence index of that (rule, path, line-text) triple)`. Fingerprints are stable when lines move. The baseline file `.pulse/baseline.json` stores `{ version: 1, fingerprints: [hex…] }`, sorted, so diffs stay clean.
+`fingerprint = xxh3(rule_id, normalized relative path, trimmed text of the finding's first line, occurrence index of that (rule, path, line-text) triple)`. Fingerprints are stable when lines move. The baseline file `.pulse/baseline.json` stores `{ version: 1, fingerprints: [hex…] }` (16 lowercase hex digits each), sorted and deduplicated, so diffs stay clean. Another version or a malformed file is an error (exit 2); a missing file means no baseline. `pulse baseline` always scans the whole root (no `PATHS`, rule filters or `--changed-since`); `scan`/`ci` read only `<root>/.pulse/baseline.json`, so `--output` elsewhere is an export.

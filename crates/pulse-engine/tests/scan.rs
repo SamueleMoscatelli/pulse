@@ -6,7 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use pulse_core::{Config, Severity};
-use pulse_engine::{GateStatus, Report, ScanOptions, scan};
+use pulse_engine::{Baseline, GateStatus, Report, ScanOptions, scan};
 
 fn mixed() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/repos/mixed")
@@ -215,4 +215,138 @@ fn scan_scores_and_gates_in_scope_assets() {
         .find(|c| c.name == "max_context_debt")
         .unwrap();
     assert!(!debt.passed);
+}
+
+/// A CLAUDE.md with `lead` lines before one zero-width-space finding (AI-SEC-001, critical).
+fn claude_md(lead: &str, extra: &str) -> String {
+    format!(
+        "# Project\n{lead}\nAlways run{}the tests.\n{extra}",
+        '\u{200B}'
+    )
+}
+
+fn new_only(baseline: &Baseline) -> ScanOptions {
+    ScanOptions {
+        baseline: Some(baseline.clone()),
+        new_only: true,
+        ..ScanOptions::default()
+    }
+}
+
+#[test]
+fn baseline_survives_shifted_lines() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let config = Config::default();
+    write(root, "CLAUDE.md", claude_md("", "").as_bytes());
+    let before = scan(root, &config, &ScanOptions::default()).unwrap();
+    assert!(before.findings.iter().any(|f| f.rule_id == "AI-SEC-001"));
+    let baseline = Baseline::from_findings(&before.findings);
+
+    write(
+        root,
+        "CLAUDE.md",
+        claude_md("\nBuild with cargo.\n\n", "").as_bytes(),
+    );
+    let after = scan(root, &config, &new_only(&baseline)).unwrap();
+    assert!(after.findings.is_empty(), "{}", render(&after));
+    assert_eq!(after.gate.status, GateStatus::Passed);
+    // Overall metrics still count the baselined finding; new-code metrics do not.
+    assert_eq!(
+        after.metrics.issues_by_severity.get(&Severity::Critical),
+        Some(&1)
+    );
+    let new = after.new_metrics.unwrap();
+    assert_eq!(new.issues_by_severity.get(&Severity::Critical), None);
+}
+
+#[test]
+fn new_only_keeps_findings_missing_from_the_baseline() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let config = Config::default();
+    write(root, "CLAUDE.md", claude_md("", "").as_bytes());
+    let baseline = Baseline::from_findings(
+        &scan(root, &config, &ScanOptions::default())
+            .unwrap()
+            .findings,
+    );
+
+    // A second, identical line is a new occurrence of the same (rule, path, text) triple.
+    let extra = format!("Always run{}the tests.\n", '\u{200B}');
+    write(root, "CLAUDE.md", claude_md("", &extra).as_bytes());
+    let all = ScanOptions {
+        baseline: Some(baseline.clone()),
+        ..ScanOptions::default()
+    };
+    let full = scan(root, &config, &all).unwrap();
+    let sec = |r: &Report| {
+        r.findings
+            .iter()
+            .filter(|f| f.rule_id == "AI-SEC-001")
+            .map(|f| (f.location.line, r.is_new(f)))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(sec(&full), [(3, false), (4, true)]);
+    assert!(full.new_metrics.is_none());
+
+    let only = scan(root, &config, &new_only(&baseline)).unwrap();
+    assert_eq!(sec(&only), [(4, true)]);
+    assert!(only.findings.iter().all(|f| only.is_new(f)));
+    assert_eq!(only.gate.status, GateStatus::Failed);
+}
+
+#[test]
+fn gate_new_code_only_ignores_baselined_findings() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(root, "CLAUDE.md", claude_md("", "").as_bytes());
+    let plain = Config::default();
+    let first = scan(root, &plain, &ScanOptions::default()).unwrap();
+    assert_eq!(first.gate.status, GateStatus::Failed);
+    let opts = ScanOptions {
+        baseline: Some(Baseline::from_findings(&first.findings)),
+        ..ScanOptions::default()
+    };
+    // Without new-code mode the baseline only marks findings; the gate still fails.
+    assert_eq!(
+        scan(root, &plain, &opts).unwrap().gate.status,
+        GateStatus::Failed
+    );
+
+    let new_code =
+        Config::parse("[gate]\nnew_code_only = true\n", Path::new("pulse.toml")).unwrap();
+    let report = scan(root, &new_code, &opts).unwrap();
+    assert_eq!(report.gate.status, GateStatus::Passed);
+    // Every finding is still listed, marked as not new.
+    assert_eq!(report.findings.len(), first.findings.len());
+    assert!(report.findings.iter().all(|f| !report.is_new(f)));
+}
+
+#[test]
+fn changed_set_limits_findings_to_those_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(root, "CLAUDE.md", claude_md("", "").as_bytes());
+    write(root, "AGENTS.md", claude_md("", "").as_bytes());
+    let config = Config::default();
+    let opts = ScanOptions {
+        changed: Some(["AGENTS.md".to_owned()].into()),
+        ..ScanOptions::default()
+    };
+    let report = scan(root, &config, &opts).unwrap();
+    assert!(!report.findings.is_empty());
+    assert!(
+        report
+            .findings
+            .iter()
+            .all(|f| f.location.path.ends_with("AGENTS.md")),
+        "{}",
+        render(&report)
+    );
+    let none = ScanOptions {
+        changed: Some(Default::default()),
+        ..ScanOptions::default()
+    };
+    assert!(scan(root, &config, &none).unwrap().findings.is_empty());
 }

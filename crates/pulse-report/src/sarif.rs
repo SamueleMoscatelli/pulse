@@ -41,7 +41,14 @@ pub fn render<W: Write + ?Sized>(
     let rules: Vec<Value> = index.keys().map(|id| rule(id)).collect();
     let results: Vec<Value> = shown
         .iter()
-        .map(|f| result(f, index.get(f.rule_id).copied().unwrap_or(0), opts.root))
+        .map(|f| {
+            let mut r = result(f, index.get(f.rule_id).copied().unwrap_or(0), opts.root);
+            if report.baseline.is_some() {
+                let state = if report.is_new(f) { "new" } else { "unchanged" };
+                r["baselineState"] = json!(state);
+            }
+            r
+        })
         .collect();
     let log = json!({
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
