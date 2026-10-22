@@ -26,4 +26,4 @@ The rule's spec is in `scripts/spec.sh "<RULE-ID>"`. Implement exactly that: det
 - Never put secrets in messages: redact them.
 
 ## Verify
-`scripts/check.sh -p pulse-rules` while iterating, then the full `scripts/check.sh`. The fixture harness fails if fixtures or docs are missing for a registered rule.
+`scripts/check.sh -p pulse-rules` while iterating, then the full `scripts/check.sh`. The fixture harness fails if fixtures or docs are missing for a registered rule, or if a doc strays from the template (title, header line matching the rule meta, sections in order).

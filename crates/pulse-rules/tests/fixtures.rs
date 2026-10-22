@@ -187,6 +187,86 @@ fn every_rule_has_fixtures_and_docs() {
     assert!(missing.is_empty(), "\n{}", missing.join("\n"));
 }
 
+/// Sections every rule doc has, in this order (the `add-rule` doc template).
+const DOC_SECTIONS: &[&str] = &[
+    "## Why it matters",
+    "## What triggers it",
+    "## Noncompliant",
+    "## Compliant",
+    "## Options",
+    "## Suppressing",
+];
+
+#[test]
+fn rule_docs_are_complete_embedded_and_match_meta() {
+    let dir = crate_dir().join("../../docs/rules");
+    let mut problems = Vec::new();
+    let ids: HashSet<&str> = all_meta().map(|m| m.id).collect();
+    for entry in fs::read_dir(&dir).unwrap() {
+        let name = entry.unwrap().file_name().into_string().unwrap();
+        let id = name.strip_suffix(".md").unwrap_or(&name);
+        if !ids.contains(id) {
+            problems.push(format!("docs/rules/{name}: no registered rule `{id}`"));
+        }
+    }
+    for meta in all_meta() {
+        let id = meta.id;
+        let Some(doc) = pulse_rules::docs(id) else {
+            problems.push(format!("{id}: not in the rule_docs! list (docs.rs)"));
+            continue;
+        };
+        if fs::read_to_string(dir.join(format!("{id}.md")))
+            .ok()
+            .as_deref()
+            != Some(doc)
+        {
+            problems.push(format!(
+                "{id}: embedded docs differ from docs/rules/{id}.md"
+            ));
+        }
+        let title = format!("# {id} — {}\n", meta.name);
+        if !doc.starts_with(&title) {
+            problems.push(format!("{id}: title must be `{}`", title.trim_end()));
+        }
+        let mut severity = meta.default_severity.as_str().to_owned();
+        severity[..1].make_ascii_uppercase();
+        let mut category = meta.category.as_str().to_owned();
+        category[..1].make_ascii_uppercase();
+        let suppressible = if meta.inline_suppressible {
+            "yes"
+        } else {
+            "no"
+        };
+        // The severity may carry a qualifier: `High (Medium when …)`.
+        let header_ok = doc.lines().nth(2).is_some_and(|l| {
+            l.strip_prefix(&format!("**Severity:** {severity}"))
+                .is_some_and(|r| r.starts_with(" · ") || r.starts_with(" ("))
+                && l.contains(&format!(" · **Category:** {category} · "))
+                && l.ends_with(&format!(" · **Inline-suppressible:** {suppressible}"))
+        });
+        if !header_ok {
+            problems.push(format!(
+                "{id}: line 3 must be `**Severity:** {severity} · **Category:** {category} · \
+                 **Applies to:** … · **Inline-suppressible:** {suppressible}`"
+            ));
+        }
+        let mut fenced = false;
+        let headings: Vec<&str> = doc
+            .lines()
+            .filter(|l| {
+                fenced ^= l.starts_with("```");
+                !fenced && l.starts_with("## ")
+            })
+            .collect();
+        if headings != DOC_SECTIONS {
+            problems.push(format!(
+                "{id}: sections {headings:?}, expected {DOC_SECTIONS:?}"
+            ));
+        }
+    }
+    assert!(problems.is_empty(), "\n{}", problems.join("\n"));
+}
+
 // Generated cases: content that must not be committed raw.
 
 fn str002(kind: AssetKind, rel: &str, bytes: &[u8]) -> Vec<Finding> {

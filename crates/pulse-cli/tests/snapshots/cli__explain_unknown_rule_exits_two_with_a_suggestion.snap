@@ -1,0 +1,5 @@
+---
+source: crates/pulse-cli/tests/cli.rs
+expression: stderr(&out)
+---
+error: unknown rule `AI-SEC-0011` (did you mean `AI-SEC-001`?); run `pulse rules` to list them

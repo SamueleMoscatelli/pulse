@@ -11,9 +11,9 @@ use std::time::{Duration, SystemTime};
 
 use anyhow::{Context as _, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use pulse_core::config::CONFIG_FILE;
-use pulse_core::{Config, DEFAULT_TOML, Severity};
-use pulse_engine::{BASELINE_FILE, Baseline, GateStatus, Report, ScanOptions};
+use pulse_core::config::{CONFIG_FILE, did_you_mean};
+use pulse_core::{Category, Config, DEFAULT_TOML, Severity};
+use pulse_engine::{BASELINE_FILE, Baseline, GateStatus, Report, RuleStatus, ScanOptions};
 use pulse_report::{
     GithubOptions, JsonOptions, MarkdownOptions, SarifOptions, TerminalOptions, render_github,
     render_json, render_markdown, render_sarif, render_terminal,
@@ -92,11 +92,12 @@ enum Command {
     /// Write the current findings' fingerprints to the baseline
     Baseline(BaselineArgs),
     /// List available rules
-    Rules,
+    Rules(RulesArgs),
     /// Show the documentation of a rule
-    Explain,
+    Explain(ExplainArgs),
 }
 
+#[cfg(test)]
 impl Command {
     fn name(&self) -> &'static str {
         match self {
@@ -104,8 +105,8 @@ impl Command {
             Self::Scan(_) => "scan",
             Self::Ci(_) => "ci",
             Self::Baseline(_) => "baseline",
-            Self::Rules => "rules",
-            Self::Explain => "explain",
+            Self::Rules(_) => "rules",
+            Self::Explain(_) => "explain",
         }
     }
 }
@@ -122,6 +123,29 @@ struct BaselineArgs {
     /// Baseline file [default: <root>/.pulse/baseline.json]
     #[arg(short, long, value_name = "FILE")]
     output: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum RulesFormat {
+    Terminal,
+    Json,
+}
+
+#[derive(Debug, Args)]
+struct RulesArgs {
+    /// Only this category: security, structure, efficiency, cognitive (or SEC, STR, EFF, COG)
+    #[arg(long, value_name = "CAT", value_parser = parse_category)]
+    category: Option<Category>,
+    /// Output format
+    #[arg(short, long, value_enum, default_value_t = RulesFormat::Terminal)]
+    format: RulesFormat,
+}
+
+#[derive(Debug, Args)]
+struct ExplainArgs {
+    /// Rule ID, e.g. AI-SEC-001
+    #[arg(value_name = "RULE-ID")]
+    id: String,
 }
 
 #[derive(Debug, Args)]
@@ -167,10 +191,8 @@ fn main() -> ExitCode {
             println!("wrote {n} fingerprints to {}", path.display());
             ExitCode::SUCCESS
         }),
-        other => Err(anyhow::anyhow!(
-            "pulse {}: not implemented yet",
-            other.name()
-        )),
+        Command::Rules(args) => list_rules(&cli.global, args),
+        Command::Explain(args) => explain(&cli.global, &args.id),
     };
     result.unwrap_or_else(|e| {
         eprintln!("error: {e:#}");
@@ -364,6 +386,118 @@ fn append_step_summary(report: &Report, root: &Path, min_severity: Severity) -> 
     write().with_context(|| format!("cannot write step summary {}", path.display()))
 }
 
+/// `rules`: every built-in rule with its effective severity and state under the config.
+fn list_rules(global: &Global, args: &RulesArgs) -> anyhow::Result<ExitCode> {
+    let config = Config::load(&global.root, global.config.as_deref())?;
+    let statuses: Vec<_> = pulse_engine::rule_statuses(&config)?
+        .into_iter()
+        .filter(|s| args.category.is_none_or(|c| s.meta.category == c))
+        .collect();
+    let mut out = String::new();
+    match args.format {
+        RulesFormat::Json => {
+            out = serde_json::to_string_pretty(&rules_json(&statuses))?;
+            out.push('\n');
+        }
+        RulesFormat::Terminal => rules_table(&mut out, &statuses, global.quiet),
+    }
+    print_stdout(&out)?;
+    Ok(ExitCode::SUCCESS)
+}
+
+/// The `rules` table, plus a count line unless `quiet`.
+fn rules_table(out: &mut String, statuses: &[RuleStatus], quiet: bool) {
+    use std::fmt::Write as _;
+    let id_w = statuses.iter().map(|s| s.meta.id.len()).max().unwrap_or(0);
+    let row = |out: &mut String, id: &str, sev: &str, on: &str, name: &str| {
+        let _ = writeln!(out, "{id:<id_w$}  {sev:<8}  {on:<7}  {name}");
+    };
+    row(out, "ID", "SEVERITY", "ENABLED", "NAME");
+    for s in statuses {
+        let on = if s.enabled { "yes" } else { "no" };
+        row(out, s.meta.id, s.severity.as_str(), on, s.meta.name);
+    }
+    if !quiet {
+        let enabled = statuses.iter().filter(|s| s.enabled).count();
+        let _ = writeln!(out, "\n{} rules, {enabled} enabled", statuses.len());
+    }
+}
+
+fn rules_json(statuses: &[RuleStatus]) -> serde_json::Value {
+    statuses
+        .iter()
+        .map(|s| {
+            serde_json::json!({
+                "id": s.meta.id,
+                "name": s.meta.name,
+                "category": s.meta.category.as_str(),
+                "severity": s.severity.as_str(),
+                "default_severity": s.meta.default_severity.as_str(),
+                "enabled": s.enabled,
+                "summary": s.meta.summary,
+            })
+        })
+        .collect()
+}
+
+/// `explain`: prints the embedded docs of a rule; headings are bold when colored.
+fn explain(global: &Global, id: &str) -> anyhow::Result<ExitCode> {
+    let id = id.to_ascii_uppercase();
+    let Some(doc) = pulse_rules::docs(&id) else {
+        let hint = did_you_mean(&id, pulse_rules::all_meta().map(|m| m.id))
+            .map_or_else(String::new, |s| format!(" (did you mean `{s}`?)"));
+        bail!("unknown rule `{id}`{hint}; run `pulse rules` to list them");
+    };
+    let color = use_color(global.color, io::stdout().is_terminal(), no_color());
+    print_stdout(&if color {
+        style_headings(doc)
+    } else {
+        doc.to_owned()
+    })?;
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Bolds Markdown headings outside code fences.
+fn style_headings(doc: &str) -> String {
+    let mut out = String::with_capacity(doc.len() + 64);
+    let mut fenced = false;
+    for line in doc.split_inclusive('\n') {
+        if line.starts_with("```") {
+            fenced = !fenced;
+        }
+        if !fenced && line.starts_with('#') {
+            let text = line.trim_end_matches(['\n', '\r']);
+            out.push_str(&format!("\x1b[1m{text}\x1b[0m"));
+            out.push_str(&line[text.len()..]);
+        } else {
+            out.push_str(line);
+        }
+    }
+    out
+}
+
+/// Writes to stdout; a closed pipe (`pulse rules | head`) is not an error.
+fn print_stdout(text: &str) -> anyhow::Result<()> {
+    let mut w = io::stdout().lock();
+    match w.write_all(text.as_bytes()).and_then(|()| w.flush()) {
+        Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        other => other.context("cannot write to stdout"),
+    }
+}
+
+/// A `--category` value: a category name or its rule ID prefix, any case.
+fn parse_category(s: &str) -> Result<Category, String> {
+    [
+        Category::Security,
+        Category::Structure,
+        Category::Efficiency,
+        Category::Cognitive,
+    ]
+    .into_iter()
+    .find(|c| s.eq_ignore_ascii_case(c.as_str()) || s.eq_ignore_ascii_case(c.prefix()))
+    .ok_or_else(|| format!("unknown category `{s}` (security, structure, efficiency, cognitive)"))
+}
+
 /// Whether to emit ANSI styles; an explicit `--color` wins over `NO_COLOR`.
 fn use_color(choice: ColorChoice, tty: bool, no_color: bool) -> bool {
     match choice {
@@ -464,9 +598,17 @@ mod tests {
 
     #[test]
     fn parses_every_subcommand() {
-        for name in ["init", "scan", "ci", "baseline", "rules", "explain"] {
-            let cli = Cli::try_parse_from(["pulse", name]).unwrap();
-            assert_eq!(cli.command.name(), name);
+        for args in [
+            &["init"][..],
+            &["scan"],
+            &["ci"],
+            &["baseline"],
+            &["rules"],
+            &["explain", "AI-SEC-001"],
+        ] {
+            let cli =
+                Cli::try_parse_from(std::iter::once("pulse").chain(args.iter().copied())).unwrap();
+            assert_eq!(cli.command.name(), args[0]);
         }
     }
 
@@ -512,6 +654,29 @@ mod tests {
         assert!(args.new_only);
         assert_eq!(args.changed_since.as_deref(), Some("origin/main"));
         assert_eq!(args.format, Some(Format::Github));
+    }
+
+    #[test]
+    fn parses_rules_flags() {
+        let cli =
+            Cli::try_parse_from(["pulse", "rules", "--category", "sec", "-f", "json"]).unwrap();
+        let Command::Rules(args) = cli.command else {
+            panic!("expected rules");
+        };
+        assert_eq!(args.category, Some(Category::Security));
+        assert_eq!(args.format, RulesFormat::Json);
+        assert_eq!(parse_category("Cognitive"), Ok(Category::Cognitive));
+        assert!(parse_category("style").is_err());
+        assert!(Cli::try_parse_from(["pulse", "explain"]).is_err());
+    }
+
+    #[test]
+    fn style_headings_skips_code_fences() {
+        let doc = "# Title\ntext\n```md\n# not a heading\n```\n## Section\n";
+        assert_eq!(
+            style_headings(doc),
+            "\x1b[1m# Title\x1b[0m\ntext\n```md\n# not a heading\n```\n\x1b[1m## Section\x1b[0m\n"
+        );
     }
 
     #[test]

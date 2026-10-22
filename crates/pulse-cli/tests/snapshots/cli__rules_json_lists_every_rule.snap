@@ -1,0 +1,69 @@
+---
+source: crates/pulse-cli/tests/cli.rs
+expression: stdout(&out)
+---
+[
+  {
+    "category": "efficiency",
+    "default_severity": "high",
+    "enabled": true,
+    "id": "AI-EFF-001",
+    "name": "Asset over token budget",
+    "severity": "high",
+    "summary": "Asset is larger than the token budget for its kind."
+  },
+  {
+    "category": "efficiency",
+    "default_severity": "high",
+    "enabled": true,
+    "id": "AI-EFF-002",
+    "name": "Always-on context over budget",
+    "severity": "high",
+    "summary": "The context loaded into every session is larger than budgets.always_on."
+  },
+  {
+    "category": "efficiency",
+    "default_severity": "medium",
+    "enabled": true,
+    "id": "AI-EFF-003",
+    "name": "Duplicated content",
+    "severity": "medium",
+    "summary": "The same paragraph or line appears more than once in the context."
+  },
+  {
+    "category": "efficiency",
+    "default_severity": "medium",
+    "enabled": true,
+    "id": "AI-EFF-004",
+    "name": "Inlined bulk content",
+    "severity": "medium",
+    "summary": "A large code block, table or data dump is inlined in a loaded asset."
+  },
+  {
+    "category": "efficiency",
+    "default_severity": "medium",
+    "enabled": true,
+    "id": "AI-EFF-005",
+    "name": "MCP server/tool sprawl",
+    "severity": "medium",
+    "summary": "Too many MCP servers or tools are enabled, or a server is defined twice."
+  },
+  {
+    "category": "efficiency",
+    "default_severity": "medium",
+    "enabled": true,
+    "id": "AI-EFF-006",
+    "name": "Oversized skill or agent",
+    "severity": "medium",
+    "summary": "A skill body is too long, or a skill/agent description exceeds its budget."
+  },
+  {
+    "category": "efficiency",
+    "default_severity": "low",
+    "enabled": true,
+    "id": "AI-EFF-007",
+    "name": "Filler phrasing",
+    "severity": "low",
+    "summary": "Filler phrases spend tokens without adding instructions."
+  }
+]

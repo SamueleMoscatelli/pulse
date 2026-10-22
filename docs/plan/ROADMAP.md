@@ -49,7 +49,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [x] P6.1 JSON & SARIF reporters
 - [x] P6.2 Markdown & GitHub reporters
 - [x] P6.3 Baseline, `--new-only`, `--changed-since`
-- [ ] P6.4 `pulse rules` & `pulse explain`
+- [x] P6.4 `pulse rules` & `pulse explain`
 - [ ] P6.5 Declarative custom rules
 
 ## Phase 7 — Hardening & release (v1.0.0)
