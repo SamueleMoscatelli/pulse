@@ -13,7 +13,9 @@ use anyhow::{Context as _, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use pulse_core::config::{CONFIG_FILE, did_you_mean};
 use pulse_core::{Category, Config, DEFAULT_TOML, Severity};
-use pulse_engine::{BASELINE_FILE, Baseline, GateStatus, Report, RuleStatus, ScanOptions};
+use pulse_engine::{
+    BASELINE_FILE, Baseline, GateStatus, Report, RuleStatus, ScanOptions, category_of,
+};
 use pulse_report::{
     GithubOptions, JsonOptions, MarkdownOptions, SarifOptions, TerminalOptions, render_github,
     render_json, render_markdown, render_sarif, render_terminal,
@@ -386,12 +388,15 @@ fn append_step_summary(report: &Report, root: &Path, min_severity: Severity) -> 
     write().with_context(|| format!("cannot write step summary {}", path.display()))
 }
 
-/// `rules`: every built-in rule with its effective severity and state under the config.
+/// `rules`: every rule (built-in and custom) with its effective severity and state under the config.
 fn list_rules(global: &Global, args: &RulesArgs) -> anyhow::Result<ExitCode> {
     let config = Config::load(&global.root, global.config.as_deref())?;
     let statuses: Vec<_> = pulse_engine::rule_statuses(&config)?
         .into_iter()
-        .filter(|s| args.category.is_none_or(|c| s.meta.category == c))
+        .filter(|s| {
+            args.category
+                .is_none_or(|c| category_of(s.meta.id) == Some(c))
+        })
         .collect();
     let mut out = String::new();
     match args.format {
@@ -430,7 +435,7 @@ fn rules_json(statuses: &[RuleStatus]) -> serde_json::Value {
             serde_json::json!({
                 "id": s.meta.id,
                 "name": s.meta.name,
-                "category": s.meta.category.as_str(),
+                "category": category_of(s.meta.id).map(Category::as_str),
                 "severity": s.severity.as_str(),
                 "default_severity": s.meta.default_severity.as_str(),
                 "enabled": s.enabled,

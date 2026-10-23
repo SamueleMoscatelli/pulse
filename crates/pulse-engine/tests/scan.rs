@@ -350,3 +350,105 @@ fn changed_set_limits_findings_to_those_files() {
     };
     assert!(scan(root, &config, &none).unwrap().findings.is_empty());
 }
+
+#[test]
+fn custom_rules_run_with_config_overrides() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root,
+        "CLAUDE.md",
+        b"# Rules\n\nDeploy to build.internal.corp only.\nNever say Ship It without tests.\n",
+    );
+    write(
+        root,
+        ".claude/skills/s/SKILL.md",
+        b"---\nname: s\ndescription: Use when deploying.\n---\n\nAsk build.internal.corp.\n",
+    );
+    let src = r#"
+[rules]
+X-ORG-002 = "low"
+
+[[custom_rules]]
+id = "X-ORG-001"
+name = "No internal hostnames"
+severity = "high"
+kinds = ["instructions"]
+pattern = '\binternal\.corp\b'
+message = "Internal hostname leaked into AI context"
+remediation = "Use the public alias"
+
+[[custom_rules]]
+id = "X-ORG-002"
+name = "No slogans"
+severity = "medium"
+phrases = ["ship it"]
+message = "Slogan in instructions"
+"#;
+    let config = Config::parse(src, Path::new("pulse.toml")).unwrap();
+    let report = scan(root, &config, &ScanOptions::default()).unwrap();
+    let custom: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id.starts_with("X-"))
+        .map(|f| {
+            let rel = f.location.path.strip_prefix(root).unwrap();
+            (
+                f.rule_id,
+                rel.to_string_lossy().replace('\\', "/"),
+                f.location.line,
+                f.severity,
+            )
+        })
+        .collect();
+    // X-ORG-001 is limited to instructions, so the skill's hostname is not reported.
+    assert_eq!(
+        custom,
+        [
+            ("X-ORG-001", "CLAUDE.md".to_owned(), 3, Severity::High),
+            ("X-ORG-002", "CLAUDE.md".to_owned(), 4, Severity::Low),
+        ]
+    );
+    let f = report
+        .findings
+        .iter()
+        .find(|f| f.rule_id == "X-ORG-001")
+        .unwrap();
+    assert_eq!(f.remediation, Some("Use the public alias"));
+
+    let off = format!("{src}\n").replace("X-ORG-002 = \"low\"", "X-ORG-002 = \"off\"");
+    let config = Config::parse(&off, Path::new("pulse.toml")).unwrap();
+    let report = scan(root, &config, &ScanOptions::default()).unwrap();
+    assert!(report.findings.iter().all(|f| f.rule_id != "X-ORG-002"));
+    let only = ScanOptions {
+        only_rules: vec!["X-".into()],
+        ..ScanOptions::default()
+    };
+    let report = scan(root, &config, &only).unwrap();
+    assert!(report.findings.iter().all(|f| f.rule_id == "X-ORG-001"));
+    assert!(!report.findings.is_empty());
+}
+
+#[test]
+fn custom_rule_bad_regex_is_a_config_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = "[[custom_rules]]\nid = \"X-ORG-001\"\nname = \"n\"\nseverity = \"low\"\npattern = '(oops'\nmessage = \"m\"\n";
+    let config = Config::parse(src, Path::new("pulse.toml")).unwrap();
+    let err = scan(dir.path(), &config, &ScanOptions::default())
+        .err()
+        .unwrap();
+    assert!(err.to_string().contains("custom rule `X-ORG-001`"), "{err}");
+    let opts = "[rules.X-ORG-001]\nfoo = 1\n";
+    let config = Config::parse(
+        &format!("{opts}{src}").replace("'(oops'", "'x'"),
+        Path::new("p"),
+    )
+    .unwrap();
+    let err = scan(dir.path(), &config, &ScanOptions::default())
+        .err()
+        .unwrap();
+    assert!(
+        err.to_string().contains("custom rules take no options"),
+        "{err}"
+    );
+}

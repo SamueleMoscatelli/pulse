@@ -245,7 +245,8 @@ pub struct Ignore {
     pub reason: Option<String>,
 }
 
-/// `[[custom_rules]]`: a declarative regex rule.
+/// `[[custom_rules]]`: a declarative rule with exactly one matcher (`pattern`, `phrases`
+/// or `max_tokens`; checked by validation, the regex is compiled by `pulse-rules`).
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CustomRule {
@@ -255,7 +256,15 @@ pub struct CustomRule {
     /// Empty means every kind.
     #[serde(default)]
     pub kinds: Vec<AssetKind>,
-    pub pattern: String,
+    /// Regex matched on the asset source.
+    #[serde(default)]
+    pub pattern: Option<String>,
+    /// Phrases matched on normalized text.
+    #[serde(default)]
+    pub phrases: Option<Vec<String>>,
+    /// Fires when the asset has more tokens than this.
+    #[serde(default)]
+    pub max_tokens: Option<u32>,
     pub message: String,
     #[serde(default)]
     pub remediation: Option<String>,
@@ -328,6 +337,39 @@ impl Config {
                 "custom rule ID `{}` must match X-<ORG>-<NNN> (e.g. X-ACME-001)",
                 rule.id
             ));
+        }
+        for (i, rule) in self.custom_rules.iter().enumerate() {
+            if self.custom_rules[..i].iter().any(|r| r.id == rule.id) {
+                return Err(format!("duplicate custom rule ID `{}`", rule.id));
+            }
+            let matchers = usize::from(rule.pattern.is_some())
+                + usize::from(rule.phrases.is_some())
+                + usize::from(rule.max_tokens.is_some());
+            if matchers != 1 {
+                return Err(format!(
+                    "custom rule `{}` needs exactly one of `pattern`, `phrases`, `max_tokens`",
+                    rule.id
+                ));
+            }
+            if rule.pattern.as_deref() == Some("") {
+                return Err(format!("custom rule `{}`: `pattern` is empty", rule.id));
+            }
+            if rule
+                .phrases
+                .as_ref()
+                .is_some_and(|p| p.is_empty() || p.iter().any(|p| p.trim().is_empty()))
+            {
+                return Err(format!(
+                    "custom rule `{}`: `phrases` must be non-empty strings",
+                    rule.id
+                ));
+            }
+            if rule.max_tokens == Some(0) {
+                return Err(format!(
+                    "custom rule `{}`: `max_tokens` must be greater than 0",
+                    rule.id
+                ));
+            }
         }
         Ok(())
     }
@@ -526,6 +568,26 @@ message = "Internal hostname"
             (
                 "[[custom_rules]]\nid = \"ORG-1\"\nname = \"n\"\nseverity = \"low\"\npattern = \"x\"\nmessage = \"m\"\n",
                 "custom rule ID `ORG-1`",
+            ),
+            (
+                "[[custom_rules]]\nid = \"X-A-001\"\nname = \"n\"\nseverity = \"low\"\nmessage = \"m\"\n",
+                "exactly one of",
+            ),
+            (
+                "[[custom_rules]]\nid = \"X-A-001\"\nname = \"n\"\nseverity = \"low\"\npattern = \"x\"\nmax_tokens = 5\nmessage = \"m\"\n",
+                "exactly one of",
+            ),
+            (
+                "[[custom_rules]]\nid = \"X-A-001\"\nname = \"n\"\nseverity = \"low\"\nphrases = []\nmessage = \"m\"\n",
+                "`phrases` must be",
+            ),
+            (
+                "[[custom_rules]]\nid = \"X-A-001\"\nname = \"n\"\nseverity = \"low\"\nmax_tokens = 0\nmessage = \"m\"\n",
+                "`max_tokens` must be",
+            ),
+            (
+                "[[custom_rules]]\nid = \"X-A-001\"\nname = \"n\"\nseverity = \"low\"\nmax_tokens = 1\nmessage = \"m\"\n[[custom_rules]]\nid = \"X-A-001\"\nname = \"n\"\nseverity = \"low\"\nmax_tokens = 2\nmessage = \"m\"\n",
+                "duplicate custom rule ID",
             ),
         ] {
             let err = parse(src).unwrap_err();

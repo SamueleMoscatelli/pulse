@@ -50,7 +50,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [x] P6.2 Markdown & GitHub reporters
 - [x] P6.3 Baseline, `--new-only`, `--changed-since`
 - [x] P6.4 `pulse rules` & `pulse explain`
-- [ ] P6.5 Declarative custom rules
+- [x] P6.5 Declarative custom rules
 
 ## Phase 7 — Hardening & release (v1.0.0)
 - [ ] P7.1 Performance hardening & budget enforcement
@@ -58,4 +58,4 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [ ] P7.3 Docs, license, dogfooding in CI
 
 ## Backlog (unscheduled; promote by adding a card + roadmap line)
-`pulse fix` autofixes · LSP server & VS Code extension · WASM playground · opt-in `--deep` LLM analysis · result cache keyed by content hash · optional tiktoken feature · multilingual injection lexicon · `apm` integration · scanning prompts embedded in source code. · default excludes (`build`, `out`, …) also prune same-named dirs inside asset trees (e.g. `.claude/commands/build/`): consider pruning them only outside hidden dirs. · AI-SEC-001: allow emoji tag sequences (U+1F3F4 + tags + U+E007F, e.g. the England flag) instead of reporting them as tag smuggling. · AI-EFF-002: the top-5 contributor list can push the message past 100 chars; consider basenames or a shorter format once reporters show details. · AI-SEC-007: map Copilot `.prompt.md` tool names (`runCommands`, `runInTerminal`, `fetch`) to Bash/network.
+`pulse fix` autofixes · LSP server & VS Code extension · WASM playground · opt-in `--deep` LLM analysis · result cache keyed by content hash · optional tiktoken feature · multilingual injection lexicon · `apm` integration · scanning prompts embedded in source code. · default excludes (`build`, `out`, …) also prune same-named dirs inside asset trees (e.g. `.claude/commands/build/`): consider pruning them only outside hidden dirs. · AI-SEC-001: allow emoji tag sequences (U+1F3F4 + tags + U+E007F, e.g. the England flag) instead of reporting them as tag smuggling. · AI-EFF-002: the top-5 contributor list can push the message past 100 chars; consider basenames or a shorter format once reporters show details. · `pulse explain` for custom (`X-`) rules: print name, message and remediation from `pulse.toml`. · AI-SEC-007: map Copilot `.prompt.md` tool names (`runCommands`, `runInTerminal`, `fetch`) to Bash/network.

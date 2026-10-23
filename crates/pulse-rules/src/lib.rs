@@ -3,6 +3,7 @@
 use pulse_core::{ProjectRule, Rule, RuleMeta};
 
 pub mod cognitive;
+pub mod custom;
 mod docs;
 pub mod efficiency;
 pub mod lexicon;

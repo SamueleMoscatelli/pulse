@@ -107,9 +107,12 @@ new_code_only = false
 # pattern = '\binternal\.corp\.example\b'
 # message = "Internal hostname leaked into AI context"
 # remediation = "Use the public alias"
+# One matcher per rule: `pattern` (regex on source), `phrases` (list, matched on
+# normalized text at word boundaries) or `max_tokens` (fires above this many tokens).
+# Severity overrides and "off" in [rules] apply to custom rule IDs too.
 ```
 
-Validation: unknown top-level keys and unknown rule IDs are errors (exit 2) with a "did you mean" suggestion. Custom rule IDs must match `^X-[A-Z0-9]+-\d{3}$`. Unknown rule IDs are checked by the engine against the registry; `pulse-core` checks `max_context_debt` in [0, 1], budgets, `context.window` and `context.calibration` > 0. Optional keys: `scan.custom.load` (omitted = the kind's default), `ignore.rules` and `custom_rules.kinds` (omitted = all), `ignore.reason`, `custom_rules.remediation`. `gate.min_ratings` keys: `security`, `reliability`, `clarity`, `efficiency`.
+Validation: unknown top-level keys and unknown rule IDs are errors (exit 2) with a "did you mean" suggestion. Custom rule IDs must match `^X-[A-Z0-9]+-\d{3}$`. Unknown rule IDs are checked by the engine against the registry; `pulse-core` checks `max_context_debt` in [0, 1], budgets, `context.window` and `context.calibration` > 0. Optional keys: `scan.custom.load` (omitted = the kind's default), `ignore.rules` and `custom_rules.kinds` (omitted = all), `ignore.reason`, `custom_rules.remediation`. Each custom rule needs exactly one of `pattern`, `phrases` (non-empty) or `max_tokens` (> 0); IDs must be unique; `[rules.X-…]` tables accept only `severity`/`enabled`. An invalid regex is an engine config error (exit 2) naming the rule ID. `gate.min_ratings` keys: `security`, `reliability`, `clarity`, `efficiency`.
 
 ## Inline suppressions (Markdown-based assets)
 
