@@ -429,3 +429,49 @@ fn explain_unknown_rule_exits_two_with_a_suggestion() {
     assert!(stdout(&out).is_empty());
     insta::assert_snapshot!(stderr(&out));
 }
+
+const CUSTOM_RULE: &str = r#"
+[[custom_rules]]
+id = "X-ORG-001"
+name = "No internal hostnames"
+severity = "high"
+pattern = '\binternal\.corp\b'
+message = "Internal hostname leaked into AI context"
+"#;
+
+#[test]
+fn custom_rule_finding_shows_in_terminal_and_rules() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("pulse.toml"), CUSTOM_RULE).unwrap();
+    std::fs::write(
+        dir.path().join("CLAUDE.md"),
+        "# Rules\n\nDeploy to build.internal.corp only.\n",
+    )
+    .unwrap();
+    let d = tempdir_str(&dir);
+    let out = pulse(&["scan", "-C", &d, "--color", "never"]).code(0);
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(
+        stdout.contains("X-ORG-001") && stdout.contains("Internal hostname leaked into AI context"),
+        "{stdout}"
+    );
+    let out = pulse(&["rules", "-C", &d]).code(0);
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(stdout.contains("X-ORG-001   high      yes"), "{stdout}");
+    let out = pulse(&["rules", "-C", &d, "--category", "sec"]).code(0);
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(!stdout.contains("X-ORG-001"), "{stdout}");
+}
+
+#[test]
+fn custom_rule_bad_regex_exits_two_naming_the_rule() {
+    let dir = tempfile::tempdir().unwrap();
+    let bad = CUSTOM_RULE.replace(r"'\binternal\.corp\b'", "'(oops'");
+    std::fs::write(dir.path().join("pulse.toml"), bad).unwrap();
+    let out = pulse(&["scan", "-C", &tempdir_str(&dir)]).code(2);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("custom rule `X-ORG-001`: invalid `pattern`"),
+        "{stderr}"
+    );
+}

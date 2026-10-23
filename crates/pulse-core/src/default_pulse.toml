@@ -65,3 +65,6 @@ new_code_only = false
 # pattern = '\binternal\.corp\.example\b'
 # message = "Internal hostname leaked into AI context"
 # remediation = "Use the public alias"
+# One matcher per rule: `pattern` (regex on source), `phrases` (list, matched on
+# normalized text at word boundaries) or `max_tokens` (fires above this many tokens).
+# Severity overrides and "off" in [rules] apply to custom rule IDs too.

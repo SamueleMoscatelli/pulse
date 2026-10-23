@@ -11,6 +11,7 @@ use pulse_core::{
     Asset, Config, ConfigError, DiscoveredFile, Finding, ImportGraph, KindSet, OptionsStore,
     ProjectRule, Rule, RuleCtx, RuleMeta, RuleOptions, Severity, discover,
 };
+use pulse_rules::custom::{self, Custom};
 use pulse_rules::{PROJECT_RULES, RULES, all_meta, structure};
 use rayon::prelude::*;
 
@@ -36,7 +37,7 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
         files: &no_files,
         imports: &no_imports,
     };
-    for rule in &rules.asset {
+    for rule in rules.asset_rules() {
         rule.validate(&early)?;
     }
     for rule in &rules.project {
@@ -76,7 +77,7 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
         .filter(|a| opts.in_scope(&a.rel_path))
         .flat_map_iter(|asset| {
             let mut out = Vec::new();
-            for rule in &rules.asset {
+            for rule in rules.asset_rules() {
                 let meta = rule.meta();
                 // A skipped asset has no content: only AI-STR-002 reports it.
                 if meta.kinds.contains(asset.kind)
@@ -111,10 +112,7 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
         .iter()
         .filter(|a| opts.in_scope(&a.rel_path))
         .collect();
-    let ran = |id: &str| {
-        rules.asset.iter().any(|r| r.meta().id == id)
-            || rules.project.iter().any(|r| r.meta().id == id)
-    };
+    let ran = |id: &str| rules.runs(id);
     let (findings, suppressed) = suppress::apply(findings, &in_scope, root, &ignores, ran);
     let mut findings = dedup(findings);
     sort(&mut findings);
@@ -193,7 +191,7 @@ fn read(f: &DiscoveredFile, max_bytes: u64, calibration: f64) -> Asset {
     }
 }
 
-/// A built-in rule as `config` leaves it: effective severity and whether it runs.
+/// A rule (built-in or custom) as `config` leaves it: effective severity and whether it runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RuleStatus {
     pub meta: &'static RuleMeta,
@@ -201,10 +199,11 @@ pub struct RuleStatus {
     pub enabled: bool,
 }
 
-/// Every built-in rule with its config overrides applied, in ID order.
+/// Every rule, built-in then custom, with its config overrides applied, in ID order.
 pub fn rule_statuses(config: &Config) -> Result<Vec<RuleStatus>, ConfigError> {
     let resolved = Resolved::new(config, &ScanOptions::default())?;
     let mut statuses: Vec<_> = all_meta()
+        .chain(resolved.custom_all.iter().map(|r| r.meta()))
         .map(|meta| RuleStatus {
             meta,
             severity: resolved
@@ -212,8 +211,7 @@ pub fn rule_statuses(config: &Config) -> Result<Vec<RuleStatus>, ConfigError> {
                 .get(meta.id)
                 .copied()
                 .unwrap_or(meta.default_severity),
-            enabled: resolved.asset.iter().any(|r| r.meta().id == meta.id)
-                || resolved.project.iter().any(|r| r.meta().id == meta.id),
+            enabled: resolved.runs(meta.id),
         })
         .collect();
     statuses.sort_unstable_by_key(|s| s.meta.id);
@@ -236,6 +234,10 @@ pub(crate) fn in_paths(rel: &str, paths: &[String]) -> bool {
 struct Resolved {
     asset: Vec<&'static dyn Rule>,
     project: Vec<&'static dyn ProjectRule>,
+    /// Every compiled custom rule, enabled or not (for `rule_statuses`).
+    custom_all: Vec<Custom>,
+    /// Indices into `custom_all` of the custom rules that run.
+    custom: Vec<usize>,
     severity: HashMap<&'static str, Severity>,
     options: OptionsStore,
 }
@@ -245,11 +247,11 @@ impl Resolved {
         let mut options = HashMap::new();
         let mut severity = HashMap::new();
         let mut disabled = Vec::new();
+        let custom_all = custom::compile(&config.custom_rules)?;
         for (id, setting) in &config.rules {
-            let Some(meta) = pulse_rules::find(id) else {
-                if config.custom_rules.iter().any(|c| &c.id == id) {
-                    continue;
-                }
+            let found = pulse_rules::find(id)
+                .or_else(|| custom_all.iter().map(|r| r.meta()).find(|m| m.id == id));
+            let Some(meta) = found else {
                 let ids = all_meta()
                     .map(|m| m.id)
                     .chain(config.custom_rules.iter().map(|c| c.id.as_str()));
@@ -271,6 +273,15 @@ impl Resolved {
                     }
                     if let Some(s) = t.severity {
                         severity.insert(meta.id, s);
+                    }
+                    if !t.options.0.is_empty() && pulse_rules::find(meta.id).is_none() {
+                        let key = t.options.0.keys().next().map_or("", String::as_str);
+                        return Err(ConfigError::Invalid {
+                            path: CONFIG_FILE.into(),
+                            message: format!(
+                                "[rules.{id}]: custom rules take no options (found `{key}`)"
+                            ),
+                        });
                     }
                     if !t.options.0.is_empty() {
                         options.insert(meta.id.to_owned(), RuleOptions(t.options.0.clone()));
@@ -295,9 +306,28 @@ impl Resolved {
                 .copied()
                 .filter(|r| enabled(r.meta().id))
                 .collect(),
+            custom: (0..custom_all.len())
+                .filter(|&i| enabled(custom_all[i].meta().id))
+                .collect(),
+            custom_all,
             severity,
             options: OptionsStore::new(options, CONFIG_FILE),
         })
+    }
+
+    /// The asset rules that run: built-in, then custom.
+    fn asset_rules(&self) -> impl Iterator<Item = &dyn Rule> {
+        self.asset.iter().map(|r| *r as &dyn Rule).chain(
+            self.custom
+                .iter()
+                .map(|&i| &self.custom_all[i] as &dyn Rule),
+        )
+    }
+
+    /// Whether the rule `id` runs.
+    fn runs(&self, id: &str) -> bool {
+        self.asset_rules().any(|r| r.meta().id == id)
+            || self.project.iter().any(|r| r.meta().id == id)
     }
 }
 
