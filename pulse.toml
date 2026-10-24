@@ -1,6 +1,6 @@
-# Pulse config for Pulse's own repo (dogfooding). Defaults apply for everything not set here.
+# Pulse config for Pulse's own repo (dogfooding, also gated in CI). Defaults apply for
+# everything not set here.
 
-[[ignore]]
-path = "**/tests/fixtures/**"
-rules = ["AI-STR-002"]
-reason = "Deliberately malformed test fixtures"
+[scan]
+# Test fixtures are deliberately bad assets; the gate judges the repo's real ones.
+exclude = ["**/tests/fixtures/**"]
