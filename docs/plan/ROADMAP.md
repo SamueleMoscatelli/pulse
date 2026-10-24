@@ -54,7 +54,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 
 ## Phase 7 — Hardening & release (v1.0.0)
 - [x] P7.1 Performance hardening & budget enforcement
-- [ ] P7.2 Release pipeline, GitHub Action, pre-commit
+- [x] P7.2 Release pipeline, GitHub Action, pre-commit
 - [ ] P7.3 Docs, license, dogfooding in CI
 
 ## Backlog (unscheduled; promote by adding a card + roadmap line)
