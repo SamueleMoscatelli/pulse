@@ -1,6 +1,6 @@
 //! Secret patterns and placeholder words (AI-SEC-003).
 
-use std::sync::LazyLock;
+use std::sync::{LazyLock, OnceLock};
 
 use pulse_core::text::shannon_entropy;
 use regex::{Regex, RegexSet};
@@ -63,20 +63,28 @@ pub const PROVIDERS: &[Provider] = &[
     },
 ];
 
-/// The compiled prefilter and per-pattern regexes, in [`PROVIDERS`] order.
+/// The compiled prefilter, and per-pattern regexes in [`PROVIDERS`] order.
 pub struct Matchers {
     pub set: RegexSet,
-    pub regexes: Vec<Regex>,
+    /// Compiled on first use: only patterns the set matched need captures, and compiling
+    /// all of them up front doubled the startup cost (P7.1).
+    regexes: Vec<OnceLock<Regex>>,
 }
 
-/// [`PROVIDERS`] compiled once.
+impl Matchers {
+    /// The regex of [`PROVIDERS`]`[i]`, compiled on first use.
+    #[allow(clippy::expect_used)] // static patterns (rust.md)
+    pub fn regex(&self, i: usize) -> Option<&Regex> {
+        let (cell, provider) = (self.regexes.get(i)?, PROVIDERS.get(i)?);
+        Some(cell.get_or_init(|| Regex::new(provider.pattern).expect("static pattern")))
+    }
+}
+
+/// [`PROVIDERS`] compiled once (the set; regexes on demand).
 #[allow(clippy::expect_used)] // static patterns (rust.md)
 pub static MATCHERS: LazyLock<Matchers> = LazyLock::new(|| Matchers {
     set: RegexSet::new(PROVIDERS.iter().map(|p| p.pattern)).expect("static pattern"),
-    regexes: PROVIDERS
-        .iter()
-        .map(|p| Regex::new(p.pattern).expect("static pattern"))
-        .collect(),
+    regexes: PROVIDERS.iter().map(|_| OnceLock::new()).collect(),
 });
 
 /// Lowercase substrings that mark a value as a placeholder or a reference, not a secret.
@@ -149,8 +157,9 @@ mod tests {
     #[test]
     fn all_patterns_compile() {
         let m = &*MATCHERS;
-        assert_eq!(m.regexes.len(), PROVIDERS.len());
         assert_eq!(m.set.len(), PROVIDERS.len());
+        assert!((0..PROVIDERS.len()).all(|i| m.regex(i).is_some()));
+        assert!(m.regex(PROVIDERS.len()).is_none());
     }
 
     #[test]

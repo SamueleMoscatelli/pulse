@@ -4,6 +4,7 @@ pub mod entropy;
 pub mod levenshtein;
 pub mod lines;
 pub mod normalize;
+pub mod prose;
 pub mod shingles;
 pub mod tokens;
 pub mod unicode;

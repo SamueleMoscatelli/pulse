@@ -105,7 +105,7 @@ pub trait ProjectRule: Sync {
 - **Parallelism**: `rayon` across assets. Rules run sequentially per asset; assets are small, so the parallelism goes across files.
 - **Matching**: keyword lists compile once into `aho_corasick::AhoCorasick` (`LazyLock`). Use the `regex` crate only (linear time, no ReDoS) and compile each pattern once. Byte scans use `memchr`.
 - **Allocation**: findings go into a per-thread `Vec` and are merged once. Messages are built only when a finding fires.
-- **Startup**: no global initialization beyond lazies. Config parsing happens only if `pulse.toml` exists.
+- **Startup**: no global initialization beyond lazies. Config parsing happens only if `pulse.toml` exists. `scan` starts building the costly lexicon automatons and regexes (`pulse_rules::warm_up`) on the rayon pool before the walk, so they're ready when the rules run (ADR-039); `pulse --version` and other commands pay nothing.
 - **Release profile**: `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = true`, `opt-level = 3`.
 - **Timings**: `--timings` prints per-phase durations (walk, parse+rules, project rules, report) to stderr.
 

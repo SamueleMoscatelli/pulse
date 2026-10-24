@@ -68,6 +68,43 @@ pub fn find(id: &str) -> Option<&'static RuleMeta> {
     all_meta().find(|m| m.id == id)
 }
 
+/// Starts building the costly lexicon automatons and regexes on the rayon pool, in
+/// parallel, without waiting (P7.1, ADR-039). Built lazily on first use instead, they
+/// cost ~13 ms per run serially on the first assets; the engine calls this before
+/// discovery, while the pool would otherwise sit idle during the walk.
+pub fn warm_up() {
+    use std::sync::LazyLock;
+    let inits: [fn(); 8] = [
+        || {
+            LazyLock::force(&lexicon::secrets::MATCHERS);
+        },
+        || {
+            LazyLock::force(&lexicon::injection::INJECTION);
+        },
+        || {
+            LazyLock::force(&lexicon::poisoning::TOOL_CALL);
+        },
+        || {
+            LazyLock::force(&lexicon::style::FILLER_SET);
+        },
+        || {
+            LazyLock::force(&lexicon::poisoning::CONCEAL);
+        },
+        || {
+            LazyLock::force(&lexicon::paths::PATHS);
+        },
+        || {
+            LazyLock::force(&lexicon::mcp::CREDENTIAL_KEY);
+        },
+        || {
+            LazyLock::force(&lexicon::poisoning::HIDDEN_TAG);
+        },
+    ];
+    for init in inits {
+        rayon::spawn(init);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

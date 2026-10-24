@@ -8,9 +8,7 @@ use pulse_core::{
 };
 use serde::Deserialize;
 
-use crate::cognitive::directives::{
-    Word, contains_phrase, is, lemma, same, sentences, split, words,
-};
+use crate::cognitive::directives::{Word, contains_phrase, is, lemma, same, split, words};
 use crate::lexicon::directives::NEGATORS;
 use crate::lexicon::imperatives::{
     DATA_FLAGS, EMBED_VERBS, FETCH_WORDS, INSTRUMENTS, LEADERS, MD_IMAGE, NOT_NEGATING, SEND_VERBS,
@@ -75,14 +73,15 @@ impl Rule for Exfiltration {
         }
         // Detect (b) and (c), one sentence at a time.
         let mut ws = Vec::new();
-        sentences(src, md, |r| {
-            let Some(text) = src.get(r.clone()) else {
-                return;
+        for s in asset.prose().sentences() {
+            let Some(text) = src.get(s.range.clone()) else {
+                continue;
             };
-            if let Some(msg) = sentence(text, &mut ws, &mut allowed) {
-                out.push(Finding::new(&META, asset, span(r), msg));
+            s.words(src, &mut ws);
+            if let Some(msg) = sentence(text, &ws, &mut allowed) {
+                out.push(Finding::new(&META, asset, span(s.range), msg));
             }
-        });
+        }
     }
 }
 
@@ -105,7 +104,10 @@ fn check_tools(asset: &Asset, allowed: &mut Allowed<'_, '_>, out: &mut Vec<Findi
         if msg.is_none() {
             split(desc, 0..desc.len(), &mut |r: Range<usize>| {
                 if msg.is_none() {
-                    msg = desc.get(r).and_then(|t| sentence(t, &mut ws, allowed));
+                    msg = desc.get(r).and_then(|t| {
+                        words(t, &mut ws);
+                        sentence(t, &ws, allowed)
+                    });
                 }
             });
         }
@@ -209,12 +211,8 @@ fn url_message(url: &str, image: bool) -> String {
 }
 
 /// The finding message for one sentence, if it matches Detect (b) or (c).
-fn sentence<'a>(
-    text: &'a str,
-    ws: &mut Vec<Word<'a>>,
-    allowed: &mut Allowed<'_, '_>,
-) -> Option<String> {
-    words(text, ws);
+/// `ws` holds `text`'s [`words`].
+fn sentence(text: &str, ws: &[Word<'_>], allowed: &mut Allowed<'_, '_>) -> Option<String> {
     let quote = || truncate(text, QUOTED);
     // Detect (c): a request to a non-allowlisted host that carries data.
     // Data means a flag or a templated URL: `Request an API key from https://…` asks for one.

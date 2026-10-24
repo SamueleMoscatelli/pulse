@@ -2,6 +2,7 @@
 //! together (AI-COG-005).
 
 use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
 
 use pulse_core::{
     Asset, AssetKind, Category, ConfigError, Finding, KindSet, LoadMode, ProjectRule, Rule,
@@ -9,7 +10,9 @@ use pulse_core::{
 };
 use serde::Deserialize;
 
-use super::directives::{self, Directive, Polarity, contains_phrase, is, lemma, same, words};
+use super::directives::{
+    self, Directive, Polarity, contains_phrase, contains_words, is, lemma, same, words,
+};
 use crate::lexicon::directives::{EXCLUSIVE_SETS, GENERIC_HEADINGS, STOP};
 use crate::util::{tail, truncate};
 
@@ -56,8 +59,11 @@ impl Rule for ContradictoryDirectives {
             .iter()
             .map(|d| Prepared::new(d, &opts.exclusive, false))
             .collect();
-        for (j, b) in ps.iter().enumerate().skip(1) {
-            let Some(a) = ps[..j].iter().find(|a| conflict(a, b)) else {
+        let mut index = Index::default();
+        for (j, b) in ps.iter().enumerate() {
+            let first = index.first_conflict(&ps, b);
+            index.insert(j, b);
+            let Some(a) = first.and_then(|i| ps.get(i)) else {
                 continue;
             };
             let (a, b) = (a.directive, b.directive);
@@ -81,6 +87,30 @@ pub struct Prepared<'d, 'a> {
     /// `(set, member)` of every exclusive-set member the object names (positive only);
     /// built-in sets first, then `extra` sets offset by `EXCLUSIVE_SETS.len()`.
     members: Vec<(usize, usize)>,
+    /// [`Index`] keys, hashed once: the context, and context + verb + first object word.
+    ctx: u64,
+    verb_key: Option<u64>,
+}
+
+/// [`EXCLUSIVE_SETS`] members split into lemmatized words, once (not per directive).
+static EXCLUSIVE_WORDS: LazyLock<Vec<Vec<Vec<&'static str>>>> = LazyLock::new(|| {
+    EXCLUSIVE_SETS
+        .iter()
+        .map(|set| {
+            set.iter()
+                .map(|m| m.split_whitespace().map(lemma).collect())
+                .collect()
+        })
+        .collect()
+});
+
+/// FNV-1a over ASCII-lowercased words, each followed by a 0 byte (as [`same`] compares).
+fn key(seed: u64, words: &[&str]) -> u64 {
+    words.iter().fold(seed, |h, w| {
+        w.bytes().chain([0]).fold(h, |h, b| {
+            (h ^ u64::from(b.to_ascii_lowercase())).wrapping_mul(0x100_0000_01b3)
+        })
+    })
 }
 
 impl<'d, 'a> Prepared<'d, 'a> {
@@ -90,9 +120,9 @@ impl<'d, 'a> Prepared<'d, 'a> {
         let mut members = Vec::new();
         if directive.polarity == Polarity::Positive {
             let obj = &directive.object;
-            for (si, set) in EXCLUSIVE_SETS.iter().enumerate() {
+            for (si, set) in EXCLUSIVE_WORDS.iter().enumerate() {
                 for (mi, m) in set.iter().enumerate() {
-                    if contains_phrase(obj, m) {
+                    if contains_words(obj, m) {
                         members.push((si, mi));
                     }
                 }
@@ -105,12 +135,81 @@ impl<'d, 'a> Prepared<'d, 'a> {
                 }
             }
         }
+        let ctx = key(0xcbf2_9ce4_8422_2325, &directive.context);
+        let verb_key = directive
+            .object
+            .first()
+            .map(|first| key(ctx, &[directive.verb, first]));
         Self {
             directive,
             scoped_section: !(cross_file && directive.titled)
                 && directive.section.is_some_and(names_scope),
             members,
+            ctx,
+            verb_key,
         }
+    }
+}
+
+/// Earlier directives bucketed by what [`conflict`] needs two directives to share, so the
+/// first conflicting one is found without testing every earlier directive (quadratic over
+/// thousands of directives in one file, P7.1). Keys are hashes ([`Prepared`]): a collision
+/// only adds candidates, which [`conflict`] then rejects.
+#[derive(Default)]
+struct Index {
+    /// (positive, context + verb + first object word) → indices: Positive/Negative pairs
+    /// share a context and a verb, and the negative object is a prefix of the positive one.
+    verb: HashMap<(bool, u64), Vec<usize>>,
+    /// (context, set, member) → indices: Positive/Positive pairs name members of one set.
+    member: HashMap<(u64, usize, usize), Vec<usize>>,
+    /// (context, set) → members seen, in first-seen order.
+    seen: HashMap<(u64, usize), Vec<usize>>,
+}
+
+impl Index {
+    fn insert(&mut self, i: usize, p: &Prepared<'_, '_>) {
+        if let Some(key) = p.verb_key {
+            let positive = p.directive.polarity == Polarity::Positive;
+            self.verb.entry((positive, key)).or_default().push(i);
+        }
+        for &(set, m) in &p.members {
+            self.member.entry((p.ctx, set, m)).or_default().push(i);
+            let seen = self.seen.entry((p.ctx, set)).or_default();
+            if !seen.contains(&m) {
+                seen.push(m);
+            }
+        }
+    }
+
+    /// Index of the first earlier directive in `ps` that conflicts with `b`.
+    fn first_conflict(&self, ps: &[Prepared<'_, '_>], b: &Prepared<'_, '_>) -> Option<usize> {
+        let mut best: Option<usize> = None;
+        let mut consider = |ids: &[usize]| {
+            let hit = ids
+                .iter()
+                .take_while(|&&i| best.is_none_or(|b| i < b))
+                .find(|&&i| ps.get(i).is_some_and(|a| conflict(a, b)));
+            if let Some(&i) = hit {
+                best = Some(i);
+            }
+        };
+        if let Some(key) = b.verb_key {
+            let opposite = b.directive.polarity != Polarity::Positive;
+            if let Some(ids) = self.verb.get(&(opposite, key)) {
+                consider(ids);
+            }
+        }
+        for &(set, y) in &b.members {
+            let Some(seen) = self.seen.get(&(b.ctx, set)) else {
+                continue;
+            };
+            for &x in seen.iter().filter(|&&x| x != y) {
+                if let Some(ids) = self.member.get(&(b.ctx, set, x)) {
+                    consider(ids);
+                }
+            }
+        }
+        best
     }
 }
 
@@ -380,6 +479,33 @@ mod tests {
         assert!(!exclusive(&[(0, 0)], &[(0, 0)]));
         assert!(!exclusive(&[(0, 0), (0, 1)], &[(0, 1)]));
         assert!(!exclusive(&[(1, 0)], &[(0, 1)]));
+    }
+
+    #[test]
+    fn index_finds_the_first_conflict_like_a_full_scan() {
+        let src = "# Rules\n\n- Always use tabs.\n- Never use tabs.\n- Use spaces.\n\
+                   - Always use npm.\n- Never use npm for tests.\n- Use yarn.\n\
+                   - Never use semicolons.\n- Always use semicolons at line end.\n\
+                   - Use pnpm.\n- Use Tabs.\n- Always use yarn for tests.\n- Use bun for tests.\n\
+                   - Prefer TypeScript.\n- Use JavaScript and TypeScript.\n- Use JavaScript.\n";
+        let asset = Asset::from_bytes(
+            std::path::PathBuf::from("CLAUDE.md"),
+            "CLAUDE.md",
+            AssetKind::Instructions,
+            LoadMode::Always,
+            src.as_bytes().to_vec(),
+        );
+        let ds = directives::extract(&asset);
+        let ps: Vec<_> = ds.iter().map(|d| Prepared::new(d, &[], false)).collect();
+        let mut index = Index::default();
+        let mut hits = 0;
+        for (j, b) in ps.iter().enumerate() {
+            let full = ps[..j].iter().position(|a| conflict(a, b));
+            assert_eq!(index.first_conflict(&ps, b), full, "directive {j}");
+            hits += usize::from(full.is_some());
+            index.insert(j, b);
+        }
+        assert!(hits >= 6, "{hits} conflicts");
     }
 
     #[test]

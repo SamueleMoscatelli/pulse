@@ -45,7 +45,7 @@ Measured on an Apple M-series laptop, release build, warm FS cache:
 | Peak RSS (typical repo) | < 30 MB |
 | Release binary size | < 8 MB |
 
-Tasks P2.8 and P7.1 add benchmarks that enforce these numbers.
+Tasks P2.8 and P7.1 add benchmarks that enforce these numbers. On other hardware, `scripts/bench.sh` scales the time budgets by the machine's speed relative to the reference machine, measured with a fixed calibration workload (ADR-038). Startup is judged net of the OS cost of spawning a process (1 ms of the 2 ms on the reference machine).
 
 ## Non-goals (v1)
 

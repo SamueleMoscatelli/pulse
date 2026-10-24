@@ -44,6 +44,8 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
         rule.validate(&early)?;
     }
 
+    // The rule lexicons build on the rayon pool while the walk runs on its own threads.
+    pulse_rules::warm_up();
     let discovery = discover(root, config)?;
     let discovered_at = Instant::now();
 
