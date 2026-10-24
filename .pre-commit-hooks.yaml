@@ -1,0 +1,12 @@
+# pre-commit hooks (https://pre-commit.com). `pulse` must be on PATH: install it with the
+# release installers or Homebrew (README). The workspace root is a virtual manifest, so
+# pre-commit's `language: rust` (`cargo install --path .`) can't build it.
+- id: pulse
+  name: pulse quality gate
+  description: Analyze AI assets and fail when the Pulse Quality Gate fails.
+  entry: pulse ci
+  language: system
+  # Project rules (references, duplicates) need the whole asset set, so pulse scans the
+  # repository instead of the staged file list.
+  pass_filenames: false
+  require_serial: true
