@@ -23,6 +23,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: scripts/check.sh
 
+  # Dogfooding: the Quality Gate on this repo's own AI assets (CLAUDE.md, .claude/, fixtures),
+  # built from source. GITHUB_ACTIONS selects the `github` format: annotations + job summary.
+  dogfood:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo run -q --release -p pulse-cli -- ci
+
   # Performance budgets (spec 00-overview) on Apple M-series. Non-blocking: shared runners
   # are noisy, so a red bench is a signal to look at, not a merge gate.
   bench:

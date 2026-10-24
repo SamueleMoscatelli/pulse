@@ -399,6 +399,40 @@ fn rules_json_lists_every_rule() {
     insta::assert_snapshot!(stdout(&out));
 }
 
+/// The README rule table is `pulse rules -f markdown` under the default config.
+/// `UPDATE_README=1 cargo test -p pulse-cli readme` regenerates it.
+#[test]
+fn readme_rule_table_is_in_sync() {
+    const START: &str = "<!-- rules:start -->\n";
+    const END: &str = "<!-- rules:end -->";
+    let dir = tempfile::tempdir().unwrap();
+    let out = pulse(&["rules", "-C", &tempdir_str(&dir), "-f", "markdown"]).code(0);
+    let table = stdout(&out);
+    assert_eq!(
+        table.lines().filter(|l| l.starts_with("| [AI-")).count(),
+        pulse_rules::all_meta().count()
+    );
+
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../README.md");
+    let readme = std::fs::read_to_string(&path)
+        .unwrap()
+        .replace("\r\n", "\n");
+    let start = readme
+        .find(START)
+        .expect("README lacks the rules:start marker")
+        + START.len();
+    let end = readme.find(END).expect("README lacks the rules:end marker");
+    if std::env::var_os("UPDATE_README").is_some() {
+        let updated = format!("{}{table}{}", &readme[..start], &readme[end..]);
+        std::fs::write(&path, updated).unwrap();
+    } else {
+        assert!(
+            readme[start..end] == table,
+            "README rule table is stale: run `UPDATE_README=1 cargo test -p pulse-cli readme`"
+        );
+    }
+}
+
 #[test]
 fn rules_with_bad_config_exits_two() {
     let dir = tempfile::tempdir().unwrap();

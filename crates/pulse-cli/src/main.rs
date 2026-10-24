@@ -131,6 +131,7 @@ struct BaselineArgs {
 enum RulesFormat {
     Terminal,
     Json,
+    Markdown,
 }
 
 #[derive(Debug, Args)]
@@ -405,6 +406,7 @@ fn list_rules(global: &Global, args: &RulesArgs) -> anyhow::Result<ExitCode> {
             out.push('\n');
         }
         RulesFormat::Terminal => rules_table(&mut out, &statuses, global.quiet),
+        RulesFormat::Markdown => rules_markdown(&mut out, &statuses),
     }
     print_stdout(&out)?;
     Ok(ExitCode::SUCCESS)
@@ -425,6 +427,32 @@ fn rules_table(out: &mut String, statuses: &[RuleStatus], quiet: bool) {
     if !quiet {
         let enabled = statuses.iter().filter(|s| s.enabled).count();
         let _ = writeln!(out, "\n{} rules, {enabled} enabled", statuses.len());
+    }
+}
+
+/// The `rules` table in Markdown, each ID linking to its docs (the README rule table).
+fn rules_markdown(out: &mut String, statuses: &[RuleStatus]) {
+    use std::fmt::Write as _;
+    let cell = |s: &str| s.replace('|', "\\|");
+    out.push_str("| Rule | Severity | Name | Summary |\n|---|---|---|---|\n");
+    for s in statuses {
+        let id = s.meta.id;
+        let link = if pulse_rules::docs(id).is_some() {
+            format!("[{id}](docs/rules/{id}.md)")
+        } else {
+            id.to_owned()
+        };
+        let sev = if s.enabled {
+            s.severity.as_str()
+        } else {
+            "off"
+        };
+        let _ = writeln!(
+            out,
+            "| {link} | {sev} | {} | {} |",
+            cell(s.meta.name),
+            cell(s.meta.summary)
+        );
     }
 }
 
