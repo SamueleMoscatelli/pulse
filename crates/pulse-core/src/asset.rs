@@ -7,6 +7,7 @@ use serde_yaml_ng::Value;
 
 use crate::model::{AssetKind, KindSet, LoadMode, Location, Span};
 use crate::parse::{JsonDoc, MarkdownView, McpView, SettingsView, ToolsView};
+use crate::text::prose::Prose;
 use crate::text::{LineIndex, Normalized, normalize, tokens};
 
 /// One file under analysis. Owns its source; parsed views are computed at most once.
@@ -32,6 +33,7 @@ pub struct Asset {
     settings: OnceLock<SettingsView>,
     tools_view: OnceLock<ToolsView>,
     normalized: OnceLock<Normalized>,
+    prose: OnceLock<Prose>,
     tokens: OnceLock<u32>,
 }
 
@@ -64,6 +66,7 @@ impl Asset {
             settings: OnceLock::new(),
             tools_view: OnceLock::new(),
             normalized: OnceLock::new(),
+            prose: OnceLock::new(),
             tokens: OnceLock::new(),
         }
     }
@@ -148,6 +151,12 @@ impl Asset {
     /// The normalized source (spec "Text normalization"), computed on first use.
     pub fn normalized(&self) -> &Normalized {
         self.normalized.get_or_init(|| normalize(&self.source))
+    }
+
+    /// The Markdown body's sentences and words, segmented on first use.
+    pub fn prose(&self) -> &Prose {
+        self.prose
+            .get_or_init(|| Prose::new(&self.source, self.markdown()))
     }
 
     /// Estimated tokens of the whole file; Markdown kinds count fenced code at the code rate.

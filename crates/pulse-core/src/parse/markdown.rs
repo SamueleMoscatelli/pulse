@@ -233,14 +233,23 @@ fn parse_frontmatter(source: &str, span: Span, body_span: Span, lines: &LineInde
         .get(body_span.start as usize..body_span.end as usize)
         .unwrap_or_default();
     let first_line = lines.line_of(body_span.start);
-    let value = match serde_yaml_ng::from_str::<Value>(yaml) {
+    let parsed = if flow_too_deep(yaml) {
+        Err(None)
+    } else {
+        serde_yaml_ng::from_str::<Value>(yaml).map_err(Some)
+    };
+    let value = match parsed {
         Ok(Value::Mapping(map)) => Ok(map),
         Ok(Value::Null) => Ok(Mapping::new()),
         Ok(_) => Err(YamlError {
             line: first_line,
             msg: "frontmatter is not a mapping".to_owned(),
         }),
-        Err(e) => {
+        Err(None) => Err(YamlError {
+            line: first_line,
+            msg: "recursion limit exceeded".to_owned(),
+        }),
+        Err(Some(e)) => {
             let line = e.location().map_or(first_line, |l| {
                 first_line + to_u32(l.line().saturating_sub(1))
             });
@@ -264,6 +273,74 @@ fn parse_frontmatter(source: &str, span: Span, body_span: Span, lines: &LineInde
         value,
         key_lines,
     }
+}
+
+/// `serde_yaml_ng`'s recursion limit: deeper documents fail to deserialize anyway.
+const MAX_YAML_DEPTH: usize = 128;
+
+/// Whether `yaml`'s flow collections (`[` `{`) nest deeper than [`MAX_YAML_DEPTH`]. libyaml's
+/// scanner is quadratic in flow depth (it rechecks every pending simple key per token), so
+/// 100k `[` took ~40 s before the recursion limit tripped (P7.1). Linear and conservative:
+/// only brackets at a token start count, and quoted scalars, comments and block-scalar
+/// bodies (`|`, `>`) are skipped, so prose like `a[` never trips it.
+fn flow_too_deep(yaml: &str) -> bool {
+    let mut depth = 0usize;
+    let mut quote: Option<u8> = None;
+    // Indent of the key whose block scalar is open.
+    let mut block: Option<usize> = None;
+    for line in yaml.lines() {
+        let b = line.as_bytes();
+        let indent = b.iter().take_while(|&&c| c == b' ').count();
+        if quote.is_none()
+            && let Some(k) = block
+        {
+            if indent == b.len() || indent > k {
+                continue;
+            }
+            block = None;
+        }
+        let mut i = indent;
+        while let Some(&c) = b.get(i) {
+            if let Some(q) = quote {
+                if c == q {
+                    quote = None;
+                } else if q == b'"' && c == b'\\' {
+                    i += 1;
+                }
+                i += 1;
+                continue;
+            }
+            let start = i == indent || matches!(b[i - 1], b' ' | b'\t' | b'[' | b'{' | b',');
+            match c {
+                b'[' | b'{' if start => {
+                    depth += 1;
+                    if depth > MAX_YAML_DEPTH {
+                        return true;
+                    }
+                }
+                b']' | b'}' => depth = depth.saturating_sub(1),
+                b'#' if start => break,
+                b'"' | b'\'' if start => quote = Some(c),
+                _ => {}
+            }
+            i += 1;
+        }
+        if quote.is_none() && depth == 0 && opens_block_scalar(line.get(indent..).unwrap_or("")) {
+            block = Some(indent);
+        }
+    }
+    false
+}
+
+/// Whether a line ends with a block scalar indicator (`key: |`, `- >-`, `k: |2+`).
+fn opens_block_scalar(line: &str) -> bool {
+    let t = line
+        .trim_end()
+        .trim_end_matches(|c: char| c == '-' || c == '+' || c.is_ascii_digit());
+    let Some(rest) = t.strip_suffix('|').or_else(|| t.strip_suffix('>')) else {
+        return false;
+    };
+    rest.is_empty() || rest.ends_with(' ')
 }
 
 /// Drops every YAML-relative ` at line N column M` mark; `YamlError::line` is file-relative.
@@ -537,6 +614,43 @@ mod tests {
             .value
             .expect_err("bomb");
         assert_eq!(err.msg, "repetition limit exceeded");
+    }
+
+    #[test]
+    fn frontmatter_deep_flow_nesting_is_an_error() {
+        let n = 100_000;
+        let src = format!("---\nk: {}{}\n---\n", "[".repeat(n), "]".repeat(n));
+        let err = parse(&src)
+            .frontmatter
+            .expect("frontmatter")
+            .value
+            .expect_err("deep");
+        assert_eq!(
+            (err.line, err.msg.as_str()),
+            (2, "recursion limit exceeded")
+        );
+    }
+
+    #[test]
+    fn flow_depth_skips_quotes_and_comments() {
+        let deep = "[".repeat(MAX_YAML_DEPTH + 1);
+        assert!(flow_too_deep(&format!("k: {deep}")));
+        assert!(!flow_too_deep(&format!("k: \"{deep}\"")));
+        assert!(!flow_too_deep(&format!("k: '{deep}'")));
+        assert!(!flow_too_deep(&format!("k: \"a\\\"{deep}\"")));
+        assert!(!flow_too_deep(&format!("k: 1 # {deep}\nj: 2")));
+        assert!(!flow_too_deep(&"[]".repeat(10_000)));
+        // Brackets in plain and block scalars are not flow collections.
+        assert!(!flow_too_deep(&"k: a[\n".repeat(200)));
+        assert!(!flow_too_deep(&format!("d: |\n  {deep}\n  {deep}\nk: 1")));
+        assert!(!flow_too_deep(&format!("d: >-\n\n  {deep}\n")));
+        // A block scalar ends at a less-indented key.
+        assert!(flow_too_deep(&format!("d: |\n  x\nk: {deep}")));
+        // Quotes may span lines.
+        assert!(!flow_too_deep(&format!("k: \"a\n{deep}\"")));
+        // Below the limit, the parser decides.
+        let ok = format!("{}{}", "[".repeat(10), "]".repeat(10));
+        assert!(!flow_too_deep(&ok));
     }
 
     #[test]

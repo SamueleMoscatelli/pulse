@@ -7,6 +7,9 @@ use crate::model::Span;
 pub struct LineIndex {
     /// Byte offset of the first byte of each line. Always starts with `0`.
     starts: Vec<u32>,
+    /// Whether each line is pure ASCII, so its columns are byte offsets: counting chars per
+    /// lookup is quadratic over many findings on one huge line (P7.1).
+    ascii: Vec<bool>,
 }
 
 impl LineIndex {
@@ -15,7 +18,19 @@ impl LineIndex {
         let mut starts = Vec::with_capacity(source.len() / 32 + 1);
         starts.push(0);
         starts.extend(memchr::memchr_iter(b'\n', source.as_bytes()).map(|i| to_u32(i + 1)));
-        Self { starts }
+        let bytes = source.as_bytes();
+        let ascii = starts
+            .iter()
+            .zip(
+                starts
+                    .iter()
+                    .skip(1)
+                    .map(|&s| s as usize)
+                    .chain([bytes.len()]),
+            )
+            .map(|(&start, end)| bytes.get(start as usize..end).is_some_and(<[u8]>::is_ascii))
+            .collect();
+        Self { starts, ascii }
     }
 
     /// Number of lines (an empty source, or one ending in `\n`, still has a last empty line).
@@ -40,7 +55,11 @@ impl LineIndex {
         // Index of the last line start <= byte; `starts[0] == 0` guarantees a match.
         let line = self.starts.partition_point(|&s| s as usize <= byte) - 1;
         let start = self.starts[line] as usize;
-        let col = source.get(start..byte).map_or(0, |s| s.chars().count());
+        let col = if self.ascii.get(line).copied().unwrap_or(false) {
+            byte - start
+        } else {
+            source.get(start..byte).map_or(0, |s| s.chars().count())
+        };
         (to_u32(line + 1), to_u32(col + 1))
     }
 

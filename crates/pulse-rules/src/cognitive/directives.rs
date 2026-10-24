@@ -4,9 +4,8 @@
 //! items and paragraphs, then into sentences. A sentence with a polarity marker becomes a
 //! [`Directive`]. Words are source slices: compare them with [`same`] (ASCII case-insensitive).
 
-use std::ops::Range;
-
-use memchr::memchr;
+use pulse_core::text::prose::{Prose, Sentence};
+pub use pulse_core::text::prose::{Word, covers, sentences, split, words};
 use pulse_core::{Asset, MarkdownView, Span};
 
 use crate::lexicon::directives::{
@@ -49,6 +48,7 @@ pub fn extract(asset: &Asset) -> Vec<Directive<'_>> {
     let mut x = Extractor {
         src: &asset.source,
         md: asset.markdown(),
+        prose: asset.prose(),
         words: Vec::new(),
         out: Vec::new(),
     };
@@ -82,13 +82,33 @@ pub fn lemma(w: &str) -> &str {
 /// Whether the `phrase` (whitespace-separated words, lemmatized here) occurs contiguously
 /// in `words`.
 pub fn contains_phrase(words: &[&str], phrase: &str) -> bool {
-    let n = phrase.split_whitespace().count();
-    n > 0
-        && words.windows(n).any(|win| {
-            win.iter()
-                .zip(phrase.split_whitespace())
-                .all(|(w, p)| same(w, lemma(p)))
-        })
+    let mut parts = phrase.split_whitespace();
+    let Some(first) = parts.next().map(lemma) else {
+        return false;
+    };
+    // Anchored on the first word, so the rest is split and lemmatized only where it
+    // matches (once per window was a hotspot, P7.1).
+    (0..words.len()).any(|i| {
+        same(words[i], first) && {
+            let mut rest = words[i + 1..].iter();
+            parts
+                .clone()
+                .all(|p| rest.next().is_some_and(|w| same(w, lemma(p))))
+        }
+    })
+}
+
+/// [`contains_phrase`] with the phrase already split and lemmatized.
+pub fn contains_words(words: &[&str], phrase: &[&str]) -> bool {
+    let Some((first, rest)) = phrase.split_first() else {
+        return false;
+    };
+    (0..words.len()).any(|i| {
+        same(words[i], first) && {
+            let mut tail = words[i + 1..].iter();
+            rest.iter().all(|p| tail.next().is_some_and(|w| same(w, p)))
+        }
+    })
 }
 
 /// Whether a sentence's words make it a directive for the style rules (AI-COG-002,
@@ -107,124 +127,10 @@ pub fn is_directive(w: &[Word<'_>]) -> bool {
     })
 }
 
-/// A word of a sentence; `brk` marks punctuation (`,` `:` `(` …) right before it.
-#[derive(Debug, Clone, Copy)]
-pub struct Word<'a> {
-    pub text: &'a str,
-    pub brk: bool,
-}
-
-/// Splits `s` into words into `out` (cleared first). Word chars are alphanumerics and
-/// `_+#`; `-` `.` `'` `’` join two word chars (`kebab-case`, `node.js`, `don't`).
-pub fn words<'a>(s: &'a str, out: &mut Vec<Word<'a>>) {
-    out.clear();
-    let mut brk = false;
-    let mut start = None;
-    let mut it = s.char_indices().peekable();
-    while let Some((i, c)) = it.next() {
-        let joins = matches!(c, '-' | '.' | '\'' | '’')
-            && start.is_some()
-            && it.peek().is_some_and(|&(_, n)| n.is_alphanumeric());
-        if c.is_alphanumeric() || matches!(c, '_' | '+' | '#') || joins {
-            start.get_or_insert(i);
-            continue;
-        }
-        if let Some(st) = start.take() {
-            out.push(Word {
-                text: &s[st..i],
-                brk,
-            });
-            brk = false;
-        }
-        if matches!(c, ',' | ':' | '(' | ')' | '—' | '–') {
-            brk = true;
-        }
-    }
-    if let Some(st) = start {
-        out.push(Word {
-            text: &s[st..],
-            brk,
-        });
-    }
-}
-
-/// Calls `f` with the trimmed, non-empty source range of every sentence in `md`'s body,
-/// outside code blocks, HTML comments and headings, in source order. List items and
-/// paragraphs are split on `.` `!` `?` (before whitespace or the end), `;` and `|`, outside
-/// inline code.
-pub fn sentences(src: &str, md: &MarkdownView, mut f: impl FnMut(Range<usize>)) {
-    let (mut pos, end) = (md.body.start as usize, md.body.end as usize);
-    let bytes = src.as_bytes();
-    let mut unit: Option<Range<usize>> = None;
-    let flush = |unit: Option<Range<usize>>, f: &mut dyn FnMut(Range<usize>)| {
-        if let Some(u) = unit {
-            split(src, u, f);
-        }
-    };
-    while pos < end {
-        let eol = bytes
-            .get(pos..end)
-            .and_then(|b| memchr(b'\n', b))
-            .map_or(end, |n| pos + n);
-        let line = src.get(pos..eol).unwrap_or("");
-        let trimmed = line.trim_start();
-        let at = pos + (line.len() - trimmed.len());
-        if trimmed.trim_end().is_empty()
-            || covers(&md.code_blocks, at, |b| b.span)
-            || covers(&md.html_comments, at, |s| *s)
-            || covers(&md.headings, at, |h| h.span)
-        {
-            flush(unit.take(), &mut f);
-        } else if let Some(marker) = list_marker(trimmed) {
-            flush(unit.take(), &mut f);
-            unit = Some(at + marker..eol);
-        } else {
-            unit = Some(unit.map_or(at, |u| u.start)..eol);
-        }
-        pos = eol + 1;
-    }
-    flush(unit, &mut f);
-}
-
-/// Calls `f` with the trimmed, non-empty range of every sentence of `src[unit]` (a paragraph
-/// or list item, or any plain text such as a tool description).
-pub fn split(src: &str, unit: Range<usize>, f: &mut dyn FnMut(Range<usize>)) {
-    let Some(text) = src.get(unit.clone()) else {
-        return;
-    };
-    let mut emit = |r: Range<usize>| {
-        let Some(raw) = src.get(r.clone()) else {
-            return;
-        };
-        let t = raw.trim();
-        if !t.is_empty() {
-            let start = r.start + (raw.len() - raw.trim_start().len());
-            f(start..start + t.len());
-        }
-    };
-    let mut start = 0;
-    let mut code = false;
-    let mut it = text.char_indices().peekable();
-    while let Some((i, c)) = it.next() {
-        match c {
-            '`' => code = !code,
-            '.' | '!' | '?' if !code && it.peek().is_none_or(|&(_, n)| n.is_whitespace()) => {
-                emit(unit.start + start..unit.start + i + 1);
-                start = i + 1;
-            }
-            ';' | '|' if !code => {
-                emit(unit.start + start..unit.start + i);
-                start = i + 1;
-            }
-            _ => {}
-        }
-    }
-    emit(unit.start + start..unit.end);
-}
-
 struct Extractor<'a> {
     src: &'a str,
     md: &'a MarkdownView,
+    prose: &'a Prose,
     /// Reused word buffer: no allocation per non-directive sentence.
     words: Vec<Word<'a>>,
     out: Vec<Directive<'a>>,
@@ -232,17 +138,19 @@ struct Extractor<'a> {
 
 impl<'a> Extractor<'a> {
     fn run(&mut self) {
-        sentences(self.src, self.md, |r| self.sentence(r));
+        for s in self.prose.sentences() {
+            self.sentence(&s);
+        }
     }
 
-    fn sentence(&mut self, range: Range<usize>) {
+    fn sentence(&mut self, s: &Sentence<'_>) {
         let src = self.src;
-        let Some(text) = src.get(range.clone()) else {
+        let Some(text) = src.get(s.range.clone()) else {
             return;
         };
-        let start = range.start;
+        let start = s.range.start;
         let mut ws = std::mem::take(&mut self.words);
-        words(text, &mut ws);
+        s.words(src, &mut ws);
         if let Some((polarity, verb, object, context)) = parse(&ws) {
             let md = self.md;
             let n = md
@@ -347,28 +255,6 @@ fn parse<'a>(w: &[Word<'a>]) -> Option<Parsed<'a>> {
         Polarity::Positive
     };
     Some((polarity, verb, object, context))
-}
-
-/// Byte length of a list marker (`- `, `* `, `+ `, `1. `, `2) `) at the start of `line`.
-fn list_marker(line: &str) -> Option<usize> {
-    let b = line.as_bytes();
-    let digits = b.iter().take_while(|c| c.is_ascii_digit()).count();
-    let len = match b {
-        [b'-' | b'*' | b'+', b' ' | b'\t', ..] => 1,
-        _ if (1..=9).contains(&digits) && matches!(b.get(digits), Some(b'.' | b')')) => digits + 1,
-        _ => return None,
-    };
-    let ws = b[len..]
-        .iter()
-        .take_while(|c| matches!(c, b' ' | b'\t'))
-        .count();
-    (ws > 0).then_some(len + ws)
-}
-
-/// Whether one of `items` (sorted, non-overlapping spans) covers byte `pos`.
-pub(crate) fn covers<T>(items: &[T], pos: usize, span: impl Fn(&T) -> Span) -> bool {
-    let i = items.partition_point(|x| span(x).start as usize <= pos);
-    i > 0 && span(&items[i - 1]).end as usize > pos
 }
 
 fn span(start: usize, end: usize) -> Span {
@@ -516,6 +402,12 @@ mod tests {
         ));
         assert!(!contains_phrase(&["single"], "single quote"));
         assert!(!contains_phrase(&["x"], ""));
+        assert!(contains_words(
+            &["prefer", "Single", "quote"],
+            &["single", "quote"]
+        ));
+        assert!(!contains_words(&["single"], &["single", "quote"]));
+        assert!(!contains_words(&["x"], &[]));
     }
 
     #[test]
@@ -530,13 +422,5 @@ mod tests {
         assert!(d("You must keep it short"));
         assert!(!d("This project is a CLI."));
         assert!(!d("The test suite is slow"));
-    }
-
-    #[test]
-    fn list_markers() {
-        assert_eq!(list_marker("- a"), Some(2));
-        assert_eq!(list_marker("12.  a"), Some(5));
-        assert_eq!(list_marker("---"), None);
-        assert_eq!(list_marker("1.5 x"), None);
     }
 }

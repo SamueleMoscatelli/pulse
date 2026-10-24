@@ -32,5 +32,11 @@ codegen-units = 1
 panic = "abort"
 strip = true
 
+# Release with symbols, for `samply`/`sample`/`cargo flamegraph` (docs/perf.md).
+[profile.profiling]
+inherits = "release"
+debug = true
+strip = false
+
 [profile.dev]
 debug = "line-tables-only"

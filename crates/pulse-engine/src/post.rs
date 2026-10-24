@@ -1,6 +1,6 @@
 //! Post-processing of raw findings: dedup, sort, fingerprints.
 
-use std::cmp::Reverse;
+use std::cmp::{Ordering, Reverse};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -15,33 +15,43 @@ const PREFERRED: &[(&str, &str)] = &[("AI-SEC-003", "AI-SEC-004")];
 /// the lowest rule ID; all of that rule's findings there are kept.
 /// Findings of unregistered (custom) rules are never merged.
 pub fn dedup(findings: Vec<Finding>) -> Vec<Finding> {
-    let mut groups: HashMap<(Location, Category), Vec<Finding>> = HashMap::new();
-    let mut out = Vec::with_capacity(findings.len());
-    for f in findings {
+    // Grouped by index, borrowing locations: no `Location` clone per finding (P7.1).
+    let mut groups: HashMap<(&Location, Category), Vec<usize>> = HashMap::new();
+    let mut keep = vec![false; findings.len()];
+    for (i, f) in findings.iter().enumerate() {
         match pulse_rules::find(f.rule_id) {
             Some(meta) => groups
-                .entry((f.location.clone(), meta.category))
+                .entry((&f.location, meta.category))
                 .or_default()
-                .push(f),
-            None => out.push(f),
+                .push(i),
+            None => keep[i] = true,
         }
     }
     for mut group in groups.into_values() {
-        prefer(&mut group);
+        prefer(&mut group, &findings);
         // Merge across rules only: every finding of the winning rule is kept.
-        if let Some(best) = group.iter().map(|f| (f.severity, Reverse(f.rule_id))).max() {
-            let winner = best.1.0;
-            out.extend(group.into_iter().filter(|f| f.rule_id == winner));
+        let best = group
+            .iter()
+            .map(|&i| (findings[i].severity, Reverse(findings[i].rule_id)))
+            .max();
+        if let Some((_, Reverse(winner))) = best {
+            for i in group {
+                keep[i] |= findings[i].rule_id == winner;
+            }
         }
     }
-    out
+    findings
+        .into_iter()
+        .zip(keep)
+        .filter_map(|(f, k)| k.then_some(f))
+        .collect()
 }
 
 /// Drops the losers of [`PREFERRED`] pairs when their winner is in `group`.
-fn prefer(group: &mut Vec<Finding>) {
+fn prefer(group: &mut Vec<usize>, findings: &[Finding]) {
     for (winner, loser) in PREFERRED {
-        if group.iter().any(|f| f.rule_id == *winner) {
-            group.retain(|f| f.rule_id != *loser);
+        if group.iter().any(|&i| findings[i].rule_id == *winner) {
+            group.retain(|&i| findings[i].rule_id != *loser);
         }
     }
 }
@@ -50,24 +60,31 @@ fn prefer(group: &mut Vec<Finding>) {
 pub fn sort(findings: &mut [Finding]) {
     findings.sort_unstable_by(|a, b| {
         let (la, lb) = (&a.location, &b.location);
-        (
-            &la.path,
-            la.line,
-            la.col,
-            a.rule_id,
-            la.end_line,
-            la.end_col,
-            &a.message,
-        )
-            .cmp(&(
-                &lb.path,
-                lb.line,
-                lb.col,
-                b.rule_id,
-                lb.end_line,
-                lb.end_col,
-                &b.message,
-            ))
+        // Byte-equal paths first: `Path::cmp` walks components, and most comparisons are
+        // within one file (P7.1).
+        let path = if la.path.as_os_str() == lb.path.as_os_str() {
+            Ordering::Equal
+        } else {
+            la.path.cmp(&lb.path)
+        };
+        path.then_with(|| {
+            (
+                la.line,
+                la.col,
+                a.rule_id,
+                la.end_line,
+                la.end_col,
+                &a.message,
+            )
+                .cmp(&(
+                    lb.line,
+                    lb.col,
+                    b.rule_id,
+                    lb.end_line,
+                    lb.end_col,
+                    &b.message,
+                ))
+        })
     });
 }
 
@@ -76,28 +93,41 @@ pub fn sort(findings: &mut [Finding]) {
 /// be sorted, so occurrence indices are deterministic.
 pub fn fingerprint(findings: &mut [Finding], assets: &[Asset]) {
     let by_path: HashMap<&Path, &Asset> = assets.iter().map(|a| (&*a.path, a)).collect();
-    let mut seen: HashMap<(&'static str, String, String), u32> = HashMap::new();
-    for f in findings {
-        let (rel, text) = match by_path.get(&*f.location.path) {
-            Some(a) => {
-                let span = a.lines.line_span(&a.source, f.location.line);
-                let text = a
-                    .source
-                    .get(span.start as usize..span.end as usize)
-                    .unwrap_or("");
-                (a.rel_path.clone(), text.trim().to_owned())
-            }
-            None => (
-                f.location.path.to_string_lossy().replace('\\', "/"),
-                String::new(),
-            ),
-        };
-        let mut h = Xxh3::new();
-        for part in [f.rule_id, &rel, &text] {
-            h.update(part.as_bytes());
-            h.update(&[0]);
+    // Keyed by the digest of `rule\0rel\0text\0`, and that hasher state memoized per
+    // (rule, path, line): hashing or copying the line once per finding is quadratic over
+    // many findings on one huge line (P7.1). Fingerprint values are unchanged.
+    let mut seen: HashMap<u64, u32> = HashMap::new();
+    // Findings are sorted by (path, line, …), so the memo only holds the current line.
+    let mut line: Option<(&Path, u32)> = None;
+    let mut prefix: HashMap<&'static str, (Xxh3, u64)> = HashMap::new();
+    for f in findings.iter_mut() {
+        let here = (&*f.location.path, f.location.line);
+        if line != Some(here) {
+            prefix.clear();
+            line = Some(here);
         }
-        let n = seen.entry((f.rule_id, rel, text)).or_insert(0);
+        let (base, digest) = prefix.entry(f.rule_id).or_insert_with(|| {
+            let (rel, text) = match by_path.get(&*f.location.path) {
+                Some(a) => {
+                    let span = a.lines.line_span(&a.source, f.location.line);
+                    let text = a
+                        .source
+                        .get(span.start as usize..span.end as usize)
+                        .unwrap_or("");
+                    (a.rel_path.clone(), text.trim())
+                }
+                None => (f.location.path.to_string_lossy().replace('\\', "/"), ""),
+            };
+            let mut h = Xxh3::new();
+            for part in [f.rule_id, &rel, text] {
+                h.update(part.as_bytes());
+                h.update(&[0]);
+            }
+            let digest = h.digest();
+            (h, digest)
+        });
+        let n = seen.entry(*digest).or_insert(0);
+        let mut h = base.clone();
         h.update(&n.to_le_bytes());
         *n += 1;
         f.fingerprint = h.digest();
@@ -155,18 +185,16 @@ mod tests {
     fn prefer_drops_sec004_next_to_sec003() {
         let a = asset("x");
         let s = Span::new(0, 1);
-        let mut g = vec![
+        let fs = vec![
             finding(&a, "AI-SEC-004", Severity::Critical, s),
             finding(&a, "AI-SEC-003", Severity::High, s),
         ];
-        prefer(&mut g);
-        assert_eq!(
-            g.iter().map(|f| f.rule_id).collect::<Vec<_>>(),
-            ["AI-SEC-003"]
-        );
-        let mut alone = vec![finding(&a, "AI-SEC-004", Severity::Critical, s)];
-        prefer(&mut alone);
-        assert_eq!(alone.len(), 1);
+        let mut g = vec![0, 1];
+        prefer(&mut g, &fs);
+        assert_eq!(g, [1]);
+        let mut alone = vec![0];
+        prefer(&mut alone, &fs);
+        assert_eq!(alone, [0]);
     }
 
     #[test]

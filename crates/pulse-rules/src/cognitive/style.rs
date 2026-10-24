@@ -1,9 +1,11 @@
 //! Directive style: vague directives (AI-COG-002), negative-only constraints (AI-COG-003)
 //! and emphasis inflation (AI-COG-004).
 
+use std::sync::LazyLock;
+
 use pulse_core::{Asset, Category, Finding, KindSet, Rule, RuleCtx, RuleMeta, Severity, Span};
 
-use super::directives::{Polarity, Word, extract, is, is_directive, lemma, sentences, words};
+use super::directives::{Polarity, Word, extract, is, is_directive, lemma};
 use crate::lexicon::directives::{ALTERNATIVES, NEGATIVE_FIRST, NEGATORS, QUALIFIERS};
 use crate::lexicon::imperatives::IMPERATIVES;
 use crate::lexicon::style::{ACRONYMS, ANCHORS, DIRECTIVE_VERBS, EMPHASIS, VAGUE};
@@ -31,16 +33,17 @@ impl Rule for VagueDirective {
         let src = asset.source.as_str();
         let mut ws = Vec::new();
         let mut hits = Vec::new();
-        sentences(src, asset.markdown(), |r| {
+        for s in asset.prose().sentences() {
+            let r = s.range.clone();
             let Some(text) = src.get(r.clone()) else {
-                return;
+                continue;
             };
-            words(text, &mut ws);
+            s.words(src, &mut ws);
             let Some((i, term)) = vague(&ws) else {
-                return;
+                continue;
             };
             if !is_directive(&ws) || anchored(text, &ws) {
-                return;
+                continue;
             }
             let start = r.start + offset(text, ws[i].text);
             hits.push(Hit {
@@ -48,7 +51,7 @@ impl Rule for VagueDirective {
                 quote: term,
                 token_waste: 0,
             });
-        });
+        }
         aggregate(
             &META_VAGUE,
             asset,
@@ -60,21 +63,41 @@ impl Rule for VagueDirective {
     }
 }
 
-/// Index of the first word of the first [`VAGUE`] term in `w`, with the term.
-fn vague(w: &[Word<'_>]) -> Option<(usize, &'static str)> {
-    (0..w.len()).find_map(|i| VAGUE.iter().find(|t| phrase_at(w, i, t)).map(|&t| (i, t)))
+/// A lexicon phrase split into lemmatized words, once (not per sentence word).
+type Phrase = (&'static str, Vec<&'static str>);
+
+fn lemmatize(list: &'static [&'static str]) -> Vec<Phrase> {
+    list.iter()
+        .map(|&p| (p, p.split_whitespace().map(lemma).collect()))
+        .filter(|(_, ws): &Phrase| !ws.is_empty())
+        .collect()
 }
 
-/// Whether the words of `phrase` occur in `w` from index `i` (lemmas compared).
-fn phrase_at(w: &[Word<'_>], i: usize, phrase: &str) -> bool {
-    let mut k = i;
-    for p in phrase.split_whitespace() {
-        match w.get(k) {
-            Some(x) if lemma(x.text).eq_ignore_ascii_case(lemma(p)) => k += 1,
-            _ => return false,
-        }
-    }
-    k > i
+static VAGUE_PHRASES: LazyLock<Vec<Phrase>> = LazyLock::new(|| lemmatize(VAGUE));
+static ANCHOR_PHRASES: LazyLock<Vec<Phrase>> = LazyLock::new(|| lemmatize(ANCHORS));
+
+/// Index of the first word of the first [`VAGUE`] term in `w`, with the term.
+fn vague(w: &[Word<'_>]) -> Option<(usize, &'static str)> {
+    find_phrase(w, &VAGUE_PHRASES)
+}
+
+/// The first position in `w` where one of `phrases` occurs (lemmas compared), in word
+/// order then lexicon order.
+fn find_phrase(w: &[Word<'_>], phrases: &[Phrase]) -> Option<(usize, &'static str)> {
+    (0..w.len()).find_map(|i| {
+        let first = lemma(w[i].text);
+        phrases
+            .iter()
+            .find(|(_, p)| {
+                p.first().is_some_and(|f| first.eq_ignore_ascii_case(f))
+                    && w.len() - i >= p.len()
+                    && p[1..]
+                        .iter()
+                        .zip(&w[i + 1..])
+                        .all(|(p, x)| lemma(x.text).eq_ignore_ascii_case(p))
+            })
+            .map(|&(t, _)| (i, t))
+    })
 }
 
 /// AI-COG-002 anchor: a digit, a code span, a path or file name, or an example.
@@ -82,7 +105,7 @@ fn anchored(text: &str, w: &[Word<'_>]) -> bool {
     text.bytes()
         .any(|b| b.is_ascii_digit() || b == b'`' || b == b'/')
         || w.iter().any(|x| x.text.contains('.'))
-        || (0..w.len()).any(|i| ANCHORS.iter().any(|a| phrase_at(w, i, a)))
+        || find_phrase(w, &ANCHOR_PHRASES).is_some()
 }
 
 pub static META_NEGATIVE: RuleMeta = RuleMeta {
@@ -115,16 +138,15 @@ impl Rule for NegativeOnly {
         if negatives.is_empty() {
             return;
         }
-        let mut sents = Vec::new();
-        sentences(src, asset.markdown(), |r| sents.push(r));
+        let sents: Vec<_> = asset.prose().sentences().collect();
         let mut ws = Vec::new();
         let mut hits = Vec::new();
         for d in &negatives {
             // AI-COG-003: an alternative in the same or the next sentence.
-            let i = sents.partition_point(|r| r.start < d.span.start as usize);
-            let offers = sents.iter().skip(i).take(2).enumerate().any(|(k, r)| {
-                let text = src.get(r.clone()).unwrap_or_default();
-                words(text, &mut ws);
+            let i = sents.partition_point(|s| s.range.start < d.span.start as usize);
+            let offers = sents.iter().skip(i).take(2).enumerate().any(|(k, s)| {
+                let text = src.get(s.range.clone()).unwrap_or_default();
+                s.words(src, &mut ws);
                 alternative(&ws) || k == 0 && positive_clause(text, &ws)
             });
             if !offers {
@@ -211,20 +233,20 @@ impl Rule for EmphasisInflation {
         let mut ws = Vec::new();
         let (mut directives, mut emphasized) = (0usize, 0usize);
         let mut first = None;
-        sentences(src, asset.markdown(), |r| {
-            let Some(text) = src.get(r.clone()) else {
-                return;
+        for s in asset.prose().sentences() {
+            let Some(text) = src.get(s.range.clone()) else {
+                continue;
             };
-            words(text, &mut ws);
+            s.words(src, &mut ws);
             if !is_directive(&ws) {
-                return;
+                continue;
             }
             directives += 1;
             if emphasis(text, &ws) {
                 emphasized += 1;
-                first.get_or_insert(span(r.start, r.end));
+                first.get_or_insert(span(s.range.start, s.range.end));
             }
-        });
+        }
         // AI-COG-004: > 25% of directives and at least 4 of them.
         if emphasized < MIN_EMPHASIZED || emphasized * 4 <= directives {
             return;
@@ -283,6 +305,7 @@ fn span(start: usize, end: usize) -> Span {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cognitive::directives::words;
 
     fn guarded(s: &str) -> bool {
         let mut w = Vec::new();

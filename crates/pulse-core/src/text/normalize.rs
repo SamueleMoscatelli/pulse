@@ -52,8 +52,22 @@ pub fn normalize(src: &str) -> Normalized {
     let mut seg: Vec<char> = Vec::new();
     let mut seg_start = 0u32;
 
-    for (i, c) in src.char_indices() {
+    let bytes = src.as_bytes();
+    let mut i = 0;
+    while let Some(&b) = bytes.get(i) {
         let off = to_u32(i);
+        // Fast path (P7.1): an ASCII byte followed by ASCII (or the end) is a complete NFKC
+        // segment, not invisible and not a confusable: no segment buffering or NFKC pass.
+        if b.is_ascii() && bytes.get(i + 1).is_none_or(u8::is_ascii) {
+            out.flush(&mut seg, seg_start);
+            out.push_ascii(b, off);
+            i += 1;
+            continue;
+        }
+        let Some(c) = src.get(i..).and_then(|rest| rest.chars().next()) else {
+            break;
+        };
+        i += c.len_utf8();
         if is_invisible(c).is_some() {
             continue;
         }
@@ -112,6 +126,19 @@ impl Builder {
             for l in c.to_lowercase() {
                 self.emit(l, src);
             }
+        }
+    }
+
+    /// [`Self::push`] for an ASCII byte.
+    fn push_ascii(&mut self, b: u8, src: u32) {
+        if (b as char).is_whitespace() {
+            if !self.text.ends_with(' ') {
+                self.text.push(' ');
+                self.map.push(src);
+            }
+        } else if !matches!(b, b'*' | b'_' | b'~' | b'`') {
+            self.text.push(char::from(b.to_ascii_lowercase()));
+            self.map.push(src);
         }
     }
 
@@ -179,6 +206,15 @@ mod tests {
     #[test]
     fn normalize_folds_full_width() {
         assert_eq!(normalize("ｉｇｎｏｒｅ").text, "ignore");
+    }
+
+    #[test]
+    fn ascii_before_combining_mark_still_composes() {
+        let n = normalize("Cafe\u{301} x\u{308}\u{301}Y\u{0}\u{B}z");
+        assert_eq!(n.text, "café ẍ\u{301}y\u{0} z");
+        // `é` (2 bytes) maps to the `e` it was composed from.
+        assert_eq!(&n.map[3..5], &[3, 3]);
+        assert_eq!(n.map.len(), n.text.len() + 1);
     }
 
     #[test]

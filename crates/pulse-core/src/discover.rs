@@ -176,6 +176,9 @@ fn glob(field: &'static str, pattern: &str) -> Result<Glob, DiscoverError> {
 /// Maps a rel path to its asset kind and load mode. Built once per scan.
 #[derive(Debug)]
 pub struct Classifier {
+    /// Cheap file-name test implied by every pattern; `None` when a pattern's last segment
+    /// is not a plain name or `*suffix`.
+    names: Option<NameFilter>,
     set: GlobSet,
     /// Glob index in `set` → table entry. Lower index = higher priority.
     entries: Vec<Entry>,
@@ -187,9 +190,11 @@ impl Classifier {
     pub fn new(config: &Config) -> Result<Self, DiscoverError> {
         let mut set = GlobSetBuilder::new();
         let mut entries = Vec::new();
+        let mut names = Some(NameFilter::default());
         let mut add = |field, pattern: &str, entry: Entry| -> Result<(), DiscoverError> {
             set.add(glob(field, pattern)?);
             entries.push(entry);
+            names = names.take().and_then(|n| n.with(pattern));
             Ok(())
         };
         for &(patterns, kind, refine) in TABLE {
@@ -235,6 +240,7 @@ impl Classifier {
         })?;
 
         Ok(Self {
+            names,
             set,
             entries,
             exclude,
@@ -244,6 +250,12 @@ impl Classifier {
     /// Classifies `rel_path` by name only. `scratch` is reused across calls to avoid allocation.
     /// Returns the entry and whether the content must be sniffed as Tools.
     fn lookup(&self, rel_path: &str, scratch: &mut Vec<usize>) -> Option<(Entry, bool)> {
+        if let Some(names) = &self.names {
+            let name = rel_path.rsplit('/').next().unwrap_or(rel_path);
+            if !names.accepts(name) {
+                return None;
+            }
+        }
         self.set
             .matches_candidate_into(&Candidate::new(rel_path), scratch);
         let entry = *self.entries.get(*scratch.iter().min()?)?;
@@ -260,6 +272,36 @@ impl Classifier {
     /// Whether `rel_path` matches `scan.exclude`.
     pub fn is_excluded(&self, rel_path: &str) -> bool {
         !self.exclude.is_empty() && self.exclude.is_match(rel_path)
+    }
+}
+
+/// File names that can match the classifier's globs: a glob's last segment matches the
+/// file name alone (`literal_separator`), so a file whose name is none of `names` and
+/// ends with none of `suffixes` matches no glob. Skips the `GlobSet` for most files of a
+/// repo (source code), a discovery hotspot (P7.1).
+#[derive(Debug, Default)]
+struct NameFilter {
+    names: Vec<String>,
+    suffixes: Vec<String>,
+}
+
+impl NameFilter {
+    /// Adds `pattern`'s last segment, or gives up (`None`) if it is not a plain name or
+    /// `*` followed by a plain suffix.
+    fn with(mut self, pattern: &str) -> Option<Self> {
+        let last = pattern.rsplit('/').next().unwrap_or(pattern);
+        let plain = |s: &str| !s.contains(['*', '?', '[', ']', '{', '}', '\\']);
+        match last.strip_prefix('*') {
+            Some(suffix) if plain(suffix) => self.suffixes.push(suffix.to_owned()),
+            None if plain(last) => self.names.push(last.to_owned()),
+            _ => return None,
+        }
+        Some(self)
+    }
+
+    fn accepts(&self, name: &str) -> bool {
+        self.suffixes.iter().any(|s| name.ends_with(s.as_str()))
+            || self.names.iter().any(|n| n == name)
     }
 }
 
@@ -316,7 +358,10 @@ fn is_tool(value: &serde_json::Value) -> bool {
 }
 
 fn rel_of(root: &Path, path: &Path) -> Option<String> {
-    let rel = path.strip_prefix(root).ok()?.to_str()?;
+    let rel = match strip_root(root, path) {
+        Some(rel) => rel,
+        None => path.strip_prefix(root).ok()?.to_str()?,
+    };
     Some(if rel.contains('\\') {
         rel.replace('\\', "/")
     } else {
@@ -324,10 +369,34 @@ fn rel_of(root: &Path, path: &Path) -> Option<String> {
     })
 }
 
+/// Fast path of [`rel_of`]: walked paths are `root` joined with the rest, so a byte prefix
+/// check replaces `Path::strip_prefix`, which compares component by component (a
+/// hotspot over 200k files, P7.1). `None` means "use the slow path".
+fn strip_root<'a>(root: &Path, path: &'a Path) -> Option<&'a str> {
+    let sep = |b: &u8| *b == b'/' || (cfg!(windows) && *b == b'\\');
+    let root = root.as_os_str().as_encoded_bytes();
+    if root.is_empty() {
+        return None;
+    }
+    let rest = path.as_os_str().as_encoded_bytes().strip_prefix(root)?;
+    let rest = match (root.last(), rest.split_first()) {
+        (_, None) => rest,
+        (_, Some((b, tail))) if sep(b) => tail,
+        (Some(b), Some(_)) if sep(b) => rest,
+        _ => return None,
+    };
+    if rest.first().is_some_and(sep) {
+        return None;
+    }
+    std::str::from_utf8(rest).ok()
+}
+
 #[derive(Default)]
 struct Collected {
     assets: Vec<DiscoveredFile>,
-    all_paths: HashSet<String>,
+    /// Hashed once, after the walk: per-thread sets merged into a shared one cost two hashes
+    /// and a rehash per path (P7.1).
+    all_paths: Vec<String>,
     skipped: Vec<(PathBuf, String)>,
 }
 
@@ -391,9 +460,11 @@ pub fn discover(root: &Path, config: &Config) -> Result<Discovery, DiscoverError
         .assets
         .sort_unstable_by(|a, b| a.rel_path.cmp(&b.rel_path));
     collected.skipped.sort_unstable();
+    let mut all_paths = HashSet::with_capacity(collected.all_paths.len());
+    all_paths.extend(collected.all_paths);
     Ok(Discovery {
         assets: collected.assets,
-        all_paths: collected.all_paths,
+        all_paths,
         skipped: collected.skipped,
     })
 }
@@ -431,7 +502,7 @@ fn visit(
     // analyzed twice: their target is walked on its own.
     if file_type.is_symlink() {
         if let Some(rel_path) = rel_of(root, entry.path()) {
-            out.all_paths.insert(rel_path);
+            out.all_paths.push(rel_path);
         }
         return;
     }
@@ -462,7 +533,7 @@ fn visit(
             });
         }
     }
-    out.all_paths.insert(rel_path);
+    out.all_paths.push(rel_path);
 }
 
 fn error_path(err: &ignore::Error) -> Option<PathBuf> {
@@ -550,6 +621,57 @@ mod tests {
             c.and_then(|c| c.classify("docs/ai/x.md")),
             Some((AssetKind::Custom, LoadMode::OnDemand))
         );
+    }
+
+    #[test]
+    fn name_filter_skips_only_impossible_names() {
+        let c = Classifier::new(&Config::default()).expect("classifier");
+        let names = c.names.as_ref().expect("built-in table is filterable");
+        for name in [
+            "CLAUDE.md",
+            "x.mdc",
+            ".cursorrules",
+            "a.prompty",
+            "mcp.json",
+            "SKILL.md",
+        ] {
+            assert!(names.accepts(name), "{name}");
+        }
+        for name in ["main.rs", "CLAUDE.txt", "Makefile", "md"] {
+            assert!(!names.accepts(name), "{name}");
+        }
+        // A complex last segment disables the filter rather than missing assets.
+        assert!(
+            NameFilter::default()
+                .with("**/prompts/*.{md,txt}")
+                .is_none()
+        );
+        assert!(NameFilter::default().with("**/AI-?.md").is_none());
+        let mut cfg = Config::default();
+        cfg.scan.include = vec!["docs/ai/*.txt".to_owned()];
+        let c = Classifier::new(&cfg).expect("classifier");
+        assert_eq!(
+            c.classify("docs/ai/x.txt").map(|(k, _)| k),
+            Some(AssetKind::Custom)
+        );
+        assert_eq!(c.classify("src/main.rs"), None);
+    }
+
+    #[test]
+    fn rel_of_fast_and_slow_paths() {
+        let rel = |root: &str, path: &str| rel_of(Path::new(root), Path::new(path));
+        assert_eq!(
+            rel("repo", "repo/a/CLAUDE.md").as_deref(),
+            Some("a/CLAUDE.md")
+        );
+        assert_eq!(rel("repo/", "repo/a.md").as_deref(), Some("a.md"));
+        assert_eq!(rel(".", "./x/y.md").as_deref(), Some("x/y.md"));
+        assert_eq!(rel("repo", "repo").as_deref(), Some(""));
+        // Not a component prefix: the fast path declines, the slow path rejects.
+        assert_eq!(rel("rep", "repo/a.md"), None);
+        assert_eq!(strip_root(Path::new("rep"), Path::new("repo/a.md")), None);
+        // Same components, different bytes: the slow path still matches.
+        assert_eq!(rel("repo", "repo//a.md").as_deref(), Some("a.md"));
     }
 
     #[test]

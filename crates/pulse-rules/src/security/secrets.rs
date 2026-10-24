@@ -33,7 +33,10 @@ impl Rule for HardcodedSecret {
         let mut hits = Vec::new();
         for i in &MATCHERS.set.matches(src) {
             let provider = &PROVIDERS[i];
-            for caps in MATCHERS.regexes[i].captures_iter(src) {
+            let Some(re) = MATCHERS.regex(i) else {
+                continue;
+            };
+            for caps in re.captures_iter(src) {
                 let Some(m) = caps.get(1).or_else(|| caps.get(0)) else {
                     continue;
                 };
