@@ -1,5 +1,8 @@
 # Pulse
 
+[![CI](https://github.com/SamueleMoscatelli/pulse/actions/workflows/ci.yml/badge.svg)](https://github.com/SamueleMoscatelli/pulse/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 **A static analyzer and Quality Gate for AI assets**: the instructions, agents, prompts,
 skills, tool definitions, MCP server configs and hooks that steer coding agents. Think
 "SonarQube for AI assets": one deterministic, offline binary that scans a repository in
@@ -21,7 +24,9 @@ other paths can be declared in `pulse.toml`.
 
 ## Status
 
-Pre-1.0: the rule set and report formats may still change between releases.
+The first release, **1.0.0**, is being prepared. Until it is out, the install, GitHub Action
+and pre-commit snippets below have nothing to download: build from source instead
+(see [Build](#build)).
 
 ## Quickstart
 
@@ -79,6 +84,7 @@ can be suppressed inline, with a reason:
 
 Release binaries for macOS (arm64, x64), Linux (x64, arm64; static musl) and Windows (x64)
 are attached to each [GitHub release](https://github.com/SamueleMoscatelli/pulse/releases).
+From source: `cargo install --locked --git https://github.com/SamueleMoscatelli/pulse pulse-cli`.
 
 ```sh
 # macOS / Linux
@@ -98,9 +104,9 @@ permissions:
   security-events: write   # only with `sarif: true`
 steps:
   - uses: actions/checkout@v4
-  - uses: SamueleMoscatelli/pulse@v0.1.0
+  - uses: SamueleMoscatelli/pulse@v1.0.0
     with:
-      version: latest        # or a release, e.g. 0.1.0
+      version: latest        # or a release, e.g. 1.0.0
       args: --new-only       # extra `pulse ci` flags
       sarif: true            # also upload a SARIF report to code scanning
 ```
@@ -113,7 +119,7 @@ The action downloads the release binary for the runner, verifies its checksum an
 ```yaml
 repos:
   - repo: https://github.com/SamueleMoscatelli/pulse
-    rev: v0.1.0
+    rev: v1.0.0
     hooks:
       - id: pulse
 ```
@@ -181,7 +187,9 @@ scripts/check.sh               # fmt + clippy + tests
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). False positives are bugs: please
+[report them](https://github.com/SamueleMoscatelli/pulse/issues/new/choose) with the snippet
+that triggered the rule. Security issues: see [SECURITY.md](SECURITY.md).
 
 ## License
 
