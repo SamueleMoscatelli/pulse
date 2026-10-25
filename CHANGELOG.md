@@ -4,9 +4,9 @@ All notable changes to Pulse are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Pulse follows
 [semantic versioning](https://semver.org/).
 
-## 1.0.0-rc.1 - 2026-10-25
+## 1.0.0 - 2026-10-25
 
-The first public release candidate.
+The first stable release.
 
 ### Added
 
@@ -23,3 +23,7 @@ The first public release candidate.
 - Terminal, JSON, SARIF 2.1.0, Markdown and GitHub (annotations + job summary) reports.
 - Release binaries for macOS, Linux and Windows, shell and PowerShell installers, a Homebrew
   formula, a GitHub Action and a pre-commit hook.
+
+## 1.0.0-rc.1 - 2026-10-25
+
+Release candidate for 1.0.0, with the same features.
