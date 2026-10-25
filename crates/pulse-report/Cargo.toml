@@ -20,4 +20,4 @@ workspace = true
 
 [dev-dependencies]
 insta = "1.49.0"
-jsonschema = { version = "0.59.0", default-features = false }
+jsonschema = { version = "0.60.0", default-features = false }
