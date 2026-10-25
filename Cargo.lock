@@ -759,7 +759,7 @@ dependencies = [
 
 [[package]]
 name = "pulse-cli"
-version = "1.0.0-rc.1"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -775,7 +775,7 @@ dependencies = [
 
 [[package]]
 name = "pulse-core"
-version = "1.0.0-rc.1"
+version = "1.0.0"
 dependencies = [
  "globset",
  "ignore",
@@ -794,7 +794,7 @@ dependencies = [
 
 [[package]]
 name = "pulse-engine"
-version = "1.0.0-rc.1"
+version = "1.0.0"
 dependencies = [
  "divan",
  "globset",
@@ -811,7 +811,7 @@ dependencies = [
 
 [[package]]
 name = "pulse-report"
-version = "1.0.0-rc.1"
+version = "1.0.0"
 dependencies = [
  "anstyle",
  "insta",
@@ -825,7 +825,7 @@ dependencies = [
 
 [[package]]
 name = "pulse-rules"
-version = "1.0.0-rc.1"
+version = "1.0.0"
 dependencies = [
  "aho-corasick",
  "memchr",

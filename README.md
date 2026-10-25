@@ -22,12 +22,19 @@ modes), `AGENTS.md`, `GEMINI.md`, Cursor, Windsurf and Cline rules, hook configs
 (`.mcp.json`, `.vscode/mcp.json`, `claude_desktop_config.json`, …) and tool definitions;
 other paths can be declared in `pulse.toml`.
 
-## Status
+## Stability
 
-The first release, **1.0.0**, is being prepared, and release candidates are published as
-[prereleases](https://github.com/SamueleMoscatelli/pulse/releases) for testing. Until 1.0.0 is
-out, the `latest` links and the `v1.0.0` examples below have nothing to download: use a release
-candidate's own links and tag, or build from source (see [Build](#build)).
+Pulse follows [semantic versioning](https://semver.org/). Within a major version, these do not
+change incompatibly:
+
+- commands, flags and exit codes
+- `pulse.toml` keys and inline suppression syntax
+- rule IDs (a removed rule's ID is never reused)
+- the JSON report schema (`pulse/report@1`) and the SARIF output
+
+Minor releases can add rules and improve detections, so an upgrade may report new findings: pin
+a version in CI (`version: 1.0.0` in the Action, `rev:` in pre-commit) and upgrade on purpose.
+The terminal output is for people and may change in any release.
 
 ## Quickstart
 
@@ -48,7 +55,7 @@ or I/O error.
 
 ```text
 $ pulse scan
- Pulse 1.0.0-rc.1 · 33 assets · 204 tokens · 10 ms
+ Pulse 1.0.0 · 33 assets · 204 tokens · 10 ms
 
  QUALITY GATE   FAILED
    ✖ severity ≥ high        1 issue    (allowed 0)
