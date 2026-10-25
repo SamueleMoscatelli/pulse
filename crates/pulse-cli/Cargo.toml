@@ -1,6 +1,9 @@
 [package]
 name = "pulse-cli"
-description = "Pulse command-line interface"
+description = "Static analyzer and Quality Gate for AI assets: instructions, agents, prompts, skills, MCP configs and hooks"
+keywords = ["ai", "llm", "mcp", "static-analysis", "security"]
+categories = ["command-line-utilities", "development-tools"]
+readme = "../../README.md"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -1,0 +1,30 @@
+name: Rule proposal
+description: Suggest a new rule, or a detection an existing rule misses.
+labels: [rule]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What goes wrong for an agent or a team when this pattern is in an asset?
+    validations:
+      required: true
+  - type: textarea
+    id: fail
+    attributes:
+      label: Should be reported
+      description: One or more realistic snippets, with their file paths.
+    validations:
+      required: true
+  - type: textarea
+    id: pass
+    attributes:
+      label: Should not be reported
+      description: Near-misses that look similar but are fine. These keep the rule from being noisy.
+    validations:
+      required: true
+  - type: input
+    id: existing
+    attributes:
+      label: Related existing rule
+      placeholder: AI-SEC-002
