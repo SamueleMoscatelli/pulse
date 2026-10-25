@@ -112,9 +112,9 @@ permissions:
   security-events: write   # only with `sarif: true`
 steps:
   - uses: actions/checkout@v7
-  - uses: SamueleMoscatelli/pulse@v1.0.0
+  - uses: SamueleMoscatelli/pulse@v1  # the action; follows every 1.x release
     with:
-      version: latest        # or a release, e.g. 1.0.0
+      version: latest        # the binary; pin one, e.g. 1.0.0, for stable CI
       args: --new-only       # extra `pulse ci` flags
       sarif: true            # also upload a SARIF report to code scanning
 ```
@@ -184,6 +184,15 @@ Releases are built by [`dist`](https://opensource.axo.dev/cargo-dist/) (`dist-wo
 `.github/workflows/release.yml`): pushing a `vX.Y.Z` tag builds every target and publishes a
 GitHub release; pull requests run `dist plan` only. After changing the dist config, run
 `dist generate` and commit the regenerated workflow.
+
+To release: bump the workspace version and `CHANGELOG.md` in a PR, merge it, then tag `main`.
+A `-rc.N` suffix publishes a prerelease. After a stable release, move the major tag that
+GitHub Action users reference:
+
+```sh
+git tag -a vX.Y.Z -m "Pulse X.Y.Z" && git push origin vX.Y.Z
+git tag -f -a v1 -m "Pulse v1" 'vX.Y.Z^{}' && git push -f origin v1
+```
 
 ## Build
 
