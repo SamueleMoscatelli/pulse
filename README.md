@@ -24,9 +24,10 @@ other paths can be declared in `pulse.toml`.
 
 ## Status
 
-The first release, **1.0.0**, is being prepared. Until it is out, the install, GitHub Action
-and pre-commit snippets below have nothing to download: build from source instead
-(see [Build](#build)).
+The first release, **1.0.0**, is being prepared, and release candidates are published as
+[prereleases](https://github.com/SamueleMoscatelli/pulse/releases) for testing. Until 1.0.0 is
+out, the `latest` links and the `v1.0.0` examples below have nothing to download: use a release
+candidate's own links and tag, or build from source (see [Build](#build)).
 
 ## Quickstart
 
@@ -47,7 +48,7 @@ or I/O error.
 
 ```text
 $ pulse scan
- Pulse 0.1.0 · 33 assets · 204 tokens · 41 ms
+ Pulse 1.0.0-rc.1 · 33 assets · 204 tokens · 10 ms
 
  QUALITY GATE   FAILED
    ✖ severity ≥ high        1 issue    (allowed 0)
@@ -103,7 +104,7 @@ permissions:
   contents: read
   security-events: write   # only with `sarif: true`
 steps:
-  - uses: actions/checkout@v4
+  - uses: actions/checkout@v7
   - uses: SamueleMoscatelli/pulse@v1.0.0
     with:
       version: latest        # or a release, e.g. 1.0.0

@@ -4,9 +4,9 @@ All notable changes to Pulse are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Pulse follows
 [semantic versioning](https://semver.org/).
 
-## Unreleased
+## 1.0.0-rc.1 - 2026-10-25
 
-The first public release.
+The first public release candidate.
 
 ### Added
 
