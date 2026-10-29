@@ -59,7 +59,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 
 ## Phase 8 — Real-world accuracy (v1.1.0)
 - [x] P8.1 Before/after comparison harness
-- [ ] P8.2 Recognize library assets outside activation folders
+- [x] P8.2 Recognize library assets outside activation folders
 - [ ] P8.3 AI-STR-008: asset in a place no assistant loads
 - [ ] P8.4 AI-COG-003 redesign: real prohibitions only
 - [ ] P8.5 Visible advice: fixes by default, `-v` for all

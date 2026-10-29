@@ -11,6 +11,7 @@ use ignore::{DirEntry, WalkBuilder, WalkState};
 
 use crate::config::Config;
 use crate::model::{AssetKind, LoadMode};
+use crate::parse::json::{JsonDoc, JsonValue};
 
 /// Directory names pruned at any depth (spec 02-assets → Default excludes).
 pub const DEFAULT_EXCLUDES: &[&str] = &[
@@ -32,7 +33,7 @@ pub const DEFAULT_EXCLUDES: &[&str] = &[
 /// Ignore file honored alongside `.gitignore` and `.ignore`.
 pub const PULSE_IGNORE: &str = ".pulseignore";
 
-/// Bytes read when sniffing a `tools/*.json` candidate.
+/// Bytes read when sniffing a content-sniffed candidate (`tools/*.json`, `hooks.json`, `mcp.json`).
 const SNIFF_BYTES: u64 = 64 * 1024;
 
 /// Error building the classifier or starting the walk.
@@ -76,8 +77,19 @@ enum Refine {
     NestedConditional,
     /// Promoted to Always by frontmatter (see `Asset::effective_load`).
     Scoped,
-    /// `tools/*.json`: a Tools asset only if its content looks like tool schemas.
-    SniffTools,
+    /// An asset only if its content has the expected shape.
+    Sniff(Sniff),
+}
+
+/// Content test for files whose name alone is ambiguous.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Sniff {
+    /// `tools/*.json`: tool schemas.
+    Tools,
+    /// `hooks.json` anywhere: a top-level `hooks` object.
+    Hooks,
+    /// `mcp.json` anywhere: a top-level `mcpServers` or `servers` object.
+    Mcp,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -85,6 +97,8 @@ struct Entry {
     kind: AssetKind,
     load: LoadMode,
     refine: Refine,
+    /// Built-in row whose load mode `scan.library` turns into OnDemand.
+    builtin: bool,
 }
 
 /// The built-in discovery table, in priority order (first match wins).
@@ -159,7 +173,37 @@ const TABLE: &[(&[&str], AssetKind, Refine)] = &[
         Refine::None,
     ),
     (&["**/*.tools.json"], AssetKind::Tools, Refine::None),
-    (&["**/tools/*.json"], AssetKind::Tools, Refine::SniffTools),
+    (
+        &["**/tools/*.json"],
+        AssetKind::Tools,
+        Refine::Sniff(Sniff::Tools),
+    ),
+];
+
+/// Library rows, matched after [`TABLE`]: assets stored for distribution, not loaded from
+/// where they are, so they are always OnDemand (spec 02-assets → Discovery table, row 10).
+const LIBRARY_TABLE: &[(&[&str], AssetKind, Refine)] = &[
+    (
+        &["**/*.agent.md", "**/*.chatmode.md"],
+        AssetKind::Agent,
+        Refine::None,
+    ),
+    (&["**/*.prompt.md"], AssetKind::Prompt, Refine::None),
+    (
+        &["**/*.instructions.md"],
+        AssetKind::ScopedInstructions,
+        Refine::None,
+    ),
+    (
+        &["**/hooks.json"],
+        AssetKind::Hooks,
+        Refine::Sniff(Sniff::Hooks),
+    ),
+    (
+        &["**/mcp.json"],
+        AssetKind::McpConfig,
+        Refine::Sniff(Sniff::Mcp),
+    ),
 ];
 
 fn glob(field: &'static str, pattern: &str) -> Result<Glob, DiscoverError> {
@@ -173,6 +217,18 @@ fn glob(field: &'static str, pattern: &str) -> Result<Glob, DiscoverError> {
         })
 }
 
+fn glob_set(field: &'static str, patterns: &[String]) -> Result<GlobSet, DiscoverError> {
+    let mut set = GlobSetBuilder::new();
+    for pattern in patterns {
+        set.add(glob(field, pattern)?);
+    }
+    set.build().map_err(|source| DiscoverError::Glob {
+        field,
+        glob: String::new(),
+        source,
+    })
+}
+
 /// Maps a rel path to its asset kind and load mode. Built once per scan.
 #[derive(Debug)]
 pub struct Classifier {
@@ -183,10 +239,13 @@ pub struct Classifier {
     /// Glob index in `set` → table entry. Lower index = higher priority.
     entries: Vec<Entry>,
     exclude: GlobSet,
+    /// `scan.library`: built-in assets under these globs are OnDemand.
+    library: GlobSet,
 }
 
 impl Classifier {
-    /// Builds the table plus `scan.custom` (then `scan.include` as Custom) and `scan.exclude`.
+    /// Builds the table and library rows plus `scan.custom` (then `scan.include` as Custom),
+    /// `scan.exclude` and `scan.library`.
     pub fn new(config: &Config) -> Result<Self, DiscoverError> {
         let mut set = GlobSetBuilder::new();
         let mut entries = Vec::new();
@@ -197,11 +256,14 @@ impl Classifier {
             names = names.take().and_then(|n| n.with(pattern));
             Ok(())
         };
-        for &(patterns, kind, refine) in TABLE {
+        let library_rows = LIBRARY_TABLE.iter().map(|row| (row, LoadMode::OnDemand));
+        let rows = TABLE.iter().map(|row| (row, row.1.default_load()));
+        for (&(patterns, kind, refine), load) in rows.chain(library_rows) {
             let entry = Entry {
                 kind,
-                load: kind.default_load(),
+                load,
                 refine,
+                builtin: true,
             };
             for pattern in patterns {
                 add("discovery table", pattern, entry)?;
@@ -212,6 +274,7 @@ impl Classifier {
                 kind: decl.kind,
                 load: decl.load.unwrap_or(decl.kind.default_load()),
                 refine: Refine::None,
+                builtin: false,
             };
             add("scan.custom", &decl.glob, entry)?;
         }
@@ -220,6 +283,7 @@ impl Classifier {
                 kind: AssetKind::Custom,
                 load: AssetKind::Custom.default_load(),
                 refine: Refine::None,
+                builtin: false,
             };
             add("scan.include", pattern, entry)?;
         }
@@ -229,27 +293,18 @@ impl Classifier {
             source,
         })?;
 
-        let mut exclude = GlobSetBuilder::new();
-        for pattern in &config.scan.exclude {
-            exclude.add(glob("scan.exclude", pattern)?);
-        }
-        let exclude = exclude.build().map_err(|source| DiscoverError::Glob {
-            field: "scan.exclude",
-            glob: String::new(),
-            source,
-        })?;
-
         Ok(Self {
             names,
             set,
             entries,
-            exclude,
+            exclude: glob_set("scan.exclude", &config.scan.exclude)?,
+            library: glob_set("scan.library", &config.scan.library)?,
         })
     }
 
     /// Classifies `rel_path` by name only. `scratch` is reused across calls to avoid allocation.
-    /// Returns the entry and whether the content must be sniffed as Tools.
-    fn lookup(&self, rel_path: &str, scratch: &mut Vec<usize>) -> Option<(Entry, bool)> {
+    /// Returns the entry and the content test it still needs, if any.
+    fn lookup(&self, rel_path: &str, scratch: &mut Vec<usize>) -> Option<(Entry, Option<Sniff>)> {
         if let Some(names) = &self.names {
             let name = rel_path.rsplit('/').next().unwrap_or(rel_path);
             if !names.accepts(name) {
@@ -259,8 +314,16 @@ impl Classifier {
         self.set
             .matches_candidate_into(&Candidate::new(rel_path), scratch);
         let entry = *self.entries.get(*scratch.iter().min()?)?;
-        let load = resolve_load(entry, rel_path);
-        Some((Entry { load, ..entry }, entry.refine == Refine::SniffTools))
+        let load = if entry.builtin && !self.library.is_empty() && self.library.is_match(rel_path) {
+            LoadMode::OnDemand
+        } else {
+            resolve_load(entry, rel_path)
+        };
+        let sniff = match entry.refine {
+            Refine::Sniff(sniff) => Some(sniff),
+            _ => None,
+        };
+        Some((Entry { load, ..entry }, sniff))
     }
 
     /// Classifies `rel_path` by name only (no content sniffing).
@@ -318,34 +381,70 @@ fn resolve_load(entry: Entry, rel_path: &str) -> LoadMode {
             }
         }
         // Scoped: frontmatter promotion happens in `Asset::effective_load`.
-        Refine::Scoped | Refine::None | Refine::SniffTools => entry.load,
+        Refine::Scoped | Refine::None | Refine::Sniff(_) => entry.load,
     }
 }
 
-/// Spec 02-assets → Content sniffing for Tools: an object, or array of objects, with `name`
-/// plus `input_schema` | `parameters` | `inputSchema`. Reads at most 64 KiB.
-fn sniff_tools(path: &Path) -> io::Result<bool> {
+/// Reads at most 64 KiB of `path` and applies `sniff` (spec 02-assets → Content sniffing).
+fn sniff_file(path: &Path, sniff: Sniff) -> io::Result<bool> {
     let mut buf = Vec::new();
     File::open(path)?.take(SNIFF_BYTES).read_to_end(&mut buf)?;
+    let truncated = buf.len() as u64 >= SNIFF_BYTES;
     let bytes = buf.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&buf);
+    Ok(match sniff {
+        Sniff::Tools => sniff_tools(bytes, truncated),
+        Sniff::Hooks => sniff_object(bytes, truncated, &["hooks"]),
+        Sniff::Mcp => sniff_object(bytes, truncated, &["mcpServers", "servers"]),
+    })
+}
+
+/// Tools: an object, or array of objects, with `name` plus `input_schema` | `parameters` |
+/// `inputSchema`.
+fn sniff_tools(bytes: &[u8], truncated: bool) -> bool {
     if let Ok(value) = serde_json::from_slice::<serde_json::Value>(bytes) {
-        return Ok(match &value {
+        return match &value {
             serde_json::Value::Array(items) => !items.is_empty() && items.iter().all(is_tool),
             other => is_tool(other),
-        });
+        };
     }
-    if (buf.len() as u64) < SNIFF_BYTES {
-        return Ok(false);
+    if !truncated {
+        return false;
     }
     // Truncated: fall back to a key scan over the prefix.
-    let starts_ok = bytes
+    let has = |key: &[u8]| memchr::memmem::find(bytes, key).is_some();
+    starts_with(bytes, b"{[")
+        && has(b"\"name\"")
+        && (has(b"\"input_schema\"") || has(b"\"parameters\"") || has(b"\"inputSchema\""))
+}
+
+/// Hooks / MCP configs: a JSONC object with one of `keys` holding an object. A truncated
+/// prefix falls back to a key scan (starts with `{`, contains a quoted key).
+fn sniff_object(bytes: &[u8], truncated: bool, keys: &[&str]) -> bool {
+    if truncated {
+        return starts_with(bytes, b"{")
+            && keys.iter().any(|k| {
+                let quoted = format!("\"{k}\"");
+                memchr::memmem::find(bytes, quoted.as_bytes()).is_some()
+            });
+    }
+    let Ok(source) = std::str::from_utf8(bytes) else {
+        return false;
+    };
+    let doc = JsonDoc::parse(source);
+    let Some(JsonValue::Object(members)) = doc.root.as_ref().map(|n| &n.value) else {
+        return false;
+    };
+    members
+        .iter()
+        .any(|m| keys.contains(&m.key.as_str()) && matches!(m.value.value, JsonValue::Object(_)))
+}
+
+/// Whether the first non-whitespace byte is one of `firsts`.
+fn starts_with(bytes: &[u8], firsts: &[u8]) -> bool {
+    bytes
         .iter()
         .find(|b| !b.is_ascii_whitespace())
-        .is_some_and(|b| matches!(b, b'{' | b'['));
-    let has = |key: &[u8]| memchr::memmem::find(bytes, key).is_some();
-    Ok(starts_ok
-        && has(b"\"name\"")
-        && (has(b"\"input_schema\"") || has(b"\"parameters\"") || has(b"\"inputSchema\"")))
+        .is_some_and(|b| firsts.contains(b))
 }
 
 fn is_tool(value: &serde_json::Value) -> bool {
@@ -516,14 +615,13 @@ fn visit(
         return;
     };
     if let Some((entry, sniff)) = classifier.lookup(&rel_path, scratch) {
-        let is_asset = !sniff
-            || match sniff_tools(path) {
-                Ok(is_tools) => is_tools,
-                Err(err) => {
-                    out.skipped.push((path.to_path_buf(), err.to_string()));
-                    false
-                }
-            };
+        let is_asset = sniff.is_none_or(|sniff| match sniff_file(path, sniff) {
+            Ok(matches) => matches,
+            Err(err) => {
+                out.skipped.push((path.to_path_buf(), err.to_string()));
+                false
+            }
+        });
         if is_asset {
             out.assets.push(DiscoveredFile {
                 path: Arc::from(path),
@@ -600,6 +698,60 @@ mod tests {
         // `*` does not cross `/`: tools/a/b.json is not a tools/*.json candidate.
         assert_eq!(classify("tools/a/b.json"), None);
         assert_eq!(classify("README.md"), None);
+    }
+
+    #[test]
+    fn classify_library_rows_after_platform_rows() {
+        use AssetKind::*;
+        use LoadMode::*;
+        for (rel, want) in [
+            ("agents/a.agent.md", Some((Agent, OnDemand))),
+            ("x/b.chatmode.md", Some((Agent, OnDemand))),
+            ("p/c.prompt.md", Some((Prompt, OnDemand))),
+            ("i/d.instructions.md", Some((ScopedInstructions, OnDemand))),
+            ("hooks/x/hooks.json", Some((Hooks, OnDemand))),
+            ("mcp.json", Some((McpConfig, OnDemand))),
+            // Platform rows still win.
+            (".github/agents/a.agent.md", Some((Agent, Always))),
+            (".github/prompts/c.prompt.md", Some((Prompt, OnDemand))),
+            (
+                ".github/instructions/d.instructions.md",
+                Some((ScopedInstructions, Conditional)),
+            ),
+            ("plugin/hooks/hooks.json", Some((Hooks, Always))),
+            (".vscode/mcp.json", Some((McpConfig, Always))),
+            ("agent.md", None),
+        ] {
+            assert_eq!(classify(rel), want, "{rel}");
+        }
+    }
+
+    #[test]
+    fn scan_library_applies_to_builtin_rows_only() {
+        let mut config = Config::default();
+        config.scan.library = vec!["lib/**".to_owned()];
+        config.scan.custom.push(CustomAssetDecl {
+            glob: "lib/*.txt".to_owned(),
+            kind: AssetKind::Instructions,
+            load: Some(LoadMode::Always),
+        });
+        let c = Classifier::new(&config).expect("classifier");
+        assert_eq!(
+            c.classify("lib/x/SKILL.md"),
+            Some((AssetKind::Skill, LoadMode::OnDemand))
+        );
+        assert_eq!(
+            c.classify("lib/CLAUDE.md"),
+            Some((AssetKind::Instructions, LoadMode::OnDemand))
+        );
+        assert_eq!(
+            c.classify("lib/a.txt"),
+            Some((AssetKind::Instructions, LoadMode::Always))
+        );
+        assert_eq!(
+            c.classify("skills/x/SKILL.md"),
+            Some((AssetKind::Skill, LoadMode::Always))
+        );
     }
 
     #[test]
@@ -694,7 +846,7 @@ mod tests {
         let check = |body: &str| {
             let p = dir.path().join("t.json");
             std::fs::write(&p, body).ok();
-            sniff_tools(&p).ok()
+            sniff_file(&p, Sniff::Tools).ok()
         };
         assert_eq!(check(r#"[{"name":"a","input_schema":{}}]"#), Some(true));
         assert_eq!(check(r#"{"name":"a","parameters":{}}"#), Some(true));
@@ -706,5 +858,22 @@ mod tests {
             "x".repeat(70_000)
         );
         assert_eq!(check(&big), Some(true));
+    }
+
+    #[test]
+    fn sniff_hooks_and_mcp_shapes() {
+        let hooks = |body: &str| sniff_object(body.as_bytes(), false, &["hooks"]);
+        let mcp = |body: &str| sniff_object(body.as_bytes(), false, &["mcpServers", "servers"]);
+        assert!(hooks("{ // jsonc\n \"hooks\": {}, }"));
+        assert!(!hooks(r#"{"hooks": []}"#));
+        assert!(!hooks(r#"[{"hooks": {}}]"#));
+        assert!(!hooks("{"));
+        assert!(mcp(r#"{"mcpServers": {"a": {}}}"#));
+        assert!(mcp(r#"{"servers": {}, "inputs": []}"#));
+        assert!(!mcp(r#"{"name": "mcp", "servers": 3}"#));
+        assert!(!mcp(""));
+        let big = format!(r#"{{"hooks": {{"x": "{}"#, "y".repeat(70_000));
+        assert!(sniff_object(big.as_bytes(), true, &["hooks"]));
+        assert!(!sniff_object(big.as_bytes(), true, &["servers"]));
     }
 }

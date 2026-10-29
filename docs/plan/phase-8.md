@@ -80,6 +80,8 @@ make tests depend on the clone. Every card reports its before/after delta from
   - AI-COG-004: bold used as structure is not emphasis: table cells, a bold label ending in `:` (`**Output (…):**`), a `**Term**: …` lead-in (`skills/agent-supply-chain/SKILL.md`).
   - AI-STR-003 skill paths: a path mentioned only in a code span or code block is reported only if its first directory exists in the skill or root (a likely typo) or it is run by a command (`python`, `python3`, `node`, `bash`, `sh`, `pwsh`, `uv run`, …); Markdown links and `@` imports are checked as today (`.github/skills/create-canvas-extension/SKILL.md`, `assets/preview.png` at lines 23 and 64). Amend ADR-027 with ADR-045.
   - AI-EFF-003: duplicate *lines* (not paragraphs) are Low; duplicate paragraphs stay Medium.
+  - AI-STR-005: know Copilot tool names in `*.agent.md`/`*.prompt.md` `tools:` (`codebase`, `search`, `fetch`, `runCommands`, `problems`, toolsets, `<server>/*` MCP refs, …); 1598 corpus hits after P8.2 (`agents/*.agent.md`).
+  - AI-STR-006: accept the Copilot hooks format (`version: 1`, camelCase events such as `sessionStart`/`preToolUse`, `bash`/`powershell` commands, `timeoutSec`); 24 corpus hits after P8.2 (`hooks/*/hooks.json`).
 - **Done when** check is green; each case has a pass fixture and a near-miss fail fixture; `compare.sh` delta in the PR.
 
 ## P8.8 — Evaluation report and release candidate

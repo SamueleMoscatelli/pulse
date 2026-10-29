@@ -1,0 +1,2 @@
+[scan]
+library = ["skills/**", ".github/agents/**"]

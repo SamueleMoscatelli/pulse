@@ -15,20 +15,24 @@ Patterns are globset globs relative to the scan root. `**/` means "at any depth"
 | 7 | `**/.cursor/rules/**/*.mdc`, `**/.claude/rules/**/*.md`, `**/.github/instructions/**/*.instructions.md`, `**/.windsurf/rules/**/*.md`, `**/.clinerules/**/*.md` | ScopedInstructions | Conditional* | MD+FM |
 | 8 | `**/CLAUDE.md`, `**/CLAUDE.local.md`, `**/AGENTS.md`, `**/GEMINI.md`, `**/.github/copilot-instructions.md`, `**/.cursorrules`, `**/.windsurfrules`, `**/.clinerules` (file) | Instructions | Always** | MD |
 | 9 | `**/*.tools.json`, `**/tools/*.json` (content-sniffed, see below) | Tools | Always | JSON |
-| 10 | `[[scan.custom]]` entries in `pulse.toml` | Custom (declared kind) | declared | declared |
+| 10 | Library rows (ADR-041): `**/*.agent.md`, `**/*.chatmode.md` → Agent; `**/*.prompt.md` → Prompt; `**/*.instructions.md` → ScopedInstructions; `**/hooks.json` (content-sniffed) → Hooks; `**/mcp.json` (content-sniffed) → McpConfig | per pattern | OnDemand*** | as rows 2–7 |
+| 11 | `[[scan.custom]]` entries in `pulse.toml` | Custom (declared kind) | declared | declared |
 
 \* ScopedInstructions become **Always** when their frontmatter says so: `.mdc` with `alwaysApply: true`; `.claude/rules` and `.github/instructions` without `paths`/`applyTo`, or with `applyTo: "**"`.
+\*** Row 10 finds assets stored outside the folders assistants load them from (libraries such as `github/awesome-copilot`). They are always OnDemand, whatever their frontmatter says (no ScopedInstructions promotion), so they add nothing to always-on tokens, context load or AI-EFF-002; every rule still runs on them. Built-in assets (rows 1–10) whose path matches a `scan.library` glob are OnDemand the same way, including `SKILL.md` files; `[[scan.custom]]` and `scan.include` entries keep their declared load.
 \** Nested `CLAUDE.md`/`AGENTS.md` below the root load only when the agent works in that subtree. They count as **Conditional** for context-load metrics; root-level ones count as **Always**.
 
 ### Content sniffing for Tools
 
 A `*.json` file under a `tools/` directory is a Tools asset only if its top-level value is an object or array whose element(s) have `name` plus (`input_schema` | `parameters` | `inputSchema`). Otherwise it is ignored silently. Sniffing parses at most the first 64 KiB; if that prefix is truncated JSON, it falls back to a key scan (starts with `{`/`[`, contains `"name"` and a schema key). `*.tools.json` is not sniffed.
 
+Row 10's `hooks.json` is a Hooks asset only if its top level is an object with a `hooks` object; `mcp.json` is a McpConfig only with an `mcpServers` or `servers` object. Both are parsed as JSONC from the same 64 KiB prefix; a truncated prefix falls back to a key scan (starts with `{`, contains the quoted key).
+
 ### Default excludes
 
-`.git`, `node_modules`, `target`, `dist`, `build`, `out`, `vendor`, `.venv`, `venv`, `__pycache__`, `.next`, `.turbo`, `coverage`. `.gitignore`, `.ignore` and `.pulseignore` are honored. Hidden directories are **not** skipped, since most assets live in them. `scan.exclude` / `scan.include` in `pulse.toml` extend the table.
+`.git`, `node_modules`, `target`, `dist`, `build`, `out`, `vendor`, `.venv`, `venv`, `__pycache__`, `.next`, `.turbo`, `coverage`. `.gitignore`, `.ignore` and `.pulseignore` are honored. Hidden directories are **not** skipped, since most assets live in them. `scan.exclude` / `scan.include` in `pulse.toml` extend the table; `scan.library` changes load modes only.
 
-Matching order: built-in rows 1–9, then `[[scan.custom]]`, then `scan.include` globs (kind Custom, load OnDemand). Ignore files are read from the scan root downward only: `.gitignore` applies even outside a git repo, while ancestors' ignore files and the global gitignore do not (deterministic across machines). `scan.exclude` globs are relative to the root and `*` does not cross `/`; use `**/` for any depth. Unfollowed symlinks are recorded as existing paths, not analyzed. `.claude/CLAUDE.md` counts as root-level. Skill and Agent are discovered with load Always; only their description counts toward always-on tokens.
+Matching order: built-in rows 1–10, then `[[scan.custom]]`, then `scan.include` globs (kind Custom, load OnDemand). Ignore files are read from the scan root downward only: `.gitignore` applies even outside a git repo, while ancestors' ignore files and the global gitignore do not (deterministic across machines). `scan.exclude` globs are relative to the root and `*` does not cross `/`; use `**/` for any depth. Unfollowed symlinks are recorded as existing paths, not analyzed. `.claude/CLAUDE.md` counts as root-level. Skill and Agent are discovered with load Always; only their description counts toward always-on tokens.
 
 ## Per-kind parsed views
 
