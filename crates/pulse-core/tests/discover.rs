@@ -64,6 +64,56 @@ fn discover_mixed_lists_exact_assets() -> Result<(), Box<dyn std::error::Error>>
     Ok(())
 }
 
+fn library() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/repos/library")
+}
+
+#[test]
+fn discover_library_rows_and_scan_library() -> Result<(), Box<dyn std::error::Error>> {
+    use AssetKind::*;
+    use LoadMode::*;
+    let root = library();
+    let config = Config::load(&root, None)?;
+    let found = discover(&root, &config)?;
+    let got: Vec<(&str, AssetKind, LoadMode)> = found
+        .assets
+        .iter()
+        .map(|a| (a.rel_path.as_str(), a.kind, a.load))
+        .collect();
+    // `data/hooks.json` and `config/mcp.json` are sniffed out.
+    let expected = [
+        (".github/agents/triage.agent.md", Agent, OnDemand),
+        ("CLAUDE.md", Instructions, Always),
+        ("agents/debug.chatmode.md", Agent, OnDemand),
+        ("agents/reviewer.agent.md", Agent, OnDemand),
+        ("hooks/guard/hooks.json", Hooks, OnDemand),
+        (
+            "instructions/everywhere.instructions.md",
+            ScopedInstructions,
+            OnDemand,
+        ),
+        ("mcp.json", McpConfig, OnDemand),
+        ("prompts/release-notes.prompt.md", Prompt, OnDemand),
+        ("skills/review/SKILL.md", Skill, OnDemand),
+    ];
+    assert_eq!(got, expected);
+    assert!(found.skipped.is_empty(), "{:?}", found.skipped);
+
+    // Without `scan.library`, built-in rows keep their load mode.
+    let found = discover(&root, &Config::default())?;
+    let load = |rel: &str| {
+        found
+            .assets
+            .iter()
+            .find(|a| a.rel_path == rel)
+            .map(|a| a.load)
+    };
+    assert_eq!(load(".github/agents/triage.agent.md"), Some(Always));
+    assert_eq!(load("skills/review/SKILL.md"), Some(Always));
+    assert_eq!(load("agents/reviewer.agent.md"), Some(OnDemand));
+    Ok(())
+}
+
 #[test]
 fn discover_mixed_all_paths_honors_excludes() -> Result<(), Box<dyn std::error::Error>> {
     let root = mixed();

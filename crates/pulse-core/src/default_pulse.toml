@@ -4,6 +4,8 @@
 [scan]
 include = []                 # extra globs to treat as assets, e.g. ["prompts/**/*.md"]
 exclude = []                 # globs to skip, e.g. ["examples/**"]
+library = []                 # folders storing assets for distribution (never loaded from there),
+                             # e.g. ["agents/**", "instructions/**", "skills/**"]
 max_file_bytes = 1048576
 follow_symlinks = false
 

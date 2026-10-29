@@ -1,0 +1,7 @@
+{
+  // Copilot hook bundle
+  "version": 1,
+  "hooks": {
+    "sessionStart": [{ "type": "command", "bash": "./log.sh" }]
+  }
+}

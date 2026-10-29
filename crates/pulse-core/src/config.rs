@@ -53,6 +53,8 @@ pub struct Config {
 pub struct Scan {
     pub include: Vec<String>,
     pub exclude: Vec<String>,
+    /// Globs of folders that store assets for distribution: their assets load OnDemand.
+    pub library: Vec<String>,
     pub max_file_bytes: u64,
     pub follow_symlinks: bool,
     pub custom: Vec<CustomAssetDecl>,
@@ -63,6 +65,7 @@ impl Default for Scan {
         Self {
             include: Vec::new(),
             exclude: Vec::new(),
+            library: Vec::new(),
             max_file_bytes: 1_048_576,
             follow_symlinks: false,
             custom: Vec::new(),

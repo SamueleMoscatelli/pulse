@@ -452,3 +452,27 @@ fn custom_rule_bad_regex_is_a_config_error() {
         "{err}"
     );
 }
+
+#[test]
+fn scan_library_assets_add_no_always_on_tokens() {
+    use pulse_core::LoadMode;
+    let root = mixed().with_file_name("library");
+    let config = Config::load(&root, None).unwrap();
+    let report = scan(&root, &config, &ScanOptions::default()).unwrap();
+    let meta = |rel: &str| {
+        report
+            .assets_meta
+            .iter()
+            .find(|a| a.rel_path == rel)
+            .unwrap()
+    };
+    // `applyTo: '**'` would promote it to Always under `.github/instructions/`.
+    let lib = meta("instructions/everywhere.instructions.md");
+    assert_eq!((lib.load, lib.always_tokens), (LoadMode::OnDemand, 0));
+    let claude = meta("CLAUDE.md");
+    assert_eq!(claude.load, LoadMode::Always);
+    assert_eq!(
+        report.metrics.always_on_tokens,
+        u64::from(claude.always_tokens)
+    );
+}

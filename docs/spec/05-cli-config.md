@@ -47,6 +47,8 @@ Exit codes: `0` OK / gate passed · `1` gate failed · `2` usage, config or I/O 
 [scan]
 include = []                 # extra globs to treat as assets, e.g. ["prompts/**/*.md"]
 exclude = []                 # globs to skip, e.g. ["examples/**"]
+library = []                 # folders storing assets for distribution (never loaded from there),
+                             # e.g. ["agents/**", "instructions/**", "skills/**"]
 max_file_bytes = 1048576
 follow_symlinks = false
 
@@ -112,6 +114,8 @@ new_code_only = false
 # normalized text at word boundaries) or `max_tokens` (fires above this many tokens).
 # Severity overrides and "off" in [rules] apply to custom rule IDs too.
 ```
+
+`scan.library` globs are matched like `scan.exclude`; built-in assets under them load OnDemand (spec 02-assets → Discovery table, footnote ***).
 
 Validation: unknown top-level keys and unknown rule IDs are errors (exit 2) with a "did you mean" suggestion. Custom rule IDs must match `^X-[A-Z0-9]+-\d{3}$`. Unknown rule IDs are checked by the engine against the registry; `pulse-core` checks `max_context_debt` in [0, 1], budgets, `context.window` and `context.calibration` > 0. Optional keys: `scan.custom.load` (omitted = the kind's default), `ignore.rules` and `custom_rules.kinds` (omitted = all), `ignore.reason`, `custom_rules.remediation`. Each custom rule needs exactly one of `pattern`, `phrases` (non-empty) or `max_tokens` (> 0); IDs must be unique; `[rules.X-…]` tables accept only `severity`/`enabled`. An invalid regex is an engine config error (exit 2) naming the rule ID. `gate.min_ratings` keys: `security`, `reliability`, `clarity`, `efficiency`.
 
