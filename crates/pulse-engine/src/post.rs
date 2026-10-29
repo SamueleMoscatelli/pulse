@@ -91,7 +91,7 @@ pub fn sort(findings: &mut [Finding]) {
 /// Sets each fingerprint (spec 04-scoring-gate → Fingerprints): xxh3 of rule ID, relative path,
 /// trimmed text of the first line and the occurrence index of that triple. `findings` must
 /// be sorted, so occurrence indices are deterministic.
-pub fn fingerprint(findings: &mut [Finding], assets: &[Asset]) {
+pub fn fingerprint(findings: &mut [Finding], assets: &[Asset], root: &Path) {
     let by_path: HashMap<&Path, &Asset> = assets.iter().map(|a| (&*a.path, a)).collect();
     // Keyed by the digest of `rule\0rel\0text\0`, and that hasher state memoized per
     // (rule, path, line): hashing or copying the line once per finding is quadratic over
@@ -116,7 +116,16 @@ pub fn fingerprint(findings: &mut [Finding], assets: &[Asset]) {
                         .unwrap_or("");
                     (a.rel_path.clone(), text.trim())
                 }
-                None => (f.location.path.to_string_lossy().replace('\\', "/"), ""),
+                // A file that is not an asset (AI-STR-008): its root-relative path, so the
+                // fingerprint does not depend on where the repo is checked out.
+                None => {
+                    let path = f
+                        .location
+                        .path
+                        .strip_prefix(root)
+                        .unwrap_or(&f.location.path);
+                    (path.to_string_lossy().replace('\\', "/"), "")
+                }
             };
             let mut h = Xxh3::new();
             for part in [f.rule_id, &rel, text] {
@@ -209,7 +218,7 @@ mod tests {
                 })
                 .collect();
             sort(&mut f);
-            fingerprint(&mut f, std::slice::from_ref(&a));
+            fingerprint(&mut f, std::slice::from_ref(&a), Path::new(""));
             f.iter().map(|f| f.fingerprint).collect::<Vec<_>>()
         };
         let before = fp("dup\nbad line\ndup\n", &[1, 2, 3]);

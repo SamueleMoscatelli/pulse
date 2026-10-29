@@ -35,6 +35,7 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
         options: &rules.options,
         root,
         files: &no_files,
+        misplaced: &[],
         imports: &no_imports,
     };
     for rule in rules.asset_rules() {
@@ -71,6 +72,7 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
         options: &rules.options,
         root,
         files: &discovery.all_paths,
+        misplaced: &discovery.misplaced,
         imports: &imports,
     };
 
@@ -118,7 +120,7 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
     let (findings, suppressed) = suppress::apply(findings, &in_scope, root, &ignores, ran);
     let mut findings = dedup(findings);
     sort(&mut findings);
-    fingerprint(&mut findings, &assets);
+    fingerprint(&mut findings, &assets, root);
     let rules_at = Instant::now();
 
     let assets_meta: Vec<AssetMeta> = assets
@@ -183,14 +185,16 @@ fn read(f: &DiscoveredFile, max_bytes: u64, calibration: f64) -> Asset {
         file.take(max_bytes.saturating_add(1))
             .read_to_end(&mut bytes)
     });
-    match res {
+    let mut asset = match res {
         Err(e) => skipped(format!("cannot read: {e}")),
         Ok(n) if n as u64 > max_bytes => {
             skipped(format!("over scan.max_file_bytes ({max_bytes} bytes)"))
         }
         Ok(_) => Asset::from_bytes(f.path.clone(), &*f.rel_path, f.kind, f.load, bytes)
             .with_calibration(calibration),
-    }
+    };
+    asset.origin = f.origin;
+    asset
 }
 
 /// A rule (built-in or custom) as `config` leaves it: effective severity and whether it runs.

@@ -476,3 +476,32 @@ fn scan_library_assets_add_no_always_on_tokens() {
         u64::from(claude.always_tokens)
     );
 }
+
+#[test]
+fn str008_near_miss_fingerprint_ignores_checkout_path() {
+    let run = || {
+        let dir = tempfile::tempdir().unwrap();
+        write(dir.path(), "pkg/claude.md", b"# Notes\n");
+        write(
+            dir.path(),
+            "agents/a.agent.md",
+            b"---\nname: a\n---\nHelp.\n",
+        );
+        let report = scan(dir.path(), &Config::default(), &ScanOptions::default()).unwrap();
+        let mut hits: Vec<(String, u64)> = report
+            .findings
+            .iter()
+            .filter(|f| f.rule_id == "AI-STR-008")
+            .map(|f| {
+                let rel = f.location.path.strip_prefix(dir.path()).unwrap();
+                (rel.to_string_lossy().replace('\\', "/"), f.fingerprint)
+            })
+            .collect();
+        hits.sort();
+        hits
+    };
+    let (a, b) = (run(), run());
+    let paths: Vec<&str> = a.iter().map(|(p, _)| p.as_str()).collect();
+    assert_eq!(paths, ["agents/a.agent.md", "pkg/claude.md"]);
+    assert_eq!(a, b);
+}

@@ -12,7 +12,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use pulse_core::{
-    Asset, AssetKind, Config, Finding, ImportGraph, LoadMode, OptionsStore, RuleCtx, Severity,
+    Asset, AssetKind, Config, Finding, ImportGraph, LoadMode, Misplaced, NearMiss, OptionsStore,
+    Origin, RuleCtx, Severity,
 };
 use pulse_rules::{PROJECT_RULES, RULES, all_meta};
 
@@ -92,6 +93,7 @@ fn run_in(
         options,
         root,
         files,
+        misplaced: &[],
         imports: &imports,
     };
     let mut out = Vec::new();
@@ -1736,4 +1738,217 @@ fn cog005_same_file_pairs_are_left_to_cog001() {
         "Use npm.\n\nUse pnpm.\n",
     )]);
     assert!(f.is_empty(), "{f:?}");
+}
+
+/// Runs AI-STR-008 over library-row assets at `library` paths, platform assets at
+/// `platform` paths, plus `extra` walked files and `misplaced` near misses.
+fn str008(
+    library: &[(&str, AssetKind)],
+    platform: &[(&str, AssetKind)],
+    extra: &[&str],
+    misplaced: &[(&str, NearMiss)],
+) -> Vec<String> {
+    let mut assets: Vec<Asset> = library
+        .iter()
+        .map(|(rel, kind)| {
+            let mut a = asset(rel, *kind, b"x\n".to_vec());
+            a.origin = Origin::LibraryRow;
+            a
+        })
+        .collect();
+    assets.extend(
+        platform
+            .iter()
+            .map(|(rel, kind)| asset(rel, *kind, b"x\n".to_vec())),
+    );
+    let mut files: HashSet<String> = assets.iter().map(|a| a.rel_path.clone()).collect();
+    files.extend(extra.iter().map(|s| (*s).to_owned()));
+    let misplaced: Vec<Misplaced> = misplaced
+        .iter()
+        .map(|&(rel, near_miss)| Misplaced {
+            rel_path: rel.to_owned(),
+            near_miss,
+        })
+        .collect();
+    let config = Config::default();
+    let options = OptionsStore::empty();
+    let imports = ImportGraph::default();
+    let ctx = RuleCtx {
+        config: &config,
+        options: &options,
+        root: Path::new(""),
+        files: &files,
+        misplaced: &misplaced,
+        imports: &imports,
+    };
+    let rule = PROJECT_RULES
+        .iter()
+        .find(|r| r.meta().id == "AI-STR-008")
+        .unwrap();
+    let mut out = Vec::new();
+    rule.check_project(&assets, &ctx, &mut out);
+    let mut lines: Vec<String> = out
+        .iter()
+        .map(|f| {
+            assert!(f.message.chars().count() <= 100, "{}", f.message);
+            assert_eq!(f.severity, Severity::Medium);
+            format!("{}: {}", f.location.path.display(), f.message)
+        })
+        .collect();
+    lines.sort();
+    lines
+}
+
+#[test]
+fn str008_library_rows_report_once_per_folder() {
+    use AssetKind::*;
+    let f = str008(
+        &[
+            ("agents/b.agent.md", Agent),
+            ("agents/a.agent.md", Agent),
+            ("agents/c.chatmode.md", Agent),
+            ("instructions/x.instructions.md", ScopedInstructions),
+            ("prompts/x.prompt.md", Prompt),
+            ("hooks/guard/hooks.json", Hooks),
+            ("hooks/audit/hooks.json", Hooks),
+            ("mcp.json", McpConfig),
+            (".github/a.agent.md", Agent),
+            (".github/agent/b.agent.md", Agent),
+        ],
+        &[],
+        &[],
+        &[],
+    );
+    assert_eq!(
+        f,
+        [
+            ".github/a.agent.md: 1 agent in `.github/` is not loaded: move it to `.github/agents/`",
+            ".github/agent/b.agent.md: 1 agent in `.github/agent/` is not loaded: move it to `.github/agents/`",
+            "agents/a.agent.md: 3 agents in `agents/` are not loaded: move them to `.github/agents/`",
+            "hooks/audit/hooks.json: 2 hook configs in `hooks/` are not loaded: move them to `.github/hooks/`",
+            "instructions/x.instructions.md: 1 instruction file in `instructions/` is not loaded: move it to `.github/instructions/`",
+            "mcp.json: 1 MCP config in `./` is not loaded: move it to `.vscode/mcp.json`",
+            "prompts/x.prompt.md: 1 prompt in `prompts/` is not loaded: move it to `.github/prompts/`",
+        ]
+    );
+}
+
+#[test]
+fn str008_plugin_folders_and_platform_assets_pass() {
+    use AssetKind::*;
+    let f = str008(
+        &[
+            ("plugins/a/agents/x.agent.md", Agent),
+            ("plugins/b/agents/y.agent.md", Agent),
+            ("plugins/c/deep/agents/z.agent.md", Agent),
+        ],
+        &[
+            (".github/agents/a.agent.md", Agent),
+            (".github/prompts/a.prompt.md", Prompt),
+            (".claude/skills/review/SKILL.md", Skill),
+            ("plugins/a/skills/review/SKILL.md", Skill),
+            ("SKILL.md", Skill),
+        ],
+        &[
+            "plugins/a/plugin.json",
+            "plugins/b/.claude-plugin/plugin.json",
+            "plugins/c/.github/plugin/plugin.json",
+        ],
+        &[],
+    );
+    assert!(f.is_empty(), "{f:?}");
+}
+
+#[test]
+fn str008_skill_not_in_name_folder() {
+    use AssetKind::*;
+    let mut library = asset("lib/x/y/SKILL.md", Skill, b"x\n".to_vec());
+    library.origin = Origin::Library;
+    let f = str008(
+        &[],
+        &[
+            (".claude/skills/SKILL.md", Skill),
+            (".github/skills/a/b/SKILL.md", Skill),
+            (".claude/skill/review/SKILL.md", Skill),
+        ],
+        &[],
+        &[],
+    );
+    assert_eq!(
+        f,
+        [
+            ".claude/skill/review/SKILL.md: Skill not loaded from `.claude/skill/review/`: \
+             expected `.claude/skills/<name>/SKILL.md`",
+            ".claude/skills/SKILL.md: Skill not loaded from `.claude/skills/`: expected \
+             `.claude/skills/<name>/SKILL.md`",
+            ".github/skills/a/b/SKILL.md: Skill not loaded from `.github/skills/a/b/`: \
+             expected `.github/skills/<name>/SKILL.md`",
+        ]
+    );
+    // `scan.library` assets are declared distribution copies.
+    let rule = PROJECT_RULES
+        .iter()
+        .find(|r| r.meta().id == "AI-STR-008")
+        .unwrap();
+    let files = HashSet::new();
+    let (config, options, imports) = (
+        Config::default(),
+        OptionsStore::empty(),
+        ImportGraph::default(),
+    );
+    let ctx = RuleCtx {
+        config: &config,
+        options: &options,
+        root: Path::new(""),
+        files: &files,
+        misplaced: &[],
+        imports: &imports,
+    };
+    let mut out = Vec::new();
+    rule.check_project(std::slice::from_ref(&library), &ctx, &mut out);
+    assert!(out.is_empty());
+}
+
+#[test]
+fn str008_near_miss_names_name_the_expected_location() {
+    let cases: Vec<(&str, NearMiss)> = [
+        ".github/agent/a.md",
+        ".github/instruction/a.md",
+        ".github/prompt/a.md",
+        ".claude/agent/a.md",
+        ".claude/command/a.md",
+        ".claude/skill/x/README.md",
+        "a/skill.md",
+        "b/Skill.md",
+        ".github/copilot-instruction.md",
+        "copilot-instructions.md",
+        "claude.md",
+        "pkg/Claude.md",
+        "rules/style.mdc",
+    ]
+    .iter()
+    .map(|rel| (*rel, pulse_core::placement::near_miss(rel).unwrap()))
+    .collect();
+    let f = str008(&[], &[], &[], &cases);
+    assert_eq!(
+        f,
+        [
+            ".claude/agent/a.md: Not loaded from `.claude/agent/`: move `a.md` to `.claude/agents/`",
+            ".claude/command/a.md: Not loaded from `.claude/command/`: move `a.md` to `.claude/commands/`",
+            ".claude/skill/x/README.md: Not loaded from `.claude/skill/x/`: move `README.md` to `.claude/skills/`",
+            ".github/agent/a.md: Not loaded from `.github/agent/`: move `a.md` to `.github/agents/`",
+            ".github/copilot-instruction.md: `copilot-instruction.md` is not loaded by any \
+             assistant: rename it to `copilot-instructions.md`",
+            ".github/instruction/a.md: Not loaded from `.github/instruction/`: move `a.md` to `.github/instructions/`",
+            ".github/prompt/a.md: Not loaded from `.github/prompt/`: move `a.md` to `.github/prompts/`",
+            "a/skill.md: `skill.md` is not loaded by any assistant: rename it to `SKILL.md`",
+            "b/Skill.md: `Skill.md` is not loaded by any assistant: rename it to `SKILL.md`",
+            "claude.md: `claude.md` loads only on case-insensitive file systems: rename it \
+             to `CLAUDE.md`",
+            "copilot-instructions.md: Not loaded from `./`: move `copilot-instructions.md` to `.github/`",
+            "pkg/Claude.md: `Claude.md` loads only on case-insensitive file systems: rename \
+             it to `CLAUDE.md`",
+            "rules/style.mdc: Not loaded from `rules/`: move `style.mdc` to `.cursor/rules/`",
+        ]
+    );
 }

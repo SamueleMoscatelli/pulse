@@ -191,6 +191,7 @@ mod tests {
             options: &options,
             root: Path::new("/r"),
             files: &files,
+            misplaced: &[],
             imports: &ImportGraph::default(),
         };
         let mut out = Vec::new();

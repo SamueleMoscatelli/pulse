@@ -118,6 +118,7 @@ fn duplicated_content(bencher: Bencher) {
         options: &options,
         root: Path::new("."),
         files: &files,
+        misplaced: &[],
         imports: &imports,
     };
     let assets = &*PARAGRAPHS;
