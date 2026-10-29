@@ -10,8 +10,9 @@ use globset::{Candidate, Glob, GlobBuilder, GlobSet, GlobSetBuilder};
 use ignore::{DirEntry, WalkBuilder, WalkState};
 
 use crate::config::Config;
-use crate::model::{AssetKind, LoadMode};
+use crate::model::{AssetKind, LoadMode, Origin};
 use crate::parse::json::{JsonDoc, JsonValue};
+use crate::placement::{Misplaced, near_miss};
 
 /// Directory names pruned at any depth (spec 02-assets → Default excludes).
 pub const DEFAULT_EXCLUDES: &[&str] = &[
@@ -57,6 +58,7 @@ pub struct DiscoveredFile {
     pub rel_path: String,
     pub kind: AssetKind,
     pub load: LoadMode,
+    pub origin: Origin,
 }
 
 /// Result of a walk. `assets` and `skipped` are sorted by path.
@@ -67,6 +69,8 @@ pub struct Discovery {
     pub all_paths: HashSet<String>,
     /// Files or directories that could not be walked or sniffed, with the reason.
     pub skipped: Vec<(PathBuf, String)>,
+    /// Non-asset files with a near-miss name or folder, outside `scan.library` (AI-STR-008).
+    pub misplaced: Vec<Misplaced>,
 }
 
 /// Post-match refinement attached to a table entry.
@@ -97,8 +101,9 @@ struct Entry {
     kind: AssetKind,
     load: LoadMode,
     refine: Refine,
-    /// Built-in row whose load mode `scan.library` turns into OnDemand.
-    builtin: bool,
+    /// Platform or library row, whose load mode `scan.library` turns into OnDemand, or
+    /// custom.
+    origin: Origin,
 }
 
 /// The built-in discovery table, in priority order (first match wins).
@@ -256,14 +261,18 @@ impl Classifier {
             names = names.take().and_then(|n| n.with(pattern));
             Ok(())
         };
-        let library_rows = LIBRARY_TABLE.iter().map(|row| (row, LoadMode::OnDemand));
-        let rows = TABLE.iter().map(|row| (row, row.1.default_load()));
-        for (&(patterns, kind, refine), load) in rows.chain(library_rows) {
+        let library_rows = LIBRARY_TABLE
+            .iter()
+            .map(|row| (row, LoadMode::OnDemand, Origin::LibraryRow));
+        let rows = TABLE
+            .iter()
+            .map(|row| (row, row.1.default_load(), Origin::Platform));
+        for (&(patterns, kind, refine), load, origin) in rows.chain(library_rows) {
             let entry = Entry {
                 kind,
                 load,
                 refine,
-                builtin: true,
+                origin,
             };
             for pattern in patterns {
                 add("discovery table", pattern, entry)?;
@@ -274,7 +283,7 @@ impl Classifier {
                 kind: decl.kind,
                 load: decl.load.unwrap_or(decl.kind.default_load()),
                 refine: Refine::None,
-                builtin: false,
+                origin: Origin::Custom,
             };
             add("scan.custom", &decl.glob, entry)?;
         }
@@ -283,7 +292,7 @@ impl Classifier {
                 kind: AssetKind::Custom,
                 load: AssetKind::Custom.default_load(),
                 refine: Refine::None,
-                builtin: false,
+                origin: Origin::Custom,
             };
             add("scan.include", pattern, entry)?;
         }
@@ -314,22 +323,34 @@ impl Classifier {
         self.set
             .matches_candidate_into(&Candidate::new(rel_path), scratch);
         let entry = *self.entries.get(*scratch.iter().min()?)?;
-        let load = if entry.builtin && !self.library.is_empty() && self.library.is_match(rel_path) {
-            LoadMode::OnDemand
+        let (load, origin) = if entry.origin != Origin::Custom && self.in_library(rel_path) {
+            (LoadMode::OnDemand, Origin::Library)
         } else {
-            resolve_load(entry, rel_path)
+            (resolve_load(entry, rel_path), entry.origin)
         };
         let sniff = match entry.refine {
             Refine::Sniff(sniff) => Some(sniff),
             _ => None,
         };
-        Some((Entry { load, ..entry }, sniff))
+        Some((
+            Entry {
+                load,
+                origin,
+                ..entry
+            },
+            sniff,
+        ))
     }
 
     /// Classifies `rel_path` by name only (no content sniffing).
     pub fn classify(&self, rel_path: &str) -> Option<(AssetKind, LoadMode)> {
         self.lookup(rel_path, &mut Vec::new())
             .map(|(e, _)| (e.kind, e.load))
+    }
+
+    /// Whether `rel_path` matches `scan.library`.
+    fn in_library(&self, rel_path: &str) -> bool {
+        !self.library.is_empty() && self.library.is_match(rel_path)
     }
 
     /// Whether `rel_path` matches `scan.exclude`.
@@ -497,6 +518,7 @@ struct Collected {
     /// and a rehash per path (P7.1).
     all_paths: Vec<String>,
     skipped: Vec<(PathBuf, String)>,
+    misplaced: Vec<Misplaced>,
 }
 
 /// Per-thread buffer, merged into the shared one when the walker thread finishes.
@@ -512,6 +534,7 @@ impl Drop for Local<'_> {
         shared.assets.extend(out.assets);
         shared.all_paths.extend(out.all_paths);
         shared.skipped.extend(out.skipped);
+        shared.misplaced.extend(out.misplaced);
     }
 }
 
@@ -559,12 +582,16 @@ pub fn discover(root: &Path, config: &Config) -> Result<Discovery, DiscoverError
         .assets
         .sort_unstable_by(|a, b| a.rel_path.cmp(&b.rel_path));
     collected.skipped.sort_unstable();
+    collected
+        .misplaced
+        .sort_unstable_by(|a, b| a.rel_path.cmp(&b.rel_path));
     let mut all_paths = HashSet::with_capacity(collected.all_paths.len());
     all_paths.extend(collected.all_paths);
     Ok(Discovery {
         assets: collected.assets,
         all_paths,
         skipped: collected.skipped,
+        misplaced: collected.misplaced,
     })
 }
 
@@ -614,8 +641,9 @@ fn visit(
             .push((path.to_path_buf(), "path is not valid UTF-8".to_owned()));
         return;
     };
+    let mut is_asset = false;
     if let Some((entry, sniff)) = classifier.lookup(&rel_path, scratch) {
-        let is_asset = sniff.is_none_or(|sniff| match sniff_file(path, sniff) {
+        is_asset = sniff.is_none_or(|sniff| match sniff_file(path, sniff) {
             Ok(matches) => matches,
             Err(err) => {
                 out.skipped.push((path.to_path_buf(), err.to_string()));
@@ -628,8 +656,19 @@ fn visit(
                 rel_path: rel_path.clone(),
                 kind: entry.kind,
                 load: entry.load,
+                origin: entry.origin,
             });
         }
+    }
+    // AI-STR-008: a name check on files that are not assets; content is never read.
+    if !is_asset
+        && let Some(near_miss) = near_miss(&rel_path)
+        && !classifier.in_library(&rel_path)
+    {
+        out.misplaced.push(Misplaced {
+            rel_path: rel_path.clone(),
+            near_miss,
+        });
     }
     out.all_paths.push(rel_path);
 }
@@ -752,6 +791,40 @@ mod tests {
             c.classify("skills/x/SKILL.md"),
             Some((AssetKind::Skill, LoadMode::Always))
         );
+    }
+
+    #[test]
+    fn lookup_records_origin() {
+        let mut config = Config::default();
+        config.scan.library = vec!["lib/**".to_owned()];
+        config.scan.include = vec!["lib/*.txt".to_owned()];
+        let c = Classifier::new(&config).expect("classifier");
+        let origin = |rel: &str| c.lookup(rel, &mut Vec::new()).map(|(e, _)| e.origin);
+        assert_eq!(origin(".github/agents/a.agent.md"), Some(Origin::Platform));
+        assert_eq!(origin("agents/a.agent.md"), Some(Origin::LibraryRow));
+        assert_eq!(origin("lib/a.agent.md"), Some(Origin::Library));
+        assert_eq!(origin("lib/x/SKILL.md"), Some(Origin::Library));
+        assert_eq!(origin("lib/a.txt"), Some(Origin::Custom));
+    }
+
+    #[test]
+    fn walk_records_misplaced_outside_library() {
+        let Ok(dir) = tempfile::tempdir() else { return };
+        for rel in [
+            "claude.md",
+            ".claude/agent/a.md",
+            "lib/skill.md",
+            "CLAUDE.md",
+        ] {
+            let path = dir.path().join(rel);
+            std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+            std::fs::write(path, "x").expect("write");
+        }
+        let mut config = Config::default();
+        config.scan.library = vec!["lib/**".to_owned()];
+        let found = discover(dir.path(), &config).expect("discover");
+        let rels: Vec<&str> = found.misplaced.iter().map(|m| &*m.rel_path).collect();
+        assert_eq!(rels, [".claude/agent/a.md", "claude.md"]);
     }
 
     #[test]

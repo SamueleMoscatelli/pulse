@@ -48,6 +48,7 @@ rule_docs!(
     "AI-STR-005",
     "AI-STR-006",
     "AI-STR-007",
+    "AI-STR-008",
 );
 
 #[cfg(test)]

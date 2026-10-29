@@ -33,6 +33,7 @@
 | AI-STR-005 | Unknown tool in allow-list | Medium | asset | 4 |
 | AI-STR-006 | Invalid hook definition | High | asset | 4 |
 | AI-STR-007 | Duplicate asset name | High | project | 4 |
+| AI-STR-008 | Asset not loaded from its location | Medium | project | 8 |
 | AI-EFF-001 | Asset over token budget | High | asset | 2 |
 | AI-EFF-002 | Always-on context over budget | High | project | 2 |
 | AI-EFF-003 | Duplicated content | Medium | project | 5 |
@@ -157,6 +158,10 @@
 ### AI-STR-007 — Duplicate asset name
 - **Sev** High · **Kinds** Skill, Agent, Prompt · **Scope** project
 - **Detect** Two assets of the same kind and platform resolving to the same invocation name (skill `name`, agent `name`, command path → `/name`). Report on the second occurrence, pointing at the first. Platform = first platform dir in the path (`.claude`, `.github`, …), else the asset folder's parent (plugin `skills/`); without frontmatter `name`, the folder or file stem (ADR-028).
+
+### AI-STR-008 — Asset not loaded from its location
+- **Sev** Medium · **Kinds** Instructions, ScopedInstructions, Skill, Agent, Prompt, Hooks, McpConfig · **Scope** project · not inline-suppressible
+- **Detect** (load locations per assistant: ADR-042) (1) assets found only by discovery row 10 (`Origin::LibraryRow`: outside `scan.library`), outside plugin folders (the folder or an ancestor holds `plugin.json`, `.claude-plugin/plugin.json` or `.github/plugin/plugin.json`): one finding per (folder, kind) at its first file, naming the expected folder (`.github/agents/`, `.github/prompts/`, `.github/instructions/`, `.github/hooks/`, `.vscode/mcp.json`); hook configs group at the folder above their own (`hooks/<name>/hooks.json` → `hooks/`). (2) A `SKILL.md` from rows 1–9 whose grandparent folder is not `skills`, when its path has a platform folder (`.claude`, `.github`, `.agents`) or a `skills` folder; otherwise (a repo that is one skill) it is not reported. (3) Non-asset files with a near-miss name or folder, found by a name check during the walk (no content read), outside `scan.library`: `.md` under `.github/agent/`, `.github/instruction/`, `.github/prompt/`, `.claude/agent/`, `.claude/command/`, `.claude/skill/`; `skill.md`/`Skill.md`; `copilot-instruction.md`; `copilot-instructions.md` outside `.github/`; `claude.md`/`Claude.md` (any non-canonical case: loads on case-insensitive file systems only); `*.mdc` outside `.cursor/rules/`. `*.agent.md` directly in `.github/` and in `.github/agent/` are row-10 assets, so case (1) reports them. Findings at line 1; for non-assets the fingerprint uses the root-relative path.
 
 ---
 

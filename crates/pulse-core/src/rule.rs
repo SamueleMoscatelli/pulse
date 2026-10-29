@@ -10,6 +10,7 @@ use serde::de::DeserializeOwned;
 use crate::asset::Asset;
 use crate::config::{CONFIG_FILE, Config, ConfigError};
 use crate::model::{Finding, RuleMeta};
+use crate::placement::Misplaced;
 use crate::refs::ImportGraph;
 
 /// A rule that inspects one asset at a time.
@@ -110,6 +111,8 @@ pub struct RuleCtx<'a> {
     pub root: &'a Path,
     /// Every walked file, as a scan-root-relative path with `/` separators.
     pub files: &'a HashSet<String>,
+    /// Non-asset files with a near-miss name or folder (AI-STR-008), sorted by path.
+    pub misplaced: &'a [Misplaced],
     /// Resolved `@imports` (built after reading; empty while validating options).
     pub imports: &'a ImportGraph,
 }
@@ -158,6 +161,7 @@ mod tests {
             options: &s,
             root: Path::new("."),
             files: &files,
+            misplaced: &[],
             imports: &ImportGraph::default(),
         };
         let o: Opts = ctx.options("AI-X-001").unwrap();

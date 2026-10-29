@@ -145,6 +145,20 @@ impl AssetKind {
     }
 }
 
+/// Which discovery row found an asset (spec 02-assets → Discovery table).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum Origin {
+    /// Rows 1–9: a file an assistant loads from where it is.
+    #[default]
+    Platform,
+    /// Row 10 (ADR-041): matched by suffix only, outside the folders assistants load.
+    LibraryRow,
+    /// Rows 1–10 under a `scan.library` glob: declared as a distribution folder.
+    Library,
+    /// `[[scan.custom]]` or `scan.include`.
+    Custom,
+}
+
 /// When an asset is loaded into the model's context; drives context-load metrics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

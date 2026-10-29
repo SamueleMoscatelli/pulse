@@ -5,7 +5,7 @@ use std::sync::{Arc, OnceLock};
 
 use serde_yaml_ng::Value;
 
-use crate::model::{AssetKind, KindSet, LoadMode, Location, Span};
+use crate::model::{AssetKind, KindSet, LoadMode, Location, Origin, Span};
 use crate::parse::{JsonDoc, MarkdownView, McpView, SettingsView, ToolsView};
 use crate::text::prose::Prose;
 use crate::text::{LineIndex, Normalized, normalize, tokens};
@@ -18,6 +18,8 @@ pub struct Asset {
     pub rel_path: String,
     pub kind: AssetKind,
     pub load: LoadMode,
+    /// Which discovery row found it; [`Origin::Platform`] unless set by the caller.
+    pub origin: Origin,
     pub source: String,
     pub lines: LineIndex,
     /// The file was not valid UTF-8 and `source` is its lossy decoding (AI-STR-002).
@@ -55,6 +57,7 @@ impl Asset {
             rel_path,
             kind,
             load,
+            origin: Origin::Platform,
             source,
             lines,
             lossy: false,
@@ -255,7 +258,7 @@ impl Asset {
 }
 
 /// Whether `rel_path` lies under a `dir` (ending in `/`) at any depth.
-fn in_dir(rel_path: &str, dir: &str) -> bool {
+pub(crate) fn in_dir(rel_path: &str, dir: &str) -> bool {
     rel_path.starts_with(dir)
         || rel_path
             .match_indices(dir)
