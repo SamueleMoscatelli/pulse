@@ -58,7 +58,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [x] P7.3 Docs, license, dogfooding in CI
 
 ## Phase 8 — Real-world accuracy (v1.1.0)
-- [ ] P8.1 Before/after comparison harness
+- [x] P8.1 Before/after comparison harness
 - [ ] P8.2 Recognize library assets outside activation folders
 - [ ] P8.3 AI-STR-008: asset in a place no assistant loads
 - [ ] P8.4 AI-COG-003 redesign: real prohibitions only
