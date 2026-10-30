@@ -224,9 +224,10 @@ Every EFF finding sets `token_waste`, which feeds context debt (`04-scoring-gate
 - **Directive** (AI-COG-002, AI-COG-004) A sentence with an AI-COG-001 marker anywhere, or a verb from `lexicon::IMPERATIVES` / `lexicon::style::DIRECTIVE_VERBS` opening a clause (`Write …`, `IMPORTANT: run …`) (ADR-031).
 
 ### AI-COG-003 — Negative-only constraint
-- **Sev** Info · **Kinds** md
-- **Detect** A negative directive (`don't`/`never`/`avoid` + object) with no positive alternative in the same or the next sentence (`instead`, `use`, `prefer`, `rather`; `use` directly after a negator doesn't count). FP guards (ADR-032): a contrast after `,`/`—` that already states the positive ("becomes a finding, never a panic"), or a later clause of the same sentence opening with an imperative ("…: redact them").
-- **Fix** State what to do instead. Models follow positive instructions more reliably.
+- **Sev** Info / Low · **Kinds** md
+- **Prohibition** An imperative negation opening a clause (the sentence start or after a `:` label, optionally after `please`/`also`/`otherwise`…): `Do not`, `Don't`, `Never`, `Avoid`, `You`/`We` + `must`/`should`/`shall` + `not`/`never`, `mustn't`/`shouldn't`. Not prohibitions: statements of fact ("They do not have …", "You do not need to …"), purpose clauses ("To avoid …"), `No X` noun phrases and labels, quoted or code-span text, headings (ADR-043).
+- **Detect** (1) Info: a prohibition whose object (up to the first `QUALIFIERS`/`TERMINATORS` word) has a `lexicon::VAGUE` term or a vague limit (unnecessary, too much/many, excessive, verbose, bad, wrong), is not concrete (code span, quoted literal, path, number, file name) and has no alternative in the same or the next sentence (`instead`, `use`, `prefer`, `rather`; `use` directly after a negator doesn't count). FP guards (ADR-032): a contrast after `,`/`—` that already states the positive, or a later clause opening with an imperative after `,`/`:`/`and`/`but` ("…: redact them", "… and focus on X"). Aggregated per asset like AI-EFF-007. (2) Low, once per asset at the first prohibition: prohibitions are ≥ 60% of its directives (AI-COG-002 definition) and ≥ 8.
+- **Fix** (1) State what to do instead. (2) Lead with what good output looks like, then the limits.
 
 ### AI-COG-004 — Emphasis inflation
 - **Sev** Low · **Kinds** md

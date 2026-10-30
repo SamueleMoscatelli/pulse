@@ -61,7 +61,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [x] P8.1 Before/after comparison harness
 - [x] P8.2 Recognize library assets outside activation folders
 - [x] P8.3 AI-STR-008: asset in a place no assistant loads
-- [ ] P8.4 AI-COG-003 redesign: real prohibitions only
+- [x] P8.4 AI-COG-003 redesign: real prohibitions only
 - [ ] P8.5 Visible advice: fixes by default, `-v` for all
 - [ ] P8.6 Context load front and center
 - [ ] P8.7 False-positive guards from the corpus
