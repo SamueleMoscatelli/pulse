@@ -113,4 +113,36 @@ pub const EXCLUSIVE_SETS: &[&[&str]] = &[
 
 /// Words that offer a positive alternative to a negative directive (AI-COG-003), when no
 /// negator directly precedes them (`never use` is not one).
-pub const ALTERNATIVES: &[&str] = &["instead", "use", "using", "prefer", "rather"];
+pub const ALTERNATIVES: &[&str] = &["instead", "use", "using", "prefer", "rather", "focus"];
+
+/// Words that may precede a prohibition's opener (`Please never …`, `otherwise do not …`).
+pub const LEAD_INS: &[&str] = &[
+    "please",
+    "also",
+    "and",
+    "but",
+    "so",
+    "then",
+    "otherwise",
+    "just",
+    "again",
+];
+
+/// Subjects allowed before a modal prohibition (`You must not …`).
+pub const SUBJECTS: &[&str] = &["you", "we"];
+
+/// Modals that forbid when negated (`must not`, `should never`).
+pub const PROHIBITING_MODALS: &[&str] = &["must", "should", "shall"];
+
+/// Terms that make a prohibition vague (AI-COG-003), besides [`super::style::VAGUE`].
+pub const VAGUE_LIMITS: &[&str] = &[
+    "unnecessary",
+    "unnecessarily",
+    "too much",
+    "too many",
+    "excessive",
+    "excessively",
+    "verbose",
+    "bad",
+    "wrong",
+];

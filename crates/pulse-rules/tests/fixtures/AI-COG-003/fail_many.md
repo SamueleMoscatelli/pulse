@@ -1,6 +1,6 @@
 # Rules
 
-- Never push to main.
-- Do not edit the lockfile by hand.
-- Avoid global state.
+- Never write bad commit messages.
+- Do not make excessive changes.
+- Avoid wrong assumptions about the schema.
 - Run `cargo test` before committing.

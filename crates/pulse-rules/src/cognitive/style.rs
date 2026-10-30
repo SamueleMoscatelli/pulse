@@ -5,8 +5,11 @@ use std::sync::LazyLock;
 
 use pulse_core::{Asset, Category, Finding, KindSet, Rule, RuleCtx, RuleMeta, Severity, Span};
 
-use super::directives::{Polarity, Word, extract, is, is_directive, lemma};
-use crate::lexicon::directives::{ALTERNATIVES, NEGATIVE_FIRST, NEGATORS, QUALIFIERS};
+use super::directives::{Word, is, is_directive, lemma, same};
+use crate::lexicon::directives::{
+    ALTERNATIVES, LEAD_INS, NEGATIVE, NEGATORS, PROHIBITING_MODALS, QUALIFIERS, SUBJECTS,
+    TERMINATORS, VAGUE_LIMITS,
+};
 use crate::lexicon::imperatives::IMPERATIVES;
 use crate::lexicon::style::{ACRONYMS, ANCHORS, DIRECTIVE_VERBS, EMPHASIS, VAGUE};
 use crate::util::{Hit, aggregate, truncate};
@@ -114,13 +117,22 @@ pub static META_NEGATIVE: RuleMeta = RuleMeta {
     category: Category::Cognitive,
     default_severity: Severity::Info,
     kinds: KindSet::MARKDOWN,
-    summary: "A directive says what not to do without saying what to do instead.",
+    summary: "A vague prohibition says what not to do without saying what to do instead.",
     remediation: "State what to do instead. Models follow positive instructions more reliably.",
     inline_suppressible: true,
 };
 
 /// Words before an [`ALTERNATIVES`] cue searched for a negator (`do not ever use`).
 const NEGATOR_WINDOW: usize = 2;
+
+/// Prohibitions needed before their share of the directives is checked.
+const MIN_PROHIBITIONS: usize = 8;
+
+static VAGUE_LIMIT_PHRASES: LazyLock<Vec<Phrase>> = LazyLock::new(|| {
+    let mut v = lemmatize(VAGUE);
+    v.extend(lemmatize(VAGUE_LIMITS));
+    v
+});
 
 pub struct NegativeOnly;
 
@@ -131,30 +143,45 @@ impl Rule for NegativeOnly {
 
     fn check(&self, asset: &Asset, _ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
         let src = asset.source.as_str();
-        let negatives: Vec<_> = extract(asset)
-            .into_iter()
-            .filter(|d| d.polarity == Polarity::Negative)
-            .collect();
-        if negatives.is_empty() {
-            return;
-        }
         let sents: Vec<_> = asset.prose().sentences().collect();
         let mut ws = Vec::new();
+        let mut next = Vec::new();
         let mut hits = Vec::new();
-        for d in &negatives {
-            // AI-COG-003: an alternative in the same or the next sentence.
-            let i = sents.partition_point(|s| s.range.start < d.span.start as usize);
-            let offers = sents.iter().skip(i).take(2).enumerate().any(|(k, s)| {
-                let text = src.get(s.range.clone()).unwrap_or_default();
-                s.words(src, &mut ws);
-                alternative(&ws) || k == 0 && positive_clause(text, &ws)
-            });
+        let (mut directives, mut prohibitions) = (0usize, 0usize);
+        let mut first = None;
+        for (i, s) in sents.iter().enumerate() {
+            let Some(text) = src.get(s.range.clone()) else {
+                continue;
+            };
+            s.words(src, &mut ws);
+            let Some(n) = prohibition(text, &ws) else {
+                directives += usize::from(is_directive(&ws));
+                continue;
+            };
+            directives += 1;
+            prohibitions += 1;
+            let sp = span(s.range.start, s.range.end);
+            first.get_or_insert(sp);
+            // AI-COG-003 (1): a vague, non-concrete prohibition with no alternative in the
+            // same or the next sentence.
+            let rest = text.get(offset(text, ws[n].text)..).unwrap_or_default();
+            // The object ends at a scope or reason (`… when X is more appropriate`).
+            let end = (n + 1..ws.len())
+                .find(|&k| is(ws[k].text, QUALIFIERS) || is(ws[k].text, TERMINATORS))
+                .unwrap_or(ws.len());
+            if concrete(rest) || find_phrase(&ws[n..end], &VAGUE_LIMIT_PHRASES).is_none() {
+                continue;
+            }
+            let offers = alternative(&ws)
+                || positive_clause(text, &ws, n)
+                || sents.get(i + 1).is_some_and(|s| {
+                    s.words(src, &mut next);
+                    alternative(&next)
+                });
             if !offers {
                 hits.push(Hit {
-                    span: d.span,
-                    quote: src
-                        .get(d.span.start as usize..d.span.end as usize)
-                        .unwrap_or_default(),
+                    span: sp,
+                    quote: text,
                     token_waste: 0,
                 });
             }
@@ -165,12 +192,84 @@ impl Rule for NegativeOnly {
             &hits,
             |h| {
                 let q = truncate(h.quote, 40);
-                format!("Negative-only constraint \"{q}\": say what to do instead")
+                format!("Vague prohibition \"{q}\": say what to do instead")
             },
-            |n, top| format!("{n} negative-only constraints: {top}"),
+            |n, top| format!("{n} vague prohibitions: {top}"),
             out,
         );
+        // AI-COG-003 (2): prohibitions are >= 60% of the directives and at least 8.
+        if let Some(at) = first
+            && prohibitions >= MIN_PROHIBITIONS
+            && prohibitions * 5 >= directives * 3
+        {
+            let msg = format!(
+                "Mostly prohibitions ({prohibitions} of {directives} directives): \
+                 lead with what good output looks like"
+            );
+            let mut f = Finding::new(&META_NEGATIVE, asset, at, msg);
+            f.severity = Severity::Low;
+            out.push(f);
+        }
     }
+}
+
+/// Index in `w` of the negator of a prohibition opening a clause of `text` (the sentence
+/// start, or after a `:` label): `Do not`, `Don't`, `Never`, `Avoid`, `You must not`, after
+/// optional [`LEAD_INS`]. Not in code spans or quotes.
+fn prohibition(text: &str, w: &[Word<'_>]) -> Option<usize> {
+    (0..w.len()).find_map(|i| {
+        if i > 0 && !(w[i].brk && after_label(text, w[i].text)) {
+            return None;
+        }
+        let mut j = i;
+        while w.get(j).is_some_and(|x| is(x.text, LEAD_INS)) && j - i < 2 {
+            j += 1;
+        }
+        let subject = w.get(j).is_some_and(|x| is(x.text, SUBJECTS));
+        j += usize::from(subject);
+        let x = w.get(j)?;
+        let next_negates = || w.get(j + 1).is_some_and(|y| is(y.text, NEGATORS));
+        let n = if is(x.text, PROHIBITING_MODALS) && next_negates() {
+            j + 1
+        } else if subject {
+            // `You mustn't`; `You don't need …` and `You never …` state facts.
+            (is(x.text, NEGATORS) && x.text.len() > 5 && x.text.contains(['\'', '’']))
+                .then_some(j)?
+        } else if is(x.text, NEGATIVE) || same(x.text, "do") && next_negates() {
+            j + usize::from(same(x.text, "do"))
+        } else {
+            return None;
+        };
+        let off = offset(text, w[n].text);
+        (!in_code(text, off) && !quoted(text, off)).then_some(n)
+    })
+}
+
+/// Whether `word` (a slice of `text`) follows a `:` label (`Note: never …`, `**Rule**: …`).
+fn after_label(text: &str, word: &str) -> bool {
+    text.get(..offset(text, word))
+        .is_some_and(|b| b.trim_end().trim_end_matches(['*', '_']).ends_with(':'))
+}
+
+/// Whether byte `off` of `text` is inside a double-quoted string.
+fn quoted(text: &str, off: usize) -> bool {
+    text.get(..off).is_some_and(|b| {
+        b.bytes().filter(|&c| c == b'"').count() % 2 == 1
+            || b.matches('“').count() > b.matches('”').count()
+    })
+}
+
+/// AI-COG-003: a prohibition whose object is concrete: a code span, a quoted literal, a
+/// path, a number or a file name.
+fn concrete(rest: &str) -> bool {
+    rest.bytes()
+        .any(|b| matches!(b, b'`' | b'"' | b'/' | b'\\') || b.is_ascii_digit())
+        || rest.contains('“')
+        || rest.split_whitespace().any(|t| {
+            let t = t.trim_matches(|c: char| !c.is_alphanumeric());
+            t.split_once('.')
+                .is_some_and(|(a, b)| a.len() > 1 && b.len() > 1)
+        })
 }
 
 /// Whether `w` offers a positive alternative: an [`ALTERNATIVES`] word with no negator in
@@ -184,23 +283,17 @@ fn alternative(w: &[Word<'_>]) -> bool {
     })
 }
 
-/// AI-COG-003 FP guards within the directive's own sentence: a contrast that already states
-/// the positive (`A bad asset becomes a finding, never a panic`), or a later clause opening
-/// with an imperative (`Never put secrets in messages: redact them`).
-fn positive_clause(text: &str, w: &[Word<'_>]) -> bool {
-    let Some(n) = w
-        .iter()
-        .enumerate()
-        .position(|(i, x)| is(x.text, NEGATORS) || i == 0 && is(x.text, NEGATIVE_FIRST))
-    else {
-        return false;
-    };
+/// AI-COG-003 FP guards within the prohibition's own sentence (negator at `w[n]`): a
+/// contrast that already states the positive (`Keep it short, never a wall of text`), or a
+/// later clause opening with an imperative (`Never put secrets in messages: redact them`,
+/// `Avoid jargon and keep it short`).
+fn positive_clause(text: &str, w: &[Word<'_>], n: usize) -> bool {
     let before = text.get(..offset(text, w[n].text)).unwrap_or_default();
     let contrast =
         n > 0 && before.trim_end().ends_with([',', '—', '–']) && !is(w[0].text, QUALIFIERS);
     contrast
         || w.iter().enumerate().skip(n + 1).any(|(j, x)| {
-            x.brk
+            (x.brk || j > n + 1 && is(w[j - 1].text, &["and", "but"]))
                 && !is(x.text, NEGATORS)
                 && (is(x.text, IMPERATIVES) || is(x.text, DIRECTIVE_VERBS))
                 && !w.get(j + 1).is_some_and(|y| is(y.text, NEGATORS))
@@ -310,13 +403,65 @@ mod tests {
     fn guarded(s: &str) -> bool {
         let mut w = Vec::new();
         words(s, &mut w);
-        positive_clause(s, &w)
+        let n = w.iter().position(|x| is(x.text, NEGATORS)).unwrap_or(0);
+        positive_clause(s, &w, n)
+    }
+
+    fn prohibits(s: &str) -> bool {
+        let mut w = Vec::new();
+        words(s, &mut w);
+        prohibition(s, &w).is_some()
+    }
+
+    #[test]
+    fn prohibitions_open_a_clause() {
+        for s in [
+            "Never push to main.",
+            "Do not edit the lockfile.",
+            "Don't mock the database.",
+            "Avoid global state.",
+            "You must not log tokens.",
+            "We should never retry twice.",
+            "Respect privacy: do not include names.",
+            "**Completeness**: Don't omit resources.",
+            "Please never guess.",
+            "otherwise do not attempt to shuffle.",
+            "You mustn't skip tests.",
+        ] {
+            assert!(prohibits(s), "{s}");
+        }
+        for s in [
+            "They do not have a manifest.",
+            "To avoid conflicts, run it first.",
+            "No build step.",
+            "No Authentication",
+            "If you don't know, ask.",
+            "You do not need to restart.",
+            "A bad asset becomes a finding, never a panic.",
+            "Say \"Never mind\" to cancel.",
+            "Run `never-fail` first.",
+            "The user should not see this.",
+        ] {
+            assert!(!prohibits(s), "{s}");
+        }
+    }
+
+    #[test]
+    fn concrete_objects() {
+        assert!(concrete("Do not add `x-awesome` fields"));
+        assert!(concrete("Never commit .azure/ folders"));
+        assert!(concrete("Never edit package.json by hand"));
+        assert!(concrete("Do not exceed 80 columns"));
+        assert!(concrete("Never write \"TODO\" comments"));
+        assert!(!concrete("Do not add unnecessary comments."));
+        assert!(!concrete("Avoid bad names, e.g. foo."));
     }
 
     #[test]
     fn positive_clause_guards() {
-        assert!(guarded("A bad asset becomes a finding, never a panic."));
+        assert!(guarded("Keep it short, never a wall of text."));
         assert!(guarded("Never put secrets in messages: redact them."));
+        assert!(guarded("Avoid unnecessary complexity and keep it short."));
         assert!(!guarded("In tests, never hit the network."));
         assert!(!guarded("Never push to main, avoid force pushes."));
         assert!(!guarded("IMPORTANT: never push to main."));
