@@ -119,7 +119,7 @@ struct JsonFinding<'a> {
     end_line: u32,
     end_col: u32,
     message: &'a str,
-    remediation: Option<&'static str>,
+    remediation: Option<&'a str>,
     token_waste: u32,
     fingerprint: String,
     /// Not in the baseline (always true without one).
@@ -207,7 +207,7 @@ fn finding<'a>(f: &'a Finding, root: &Path, new: bool) -> JsonFinding<'a> {
         end_line: l.end_line,
         end_col: l.end_col,
         message: &f.message,
-        remediation: f.remediation,
+        remediation: f.remediation.as_deref(),
         token_waste: f.token_waste,
         fingerprint: crate::fingerprint(f),
         new,

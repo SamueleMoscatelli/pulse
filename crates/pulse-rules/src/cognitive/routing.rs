@@ -8,6 +8,14 @@ use crate::lexicon::routing::{
 };
 use crate::util::truncate;
 
+/// The shape of a description that routes well.
+macro_rules! template {
+    () => {
+        "Template: \"<What it does>. Use when <requests, keywords, file types>. \
+         [Not for <what a sibling handles>.]\""
+    };
+}
+
 pub static META: RuleMeta = RuleMeta {
     id: "AI-COG-006",
     name: "Weak routing description",
@@ -15,7 +23,10 @@ pub static META: RuleMeta = RuleMeta {
     default_severity: Severity::Medium,
     kinds: KindSet::SKILL.union(KindSet::AGENT),
     summary: "A skill or agent description is too short, lacks a trigger cue, or is in first person.",
-    remediation: "Say what it does and when to use it, in the third person: \"Use when the user …\".",
+    remediation: concat!(
+        "Say what it does and when to use it, in the third person. ",
+        template!()
+    ),
     inline_suppressible: true,
 };
 
@@ -49,17 +60,22 @@ impl Rule for WeakRouting {
         if !short && !no_cue && !first_person {
             return;
         }
-        let mut why = Vec::new();
+        let (mut why, mut fix) = (Vec::new(), Vec::new());
         if short {
             let n = ws.len();
             let s = if n == 1 { "" } else { "s" };
             why.push(format!("{n} word{s} (< {MIN_WORDS})"));
+            fix.push("say what it covers");
         }
         if no_cue {
             why.push("no trigger cue".into());
+            fix.push(
+                "add \"Use when …\" with the requests, keywords and file types that should trigger it",
+            );
         }
         if first_person {
             why.push("first person".into());
+            fix.push("write it in the third person (\"Reviews …\", not \"I review …\")");
         }
         let span = fm
             .key_lines
@@ -70,7 +86,8 @@ impl Rule for WeakRouting {
             truncate(desc.trim(), 24),
             why.join(", ")
         );
-        out.push(Finding::new(&META, asset, span, msg));
+        let fix = format!(concat!("{}. ", template!()), capitalize(&fix.join("; ")));
+        out.push(Finding::new(&META, asset, span, msg).with_fix(fix));
     }
 }
 
@@ -120,6 +137,14 @@ fn first_person(desc: &str, w: &[Word<'_>]) -> bool {
 fn quoted(before: &str) -> bool {
     let n = |c: char| before.chars().filter(|&x| x == c).count();
     n('"') % 2 == 1 || n('`') % 2 == 1 || n('“') > n('”')
+}
+
+/// `s` with its first letter in upper case.
+fn capitalize(s: &str) -> String {
+    let mut c = s.chars();
+    c.next()
+        .map(|f| f.to_uppercase().chain(c).collect())
+        .unwrap_or_default()
 }
 
 fn starts_with_ci(w: &str, prefix: &str) -> bool {

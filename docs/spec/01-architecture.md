@@ -72,7 +72,7 @@ pub struct Finding {
     pub severity: Severity,          // after config overrides
     pub location: Location,
     pub message: String,
-    pub remediation: Option<&'static str>,  // default comes from RuleMeta
+    pub remediation: Option<Cow<'static, str>>,  // RuleMeta's by default; a rule may set a per-finding fix
     pub token_waste: u32,            // > 0 only for efficiency findings; feeds context debt
     pub fingerprint: u64,            // set by the engine
 }

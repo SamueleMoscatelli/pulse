@@ -211,7 +211,7 @@ fn misplaced(m: &Misplaced, root: &Path) -> Finding {
             end_col: 1,
         },
         message,
-        remediation: Some(META.remediation),
+        remediation: Some(META.remediation.into()),
         token_waste: 0,
         fingerprint: 0,
     }

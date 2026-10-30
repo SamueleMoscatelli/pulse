@@ -1,0 +1,6 @@
+---
+source: crates/pulse-rules/tests/fixtures.rs
+expression: "messages(&fail_fixture_findings(\"AI-COG-004\"))"
+---
+fail_shouting.md:3:3 Emphasis on 4 of 6 directives (lines 3, 4, 5, …); emphasis works only when rare (max 25%)
+  ↳ Keep emphasis for the rules that must never be missed; state the others plainly.

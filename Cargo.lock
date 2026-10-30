@@ -828,6 +828,7 @@ name = "pulse-rules"
 version = "1.0.0"
 dependencies = [
  "aho-corasick",
+ "insta",
  "memchr",
  "pulse-core",
  "rayon",

@@ -19,7 +19,7 @@ pub struct TerminalOptions<'a> {
     pub color: bool,
     /// Findings only, one grep-friendly line each.
     pub quiet: bool,
-    /// Show the remediation of every finding, not only Critical and High.
+    /// Show the remediation of every finding, not only Medium and higher.
     pub verbose: bool,
     /// Hide findings below this severity (display only).
     pub min_severity: Severity,
@@ -184,8 +184,37 @@ pub fn render<W: Write + ?Sized>(
         })
         .collect();
     writeln!(w, "   {}", counts.join("   "))?;
+    let fixes_hidden = shown
+        .iter()
+        .any(|f| f.remediation.is_some() && !shows_fix(f, opts));
+    if fixes_hidden {
+        writeln!(
+            w,
+            "   {}",
+            p.paint(
+                DIM,
+                "Fixes shown for medium and higher · run pulse scan -v to see all"
+            )
+        )?;
+    }
 
-    findings(w, &shown, report.findings.len() - shown.len(), opts)
+    findings(w, &shown, report.findings.len() - shown.len(), opts)?;
+    if fixes_hidden {
+        writeln!(w)?;
+        writeln!(
+            w,
+            " {} Fixes shown for medium and higher findings. Run with -v to see fixes for all {}, \
+             or `pulse explain <RULE-ID>` for a rule's full guidance.",
+            p.paint(DIM, "↳"),
+            plural(shown.len(), "finding", "findings")
+        )?;
+    }
+    Ok(())
+}
+
+/// Whether the `↳` fix line of `f` is shown: Medium and higher, or all with `-v`.
+fn shows_fix(f: &Finding, opts: &TerminalOptions<'_>) -> bool {
+    opts.verbose || f.severity >= Severity::Medium
 }
 
 /// The findings, grouped by file (they arrive sorted by path).
@@ -237,8 +266,7 @@ fn findings<W: Write + ?Sized>(
             p.paint(DIM, format!("{:<rule_w$}", f.rule_id)),
             f.message
         )?;
-        let wants_fix = opts.verbose || f.severity >= Severity::High;
-        if let Some(fix) = f.remediation.filter(|_| wants_fix) {
+        if let Some(fix) = f.remediation.as_deref().filter(|_| shows_fix(f, opts)) {
             writeln!(w, "{indent}{} {fix}", p.paint(DIM, "↳"))?;
         }
     }

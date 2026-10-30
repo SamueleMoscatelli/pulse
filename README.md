@@ -40,6 +40,7 @@ The terminal output is for people and may change in any release.
 
 ```sh
 pulse scan                 # analyze the current repository
+pulse scan -v              # same, with the fix for every finding (default: medium and higher)
 pulse init                 # write a commented pulse.toml with every default
 pulse ci                   # scan + enforce the Quality Gate (exit 1 when it fails)
 pulse explain AI-SEC-002   # what a rule checks and how to fix it
@@ -71,6 +72,7 @@ $ pulse scan
 
  .claude/agents/planner.md
    3:1     MEDIUM    AI-COG-006  Weak routing description "Plans work.": 2 words (< 20), no trigger cue
+                     ↳ Say what it covers; add "Use when …" with the requests, keywords and file types that should trigger it. Template: "<What it does>. Use when <requests, keywords, file types>. [Not for <what a sibling handles>.]"
 
  tools/fetch.json
    1:1     HIGH      AI-STR-002  Invalid shape: `tools` must be an array, found object

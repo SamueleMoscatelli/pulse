@@ -1,0 +1,10 @@
+---
+source: crates/pulse-rules/tests/fixtures.rs
+expression: messages(&f)
+---
+AGENTS.md:3:1 Lines 3, 4 also in `.github/copilot-instructions.md:4, 5`; both load on every request, so they are paid twice (~34 tokens)
+  ↳ Keep one copy and reference it (an @import or a link) from the other places.
+CLAUDE.md:3:1 Lines 3, 4 also in `AGENTS.md:3, 4`; both load on every request, so they are paid twice (~34 tokens)
+  ↳ Keep one copy and reference it (an @import or a link) from the other places.
+CLAUDE.md:5:1 Lines 5, 6, 7, … also in `.github/copilot-instructions.md:6, 7, 8, …`; both load on every request, so they are paid twice (~68 tokens)
+  ↳ Keep one copy and reference it (an @import or a link) from the other places.

@@ -9,7 +9,7 @@ GLOBAL: -C, --root <DIR>   scan root (default: cwd)
         -c, --config <FILE> config path (default: <root>/pulse.toml if present)
         --color <auto|always|never>   (also honors NO_COLOR)
         -q, --quiet         findings only, no summary
-        -v, --verbose       show the remediation of every finding (terminal)
+        -v, --verbose       show the fix for every finding (terminal; by default only for medium and higher)
         --timings           print phase timings to stderr
 
 pulse init [--force]                        write a commented default pulse.toml (refuse to overwrite without --force)

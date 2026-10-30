@@ -59,7 +59,7 @@ struct Global {
     /// Findings only, no summary
     #[arg(short, long, global = true)]
     quiet: bool,
-    /// Show the remediation of every finding
+    /// Show the fix for every finding (by default only for medium and higher)
     #[arg(short, long, global = true)]
     verbose: bool,
     /// Print phase timings to stderr
