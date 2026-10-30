@@ -58,7 +58,7 @@ expression: "render(\"mixed\", Severity::Info)"
       "end_line": 3,
       "end_col": 25,
       "message": "Weak routing description \"Plans work.\": 2 words (< 20), no trigger cue",
-      "remediation": "Say what it does and when to use it, in the third person: \"Use when the user …\".",
+      "remediation": "Say what it covers; add \"Use when …\" with the requests, keywords and file types that should trigger it. Template: \"<What it does>. Use when <requests, keywords, file types>. [Not for <what a sibling handles>.]\"",
       "token_waste": 0,
       "fingerprint": "e9e361a11277d08b",
       "new": true
@@ -73,7 +73,7 @@ expression: "render(\"mixed\", Severity::Info)"
       "end_line": 3,
       "end_col": 26,
       "message": "Weak routing description \"Review code.\": 2 words (< 20), no trigger cue",
-      "remediation": "Say what it does and when to use it, in the third person: \"Use when the user …\".",
+      "remediation": "Say what it covers; add \"Use when …\" with the requests, keywords and file types that should trigger it. Template: \"<What it does>. Use when <requests, keywords, file types>. [Not for <what a sibling handles>.]\"",
       "token_waste": 0,
       "fingerprint": "655889c56bafdbe9",
       "new": true
@@ -88,7 +88,7 @@ expression: "render(\"mixed\", Severity::Info)"
       "end_line": 2,
       "end_col": 21,
       "message": "Weak routing description \"Triage.\": 1 word (< 20), no trigger cue",
-      "remediation": "Say what it does and when to use it, in the third person: \"Use when the user …\".",
+      "remediation": "Say what it covers; add \"Use when …\" with the requests, keywords and file types that should trigger it. Template: \"<What it does>. Use when <requests, keywords, file types>. [Not for <what a sibling handles>.]\"",
       "token_waste": 0,
       "fingerprint": "a78528c60652a961",
       "new": true
@@ -103,7 +103,7 @@ expression: "render(\"mixed\", Severity::Info)"
       "end_line": 2,
       "end_col": 20,
       "message": "Weak routing description \"Debug.\": 1 word (< 20), no trigger cue",
-      "remediation": "Say what it does and when to use it, in the third person: \"Use when the user …\".",
+      "remediation": "Say what it covers; add \"Use when …\" with the requests, keywords and file types that should trigger it. Template: \"<What it does>. Use when <requests, keywords, file types>. [Not for <what a sibling handles>.]\"",
       "token_waste": 0,
       "fingerprint": "2e5d087b7c24e18a",
       "new": true

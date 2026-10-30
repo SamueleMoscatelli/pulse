@@ -158,7 +158,7 @@ fn notes(asset: &Asset, d: &Directive, ran: &impl Fn(&str) -> bool, out: &mut Ve
     let mut note = |msg: String| {
         let mut f = Finding::new(&structure::content::META, asset, d.span, msg);
         f.severity = Severity::Info;
-        f.remediation = Some(NOTE_REMEDIATION);
+        f.remediation = Some(NOTE_REMEDIATION.into());
         out.push(f);
     };
     if let Some(reason) = d.invalid {

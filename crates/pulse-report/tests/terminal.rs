@@ -57,3 +57,23 @@ fn terminal_verbose_shows_every_remediation() {
     let findings = render("mixed", true, false).lines().count();
     assert_eq!(out.matches('↳').count(), findings);
 }
+
+const FIX_HINT: &str = "Fixes shown for medium and higher · run pulse scan -v to see all";
+const FIX_FOOTER: &str = "↳ Fixes shown for medium and higher findings. Run with -v";
+
+#[test]
+fn terminal_hidden_fixes_are_announced() {
+    insta::assert_snapshot!(render("advice", false, false));
+}
+
+#[test]
+fn terminal_fix_hint_absent_with_verbose_quiet_or_nothing_hidden() {
+    for out in [
+        render("advice", false, true),
+        render("advice", true, false),
+        render("mixed", false, false),
+    ] {
+        assert!(!out.contains(FIX_HINT), "{out}");
+        assert!(!out.contains(FIX_FOOTER), "{out}");
+    }
+}

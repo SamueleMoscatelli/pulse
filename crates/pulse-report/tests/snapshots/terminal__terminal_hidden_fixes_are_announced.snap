@@ -1,0 +1,27 @@
+---
+source: crates/pulse-report/tests/terminal.rs
+expression: "render(\"advice\", false, false)"
+---
+ Pulse 1.0.0 · 2 assets · 89 tokens · 8 ms
+
+ QUALITY GATE   PASSED
+   ✔ severity ≥ high        0 issues   (allowed 0)
+   ✔ context debt           0%         (max 10%)
+
+   Security      A   0 vulnerabilities
+   Reliability   A   0 bugs
+   Clarity       C   2 smells
+   Efficiency    A   context debt 0%
+   Context load      70 always-on tokens · 0% of 200k window
+
+   CRITICAL 0   HIGH 0   MEDIUM 1   LOW 1   INFO 0
+   Fixes shown for medium and higher · run pulse scan -v to see all
+
+ .claude/skills/deploy/SKILL.md
+   3:1     MEDIUM    AI-COG-006  Weak routing description "Deploys the app.": 3 words (< 20), no trigger cue
+                     ↳ Say what it covers; add "Use when …" with the requests, keywords and file types that should trigger it. Template: "<What it does>. Use when <requests, keywords, file types>. [Not for <what a sibling handles>.]"
+
+ CLAUDE.md
+   3:3     LOW       AI-COG-004  Emphasis on 4 of 6 directives (lines 3, 4, 5, …); emphasis works only when rare (max 25%)
+
+ ↳ Fixes shown for medium and higher findings. Run with -v to see fixes for all 2 findings, or `pulse explain <RULE-ID>` for a rule's full guidance.

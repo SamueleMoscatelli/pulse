@@ -1381,7 +1381,8 @@ fn eff003_duplicate_lines_across_always_on_assets() {
     assert_eq!(f.len(), 1, "{f:?}");
     assert_eq!((f[0].location.line, f[0].location.col), (4, 1));
     assert!(
-        f[0].message.starts_with("Duplicate line of AGENTS.md:3"),
+        f[0].message
+            .starts_with("Line also in `AGENTS.md:3`; both load"),
         "{}",
         f[0].message
     );
@@ -1392,6 +1393,29 @@ fn eff003_duplicate_lines_across_always_on_assets() {
         (".claude/skills/x/SKILL.md", AssetKind::Skill, &skill),
     ]);
     assert!(f.is_empty(), "{f:?}");
+}
+
+#[test]
+fn eff003_one_finding_per_file_pair() {
+    let lines: Vec<String> = (0..6)
+        .map(|i| format!("- Rule {i}: never commit generated files or secrets to the repository."))
+        .collect();
+    let claude = format!("# Rules\n\n{}\n", lines.join("\n"));
+    let agents = format!("# Agents\n\n{}\n", lines[..2].join("\n"));
+    let copilot = format!("# Copilot\n\n- Use tabs.\n{}\n", lines.join("\n"));
+    let mut f = eff003(&[
+        ("CLAUDE.md", AssetKind::Instructions, &claude),
+        ("AGENTS.md", AssetKind::Instructions, &agents),
+        (
+            ".github/copilot-instructions.md",
+            AssetKind::Instructions,
+            &copilot,
+        ),
+    ]);
+    f.sort_by_key(|f| (f.location.path.clone(), f.location.line));
+    let total: u32 = f.iter().map(|f| f.token_waste).sum();
+    assert!(total > 0);
+    insta::assert_snapshot!(messages(&f));
 }
 
 #[test]
@@ -1611,8 +1635,9 @@ fn cog002_and_cog004_messages() {
     assert_eq!(f.len(), 1, "{f:?}");
     assert_eq!(
         f[0].message,
-        "4 of 5 directives (80%) are emphasized; none stands out"
+        "Emphasis on 4 of 5 directives (lines 1, 2, 3, …); emphasis works only when rare (max 25%)"
     );
+    assert!(f[0].message.chars().count() <= 100);
 }
 
 fn instr(rel: &str, load: LoadMode, text: &str) -> Asset {
@@ -1951,4 +1976,51 @@ fn str008_near_miss_names_name_the_expected_location() {
             "rules/style.mdc: Not loaded from `rules/`: move `style.mdc` to `.cursor/rules/`",
         ]
     );
+}
+
+// Message and fix snapshots for rules whose advice is per finding (P8.5).
+
+/// `path:line:col message`, then the `↳ fix`, one finding after another.
+fn messages(findings: &[Finding]) -> String {
+    findings
+        .iter()
+        .map(|f| {
+            format!(
+                "{}:{}:{} {}\n  ↳ {}\n",
+                f.location.path.display(),
+                f.location.line,
+                f.location.col,
+                f.message,
+                f.remediation.as_deref().unwrap_or("-")
+            )
+        })
+        .collect()
+}
+
+/// Findings of `rule_id` over its `fail_*` fixtures.
+fn fail_fixture_findings(rule_id: &str) -> Vec<Finding> {
+    let dir = fixtures_dir().join(rule_id);
+    let mut names: Vec<String> = fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().into_string().unwrap())
+        .filter(|n| n.starts_with("fail_") && is_fixture(n))
+        .collect();
+    names.sort();
+    let assets: Vec<Asset> = names
+        .iter()
+        .map(|n| asset(n, kind_of(&dir, n), fs::read(dir.join(n)).unwrap()))
+        .collect();
+    let mut f = run(rule_id, &assets);
+    f.sort_by(|a, b| a.location.path.cmp(&b.location.path));
+    f
+}
+
+#[test]
+fn cog004_messages() {
+    insta::assert_snapshot!(messages(&fail_fixture_findings("AI-COG-004")));
+}
+
+#[test]
+fn cog006_messages() {
+    insta::assert_snapshot!(messages(&fail_fixture_findings("AI-COG-006")));
 }

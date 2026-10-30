@@ -38,6 +38,8 @@ const BANDS: usize = 8;
 const MAX_CHAIN: usize = 64;
 /// Chars of the earlier occurrence's path quoted in a message (its tail is kept).
 const QUOTED_PATH: usize = 24;
+/// Repeated lines listed in a message.
+const LISTED_LINES: usize = 3;
 /// Chars of the duplicate quoted in a message.
 const QUOTED_TEXT: usize = 40;
 
@@ -221,6 +223,8 @@ fn lines(
     let mut heads: HashMap<u64, u32, IdBuild> =
         HashMap::with_capacity_and_hasher(all.len(), IdBuild::default());
     let mut prev = vec![u32::MAX; all.len()];
+    // (asset, earlier asset, line span, earlier line span) of every repeated line.
+    let mut pairs: Vec<(usize, usize, Span, Span)> = Vec::new();
     for (n, &(i, key, span)) in all.iter().enumerate() {
         let mut next = heads.insert(key, n as u32).unwrap_or(u32::MAX);
         prev[n] = next;
@@ -229,20 +233,65 @@ fn lines(
                 break;
             };
             if j != i && related(roots[j], roots[i]) {
-                let asset = assets[i];
-                out.push(finding(
-                    asset,
-                    assets[j],
-                    trimmed(asset, span),
-                    earlier,
-                    "Duplicate line",
-                    calibration,
-                ));
+                pairs.push((i, j, trimmed(assets[i], span), earlier));
                 break;
             }
             next = prev[next as usize];
         }
     }
+    // One finding per file pair, at its first line.
+    pairs.sort_by_key(|&(i, j, span, _)| (i, j, span.start));
+    for group in pairs.chunk_by(|a, b| (a.0, a.1) == (b.0, b.1)) {
+        let (i, j) = (group[0].0, group[0].1);
+        out.push(line_finding(assets[i], assets[j], group, calibration));
+    }
+}
+
+/// The AI-EFF-003 finding for the lines of `asset` repeated in `earlier` (one pair, sorted).
+fn line_finding(
+    asset: &Asset,
+    earlier: &Asset,
+    group: &[(usize, usize, Span, Span)],
+    calibration: f64,
+) -> Finding {
+    let waste: u32 = group
+        .iter()
+        .map(|&(_, _, span, _)| {
+            let text = asset
+                .source
+                .get(span.start as usize..span.end as usize)
+                .unwrap_or_default();
+            tokens::estimate(text, calibration)
+        })
+        .sum();
+    let list = |a: &Asset, spans: &mut dyn Iterator<Item = Span>| {
+        let mut lines: Vec<String> = spans
+            .take(LISTED_LINES + 1)
+            .map(|s| a.lines.line_of(s.start).to_string())
+            .collect();
+        if lines.len() > LISTED_LINES {
+            lines[LISTED_LINES] = "…".into();
+        }
+        lines.join(", ")
+    };
+    let theirs = list(earlier, &mut group.iter().map(|g| g.3));
+    let msg = if group.len() == 1 {
+        format!(
+            "Line also in `{}:{theirs}`; both load on every request, \
+             so it is paid twice (~{waste} tokens)",
+            earlier.rel_path
+        )
+    } else {
+        format!(
+            "Lines {} also in `{}:{theirs}`; both load on every request, \
+             so they are paid twice (~{waste} tokens)",
+            list(asset, &mut group.iter().map(|g| g.2)),
+            earlier.rel_path
+        )
+    };
+    let mut f = Finding::new(&META, asset, group[0].2, msg);
+    f.token_waste = waste;
+    f
 }
 
 fn finding(

@@ -414,7 +414,7 @@ message = "Slogan in instructions"
         .iter()
         .find(|f| f.rule_id == "X-ORG-001")
         .unwrap();
-    assert_eq!(f.remediation, Some("Use the public alias"));
+    assert_eq!(f.remediation.as_deref(), Some("Use the public alias"));
 
     let off = format!("{src}\n").replace("X-ORG-002 = \"low\"", "X-ORG-002 = \"off\"");
     let config = Config::parse(&off, Path::new("pulse.toml")).unwrap();

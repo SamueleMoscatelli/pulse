@@ -19,4 +19,5 @@ serde = { version = "1.0.229", features = ["derive"] }
 workspace = true
 
 [dev-dependencies]
+insta = "1.49.0"
 toml = "1.1.8"

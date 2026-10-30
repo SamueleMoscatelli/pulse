@@ -93,7 +93,7 @@ fn compile_one(rule: &CustomRule) -> Result<Custom, ConfigError> {
 impl Custom {
     fn finding(&self, asset: &Asset, span: Span, message: String) -> Finding {
         let mut f = Finding::new(self.meta, asset, span, message);
-        f.remediation = self.remediation;
+        f.remediation = self.remediation.map(Into::into);
         f
     }
 }
@@ -236,7 +236,7 @@ mod tests {
             "{}",
             out[0].message
         );
-        assert_eq!(out[0].remediation, Some("Trim"));
+        assert_eq!(out[0].remediation.as_deref(), Some("Trim"));
         assert!(run(&r[0], AssetKind::Prompt, "hi").is_empty());
     }
 

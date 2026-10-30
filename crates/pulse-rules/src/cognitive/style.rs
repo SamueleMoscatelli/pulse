@@ -307,12 +307,15 @@ pub static META_EMPHASIS: RuleMeta = RuleMeta {
     default_severity: Severity::Low,
     kinds: KindSet::MARKDOWN,
     summary: "Too many directives are emphasized, so emphasis no longer stands out.",
-    remediation: "Keep caps, bold and \"!!\" for the one or two rules that truly matter.",
+    remediation: "Keep emphasis for the rules that must never be missed; state the others plainly.",
     inline_suppressible: true,
 };
 
 /// Emphasized directives needed before the share is checked.
 const MIN_EMPHASIZED: usize = 4;
+
+/// Lines of emphasized directives listed in the message.
+const LISTED_LINES: usize = 3;
 
 pub struct EmphasisInflation;
 
@@ -326,6 +329,7 @@ impl Rule for EmphasisInflation {
         let mut ws = Vec::new();
         let (mut directives, mut emphasized) = (0usize, 0usize);
         let mut first = None;
+        let mut lines: Vec<u32> = Vec::new();
         for s in asset.prose().sentences() {
             let Some(text) = src.get(s.range.clone()) else {
                 continue;
@@ -337,7 +341,12 @@ impl Rule for EmphasisInflation {
             directives += 1;
             if emphasis(text, &ws) {
                 emphasized += 1;
-                first.get_or_insert(span(s.range.start, s.range.end));
+                let at = span(s.range.start, s.range.end);
+                first.get_or_insert(at);
+                let line = asset.lines.line_of(at.start);
+                if lines.len() <= LISTED_LINES && lines.last() != Some(&line) {
+                    lines.push(line);
+                }
             }
         }
         // AI-COG-004: > 25% of directives and at least 4 of them.
@@ -347,9 +356,18 @@ impl Rule for EmphasisInflation {
         let Some(at) = first else {
             return;
         };
-        let pct = emphasized * 100 / directives;
+        let mut listed: Vec<String> = lines
+            .iter()
+            .take(LISTED_LINES)
+            .map(u32::to_string)
+            .collect();
+        if lines.len() > LISTED_LINES {
+            listed.push("…".into());
+        }
         let msg = format!(
-            "{emphasized} of {directives} directives ({pct}%) are emphasized; none stands out"
+            "Emphasis on {emphasized} of {directives} directives (lines {}); \
+             emphasis works only when rare (max 25%)",
+            listed.join(", ")
         );
         out.push(Finding::new(&META_EMPHASIS, asset, at, msg));
     }

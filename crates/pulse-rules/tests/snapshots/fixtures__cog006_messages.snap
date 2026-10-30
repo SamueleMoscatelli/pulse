@@ -1,0 +1,10 @@
+---
+source: crates/pulse-rules/tests/fixtures.rs
+expression: "messages(&fail_fixture_findings(\"AI-COG-006\"))"
+---
+fail_first_person_agent.md:3:1 Weak routing description "I can review your pull…": no trigger cue, first person
+  ↳ Add "Use when …" with the requests, keywords and file types that should trigger it; write it in the third person ("Reviews …", not "I review …"). Template: "<What it does>. Use when <requests, keywords, file types>. [Not for <what a sibling handles>.]"
+fail_no_cue_agent.md:3:1 Weak routing description "Database migration spec…": no trigger cue
+  ↳ Add "Use when …" with the requests, keywords and file types that should trigger it. Template: "<What it does>. Use when <requests, keywords, file types>. [Not for <what a sibling handles>.]"
+fail_short_SKILL.md:3:1 Weak routing description "Extract text and tables…": 7 words (< 20), no trigger cue
+  ↳ Say what it covers; add "Use when …" with the requests, keywords and file types that should trigger it. Template: "<What it does>. Use when <requests, keywords, file types>. [Not for <what a sibling handles>.]"

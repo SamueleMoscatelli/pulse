@@ -1,5 +1,6 @@
 //! Core vocabulary: severities, categories, asset kinds, locations and findings.
 
+use std::borrow::Cow;
 use std::fmt;
 use std::path::Path;
 use std::str::FromStr;
@@ -317,7 +318,8 @@ pub struct Finding {
     pub severity: Severity,
     pub location: Location,
     pub message: String,
-    pub remediation: Option<&'static str>,
+    /// The rule's default fix, or a per-finding one (see [`Finding::with_fix`]).
+    pub remediation: Option<Cow<'static, str>>,
     /// Estimated wasted tokens; `> 0` only for efficiency findings (feeds context debt).
     pub token_waste: u32,
     /// Stable identity for baselines; set by the engine.
@@ -332,10 +334,17 @@ impl Finding {
             severity: meta.default_severity,
             location: asset.span_to_location(span),
             message: message.into(),
-            remediation: Some(meta.remediation),
+            remediation: Some(Cow::Borrowed(meta.remediation)),
             token_waste: 0,
             fingerprint: 0,
         }
+    }
+
+    /// Replaces the rule's default fix with one specific to this finding.
+    #[must_use]
+    pub fn with_fix(mut self, fix: impl Into<Cow<'static, str>>) -> Self {
+        self.remediation = Some(fix.into());
+        self
     }
 }
 

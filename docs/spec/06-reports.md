@@ -18,18 +18,24 @@ All reporters are pure functions `fn render(report: &Report, opts: &RenderOpts) 
    Context load      18.4k always-on tokens · 9.2% of 200k window
 
    CRITICAL 2   HIGH 1   MEDIUM 4   LOW 7   INFO 0
+   Fixes shown for medium and higher · run pulse scan -v to see all
 
  CLAUDE.md
    12:5    CRITICAL  AI-SEC-001  Invisible character U+202E RIGHT-TO-LEFT OVERRIDE
                      ↳ Remove the character.
    40:1    MEDIUM    AI-COG-001  Contradicts line 12: "Always use TypeScript" vs "Use plain JavaScript"
+                     ↳ Remove one directive, or scope both ("for tests…", or under headings naming each scope).
 
  .mcp.json
    7:16    HIGH      AI-SEC-005  Unpinned MCP package "@modelcontextprotocol/server-github" (npx -y)
+                     ↳ Pin an exact version (npx pkg@1.2.3, uvx pkg==1.2.3, image@sha256:...).
+   …
+
+ ↳ Fixes shown for medium and higher findings. Run with -v to see fixes for all 14 findings, or `pulse explain <RULE-ID>` for a rule's full guidance.
 ```
 
 - Colors: gate PASSED green / FAILED red background; ratings A green, B lime, C yellow, D orange, E red; severities colored. No color when not a TTY, with `--color never`, or when `NO_COLOR` is set.
-- The remediation line (`↳`) is shown for Critical and High only (keeps output short), or for all with `-v`.
+- The remediation line (`↳`) is shown for Medium, High and Critical (Low and Info stay one line each), or for all with `-v`. A rule may give a fix specific to the finding (what is missing, which lines) instead of its default one. When some fixes are hidden (not `-v`, not `-q`), the summary says so under the severity counts and a footer after the findings says how to see them (ADR-044).
 - With `-q`: only the findings, in `path:line:col: SEVERITY RULE message` form (one line each, grep-friendly).
 - Locations are relative to the root and use `/` separators on every OS.
 
