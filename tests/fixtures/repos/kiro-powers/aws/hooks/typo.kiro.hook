@@ -1,0 +1,6 @@
+{
+  "enabled": true,
+  "name": "Typo",
+  "when": { "type": "fileSaved" },
+  "then": { "type": "runCommand", "command": "terraform fmt" }
+}

@@ -96,6 +96,8 @@ enum Sniff {
     Hooks,
     /// `mcp.json` anywhere: a top-level `mcpServers` or `servers` object.
     Mcp,
+    /// `plugin.json`: a Kiro power manifest, with a top-level `keywords` array (ADR-054).
+    Power,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -440,6 +442,7 @@ fn sniff_file(path: &Path, sniff: Sniff) -> io::Result<bool> {
         Sniff::Tools => sniff_tools(bytes, truncated),
         Sniff::Hooks => sniff_object(bytes, truncated, &["hooks"]),
         Sniff::Mcp => sniff_object(bytes, truncated, &["mcpServers", "servers"]),
+        Sniff::Power => sniff_keywords(bytes, truncated),
     })
 }
 
@@ -482,6 +485,22 @@ fn sniff_object(bytes: &[u8], truncated: bool, keys: &[&str]) -> bool {
     members
         .iter()
         .any(|m| keys.contains(&m.key.as_str()) && matches!(m.value.value, JsonValue::Object(_)))
+}
+
+/// Kiro power manifest: a JSONC object with a `keywords` array. A truncated prefix falls
+/// back to a key scan.
+fn sniff_keywords(bytes: &[u8], truncated: bool) -> bool {
+    if truncated {
+        return starts_with(bytes, b"{") && memchr::memmem::find(bytes, b"\"keywords\"").is_some();
+    }
+    let Ok(source) = std::str::from_utf8(bytes) else {
+        return false;
+    };
+    let doc = JsonDoc::parse(source);
+    doc.root
+        .as_ref()
+        .and_then(|r| r.get("keywords"))
+        .is_some_and(|k| matches!(k.value, JsonValue::Array(_)))
 }
 
 /// Whether the first non-whitespace byte is one of `firsts`.
@@ -543,6 +562,8 @@ struct Collected {
     all_paths: Vec<String>,
     skipped: Vec<(PathBuf, String)>,
     misplaced: Vec<Misplaced>,
+    /// Rel paths of `POWER.md` and `plugin.json` files: candidate Kiro power roots.
+    power_markers: Vec<String>,
 }
 
 /// Per-thread buffer, merged into the shared one when the walker thread finishes.
@@ -559,6 +580,7 @@ impl Drop for Local<'_> {
         shared.all_paths.extend(out.all_paths);
         shared.skipped.extend(out.skipped);
         shared.misplaced.extend(out.misplaced);
+        shared.power_markers.extend(out.power_markers);
     }
 }
 
@@ -602,6 +624,7 @@ pub fn discover(root: &Path, config: &Config) -> Result<Discovery, DiscoverError
     });
 
     let mut collected = shared.into_inner().unwrap_or_else(PoisonError::into_inner);
+    add_powers(root, &mut collected);
     collected
         .assets
         .sort_unstable_by(|a, b| a.rel_path.cmp(&b.rel_path));
@@ -665,6 +688,9 @@ fn visit(
             .push((path.to_path_buf(), "path is not valid UTF-8".to_owned()));
         return;
     };
+    if matches!(file_name(&rel_path), "POWER.md" | "plugin.json") {
+        out.power_markers.push(rel_path.clone());
+    }
     let mut is_asset = false;
     if let Some((entry, sniff)) = classifier.lookup(&rel_path, scratch) {
         is_asset = sniff.is_none_or(|sniff| match sniff_file(path, sniff) {
@@ -695,6 +721,80 @@ fn visit(
         });
     }
     out.all_paths.push(rel_path);
+}
+
+fn file_name(rel_path: &str) -> &str {
+    rel_path.rsplit('/').next().unwrap_or(rel_path)
+}
+
+/// Kiro powers (ADR-054): a folder holding `POWER.md` (legacy), or a `plugin.json` with a
+/// `keywords` array (Agent Plugins), is a power root. Its Kiro files ([`power_kind`]) are
+/// library assets: OnDemand, [`Origin::Power`]. Files already found by the table are
+/// relabeled (custom ones keep their declaration); the others are added.
+fn add_powers(root: &Path, c: &mut Collected) {
+    let mut roots: Vec<&str> = c
+        .power_markers
+        .iter()
+        .filter(|rel| {
+            file_name(rel) == "POWER.md"
+                || sniff_file(&root.join(rel.as_str()), Sniff::Power).unwrap_or(false)
+        })
+        .map(|rel| rel.rsplit_once('/').map_or("", |(dir, _)| dir))
+        .collect();
+    if roots.is_empty() {
+        return;
+    }
+    roots.sort_unstable();
+    roots.dedup();
+    let mut known = HashSet::with_capacity(c.assets.len());
+    for a in c.assets.iter_mut().filter(|a| a.origin != Origin::Custom) {
+        if let Some(kind) = power_kind(&roots, &a.rel_path) {
+            (a.kind, a.load, a.origin) = (kind, LoadMode::OnDemand, Origin::Power);
+        }
+    }
+    known.extend(c.assets.iter().map(|a| a.rel_path.clone()));
+    for rel in &c.all_paths {
+        let Some(kind) = power_kind(&roots, rel) else {
+            continue;
+        };
+        let path = root.join(rel);
+        // Unfollowed symlinks are recorded paths, not files to analyze.
+        let is_file = std::fs::symlink_metadata(&path).is_ok_and(|m| m.is_file());
+        if is_file && !known.contains(rel) {
+            c.assets.push(DiscoveredFile {
+                path: Arc::from(path.as_path()),
+                rel_path: rel.clone(),
+                kind,
+                load: LoadMode::OnDemand,
+                origin: Origin::Power,
+            });
+        }
+    }
+}
+
+/// The kind of `rel_path` inside its innermost power root: `POWER.md` → Instructions,
+/// `steering/**/*.md` → ScopedInstructions, `hooks/*.kiro.hook` and `hooks/*.json` →
+/// Hooks, `mcp.json` (and `settings/mcp.json`, the `.kiro/` layout) → McpConfig,
+/// `skills/**/SKILL.md` → Skill.
+fn power_kind(roots: &[&str], rel_path: &str) -> Option<AssetKind> {
+    let sub = roots
+        .iter()
+        .filter_map(|r| match *r {
+            "" => Some(rel_path),
+            r => rel_path.strip_prefix(r)?.strip_prefix('/'),
+        })
+        .min_by_key(|sub| sub.len())?;
+    let hook = |name: &str| {
+        !name.contains('/') && (name.ends_with(".kiro.hook") || name.ends_with(".json"))
+    };
+    Some(match sub {
+        "POWER.md" => AssetKind::Instructions,
+        "mcp.json" | "settings/mcp.json" => AssetKind::McpConfig,
+        _ if sub.starts_with("steering/") && sub.ends_with(".md") => AssetKind::ScopedInstructions,
+        _ if sub.strip_prefix("hooks/").is_some_and(hook) => AssetKind::Hooks,
+        _ if sub.starts_with("skills/") && sub.ends_with("/SKILL.md") => AssetKind::Skill,
+        _ => return None,
+    })
 }
 
 fn error_path(err: &ignore::Error) -> Option<PathBuf> {
@@ -841,6 +941,45 @@ mod tests {
         assert_eq!(origin("lib/a.agent.md"), Some(Origin::Library));
         assert_eq!(origin("lib/x/SKILL.md"), Some(Origin::Library));
         assert_eq!(origin("lib/a.txt"), Some(Origin::Custom));
+    }
+
+    #[test]
+    fn power_kind_inside_the_innermost_root() {
+        use AssetKind::*;
+        let roots = ["", "powers/aws"];
+        for (rel, kind) in [
+            ("POWER.md", Some(Instructions)),
+            ("steering/a.md", Some(ScopedInstructions)),
+            ("steering/sub/a.md", Some(ScopedInstructions)),
+            ("hooks/fmt.kiro.hook", Some(Hooks)),
+            ("hooks/lint.json", Some(Hooks)),
+            ("hooks/x/lint.json", None),
+            ("mcp.json", Some(McpConfig)),
+            ("settings/mcp.json", Some(McpConfig)),
+            ("skills/scan/SKILL.md", Some(Skill)),
+            ("README.md", None),
+            (".kiro/steering/a.md", None),
+            ("powers/aws/steering/b.md", Some(ScopedInstructions)),
+            ("powers/aws/README.md", None),
+            ("powers/awsx/POWER.md", None),
+        ] {
+            assert_eq!(power_kind(&roots, rel), kind, "{rel}");
+        }
+        assert_eq!(power_kind(&["aws"], "steering/a.md"), None);
+    }
+
+    #[test]
+    fn sniff_power_manifest() {
+        assert!(sniff_keywords(
+            br#"{ "name": "p", "keywords": ["aws"] }"#,
+            false
+        ));
+        assert!(!sniff_keywords(
+            br#"{ "name": "p", "keywords": "aws" }"#,
+            false
+        ));
+        assert!(!sniff_keywords(br#"{ "name": "p" }"#, false));
+        assert!(sniff_keywords(br#"{ "keywords": ["a", "#, true));
     }
 
     #[test]

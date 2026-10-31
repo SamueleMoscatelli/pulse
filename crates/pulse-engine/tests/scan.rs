@@ -645,3 +645,56 @@ fn kiro_loads_always_steering_agents_md_and_descriptions() {
     assert_eq!(skipped, ["CLAUDE.md", "hooks/review.kiro.hook"]);
     assert_eq!(report.context.by_assistant, [(Assistant::Kiro, kiro)]);
 }
+
+#[test]
+fn kiro_powers_are_library_assets() {
+    use pulse_core::{AssetKind, LoadMode};
+    let root = mixed().with_file_name("kiro-powers");
+    let config = Config::load(&root, None).unwrap();
+    let report = scan(&root, &config, &ScanOptions::default()).unwrap();
+    let assets: Vec<(&str, AssetKind, LoadMode, u32)> = report
+        .assets_meta
+        .iter()
+        .map(|a| (a.rel_path.as_str(), a.kind, a.load, a.always_tokens))
+        .collect();
+    use AssetKind::*;
+    use LoadMode::OnDemand;
+    // A `POWER.md` power and a `plugin.json` power with `keywords`; not `other/` (no
+    // `keywords`) nor the bare root `steering/`. All OnDemand, nothing always-on (even
+    // `inclusion: auto` steering).
+    assert_eq!(
+        assets,
+        [
+            ("aws/POWER.md", Instructions, OnDemand, 0),
+            ("aws/hooks/scan-on-save.kiro.hook", Hooks, OnDemand, 0),
+            ("aws/hooks/typo.kiro.hook", Hooks, OnDemand, 0),
+            ("aws/settings/mcp.json", McpConfig, OnDemand, 0),
+            ("aws/skills/scan/SKILL.md", Skill, OnDemand, 0),
+            ("aws/steering/aws-cli.md", ScopedInstructions, OnDemand, 0),
+            ("aws/steering/pillars.md", ScopedInstructions, OnDemand, 0),
+            ("plugin/hooks/lint.json", Hooks, OnDemand, 0),
+            ("plugin/mcp.json", McpConfig, OnDemand, 0),
+            ("plugin/skills/lint/SKILL.md", Skill, OnDemand, 0),
+            ("plugin/steering/style.md", ScopedInstructions, OnDemand, 0),
+        ]
+    );
+    // Kiro checks run on power files (steering schema, hook events, MCP); no AI-STR-008.
+    let found: Vec<(String, &str)> = report
+        .findings
+        .iter()
+        .map(|f| {
+            let rel = f.location.path.strip_prefix(&root).unwrap();
+            (rel.to_string_lossy().replace('\\', "/"), f.rule_id)
+        })
+        .collect();
+    assert_eq!(
+        found,
+        [
+            ("aws/hooks/typo.kiro.hook".to_owned(), "AI-STR-006"),
+            ("aws/settings/mcp.json".to_owned(), "AI-SEC-005"),
+            ("aws/steering/pillars.md".to_owned(), "AI-STR-001"),
+            ("plugin/mcp.json".to_owned(), "AI-SEC-005"),
+        ]
+    );
+    assert_eq!(report.context.by_assistant, []);
+}

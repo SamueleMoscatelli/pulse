@@ -156,6 +156,8 @@ pub enum Origin {
     LibraryRow,
     /// Rows 1–10 under a `scan.library` glob: declared as a distribution folder.
     Library,
+    /// Inside a Kiro power (ADR-054): a distribution folder like [`Origin::Library`].
+    Power,
     /// `[[scan.custom]]` or `scan.include`.
     Custom,
 }
