@@ -7,7 +7,9 @@ pub mod settings;
 pub mod tools;
 
 pub use json::{JsonDoc, JsonMember, JsonNode, JsonValue, ViewError};
-pub use markdown::{CodeBlock, Frontmatter, Heading, Import, Link, MarkdownView, Table, YamlError};
+pub use markdown::{
+    CodeBlock, FileRef, Frontmatter, Heading, Import, Link, MarkdownView, Table, YamlError,
+};
 pub use mcp::{McpInput, McpServer, McpView, Transport};
 pub use settings::{HookCmd, HookEntry, SettingsView};
 pub use tools::{ToolDef, ToolsView};

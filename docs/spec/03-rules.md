@@ -132,7 +132,7 @@
 
 ### AI-STR-001 — Invalid or missing frontmatter
 - **Sev** High · **Kinds** Skill, Agent, Prompt, ScopedInstructions
-- **Detect** YAML parse errors (report the YAML error line), unterminated `---`, or missing required keys. Required: Skill → `name`, `description`; Claude Agent → `name`, `description`; `.mdc` → at least one of `description`/`globs`/`alwaysApply`; `.instructions.md` → `applyTo`. Unknown keys → Low (typo hint via Levenshtein ≤ 2 against the known keys). YAML parse errors are reported once, by AI-STR-002 (ADR-025). Platform comes from the path; Claude commands, `.prompt.md` and `.agent.md` have no required keys but are checked for unknown ones; `.prompty`, `.claude/rules`, Windsurf and Cline have no schema.
+- **Detect** YAML parse errors (report the YAML error line), unterminated `---`, or missing required keys. Required: Skill → `name`, `description`; Claude Agent → `name`, `description`; `.mdc` → at least one of `description`/`globs`/`alwaysApply`; `.instructions.md` → `applyTo`; Kiro steering (`.kiro/steering/`, ADR-050) → known keys `inclusion`, `fileMatchPattern`, `name`, `description`, `title`, `inclusion` one of `always`/`fileMatch`/`manual`/`auto` (typo hint), `fileMatch` needs a non-empty `fileMatchPattern` string or list of strings, `auto` needs `name` and `description`, and a YAML-like `---` block setting `inclusion` below the first line (outside code blocks) is reported, since Kiro then always includes the file. Unknown keys → Low (typo hint via Levenshtein ≤ 2 against the known keys). YAML parse errors are reported once, by AI-STR-002 (ADR-025). Platform comes from the path; Claude commands, `.prompt.md` and `.agent.md` have no required keys but are checked for unknown ones; `.prompty`, `.claude/rules`, Windsurf and Cline have no schema.
 
 ### AI-STR-002 — Invalid file content
 - **Sev** High · **Kinds** all
@@ -140,7 +140,7 @@
 
 ### AI-STR-003 — Broken reference or import
 - **Sev** Medium · **Kinds** md · **Scope** project
-- **Detect** `@path` imports (CLAUDE.md), relative Markdown links, and paths in skill bodies (`scripts/x.py`, `references/y.md`) that do not exist relative to the asset (or to the root for `@/`). Skip URLs, anchors-only links and paths in code fences that look like examples (contain `<`, `your-`, `example`). Import cycles (≤ 5 hops) → High. `@` tokens without `/` or `.` are mentions, not imports (ADR-027). A skill path shown only as code (code span or block) is reported only when its first directory exists in the skill or at the root (a likely typo) or a command runs it (`python`, `node`, `bash`, `uv run`, … in `lexicon::shell::SCRIPT_RUNNERS`); otherwise it is a file the skill produces or asks for (ADR-046).
+- **Detect** `@path` imports (CLAUDE.md), Kiro `#[[file:<path>]]`, `#[[file:<path>:<line>]]`, `#[[file:<path>:<start>-<end>]]` and `#[[folder:<path>]]` references (in `.kiro/steering/` files, from the workspace root holding `.kiro/`; in `AGENTS.md`, from its folder; ADR-050) whose target is missing or whose line range is empty or past the end of the file, relative Markdown links, and paths in skill bodies (`scripts/x.py`, `references/y.md`) that do not exist relative to the asset (or to the root for `@/`). Skip URLs, anchors-only links and paths in code fences that look like examples (contain `<`, `your-`, `example`). Import cycles (≤ 5 hops) → High. `@` tokens without `/` or `.` are mentions, not imports (ADR-027). A skill path shown only as code (code span or block) is reported only when its first directory exists in the skill or at the root (a likely typo) or a command runs it (`python`, `node`, `bash`, `uv run`, … in `lexicon::shell::SCRIPT_RUNNERS`); otherwise it is a file the skill produces or asks for (ADR-046).
 
 ### AI-STR-004 — Name / description constraint violated
 - **Sev** Medium · **Kinds** Skill, Agent, Prompt
@@ -176,7 +176,7 @@ Every EFF finding sets `token_waste`, which feeds context debt (`04-scoring-gate
 
 ### AI-EFF-002 — Always-on context over budget
 - **Sev** High · **Scope** project
-- **Detect** Σ Always tokens (root instructions + resolved `@imports` + alwaysApply rules + skill/agent descriptions + tool schemas) of the assistant that loads the most (ADR-045; an import counts for the assistants of the file that imports it) > `budgets.always_on` (default 8000). The finding points at that assistant's largest contributor and lists its top 5 contributors with their tokens; the message names the assistant (`Always-on context for Copilot …`) when their totals differ.
+- **Detect** Σ Always tokens (root instructions + resolved `@imports` and Kiro `#[[file:…]]` references of always-loaded files, a line range counting only its lines (ADR-050) + alwaysApply rules + skill/agent descriptions + tool schemas) of the assistant that loads the most (ADR-045; an import counts for the assistants of the file that imports it) > `budgets.always_on` (default 8000). The finding points at that assistant's largest contributor and lists its top 5 contributors with their tokens; the message names the assistant (`Always-on context for Copilot …`) when their totals differ.
 - **token_waste** `total - budget`.
 
 ### AI-EFF-003 — Duplicated content
@@ -239,7 +239,7 @@ Every EFF finding sets `token_waste`, which feeds context debt (`04-scoring-gate
 - **Report** On the directive in the file loaded later (the nested file; in the always-on set, the later path or the imported file), referencing the earlier one: `Contradicts CLAUDE.md:3: "Use pnpm" vs "Use npm"`. Pairs within one file are AI-COG-001's. A document title (first heading, level 1) is not a section scope across files (ADR-033).
 
 ### AI-COG-006 — Weak routing description
-- **Sev** Medium · **Kinds** Skill, Agent
+- **Sev** Medium · **Kinds** Skill, Agent, Kiro `inclusion: auto` steering (ADR-050)
 - **Detect** Description < 20 words, or lacking a trigger cue (`use when`, `use for`, `when the user`, `proactively`, `trigger`, `invoke`; see ADR-032 for the matched forms), or written in first person ("I can…"). The model routes on descriptions, so weak ones cause missed or wrong invocations.
 
 ### AI-COG-007 — Unstructured long instructions

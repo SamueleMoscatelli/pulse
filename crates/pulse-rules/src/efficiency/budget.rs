@@ -2,10 +2,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use pulse_core::refs::resolve;
+use pulse_core::refs::{kiro_refs, resolve};
 use pulse_core::{
-    Asset, AssetKind, Category, Finding, KindSet, ProjectRule, Rule, RuleCtx, RuleMeta, Severity,
-    Span, config::Budgets,
+    Asset, AssetKind, Category, Finding, KindSet, LoadMode, ProjectRule, Rule, RuleCtx, RuleMeta,
+    Severity, Span, config::Budgets, text::tokens,
 };
 
 use crate::util::truncate;
@@ -157,8 +157,9 @@ impl ProjectRule for AlwaysOnBudget {
 /// Always-on tokens of one file: `(tokens, path, asset the finding points at, span)`.
 type Contributor<'a> = (u32, &'a str, &'a Asset, Span);
 
-/// Adds the files that always-loaded instructions `@import` (transitively), each once,
-/// minus what they already contribute as assets. An imported file is reported at the
+/// Adds the files that always-loaded instructions `@import` or reference with Kiro
+/// `#[[file:…]]` (transitively), each once, minus what they already contribute as assets;
+/// a line-range reference adds only those lines. An imported file is reported at the
 /// import of the first root that reaches it.
 fn imported<'a>(assets: &'a [Asset], ctx: &RuleCtx<'a>, out: &mut Vec<Contributor<'a>>) {
     let by_path: HashMap<&str, &Asset> = assets.iter().map(|a| (a.rel_path.as_str(), a)).collect();
@@ -168,7 +169,8 @@ fn imported<'a>(assets: &'a [Asset], ctx: &RuleCtx<'a>, out: &mut Vec<Contributo
             matches!(
                 a.kind,
                 AssetKind::Instructions | AssetKind::ScopedInstructions
-            ) && a.always_tokens() > 0
+            ) && a.effective_load() == LoadMode::Always
+                && a.always_tokens() > 0
         })
         .collect();
     roots.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
@@ -178,10 +180,19 @@ fn imported<'a>(assets: &'a [Asset], ctx: &RuleCtx<'a>, out: &mut Vec<Contributo
             if !seen.insert(rel) {
                 continue;
             }
-            let tokens = match (by_path.get(rel), ctx.imports.file(rel)) {
-                (Some(a), _) => a.tokens().saturating_sub(a.always_tokens()),
-                (None, Some(f)) => f.tokens(),
-                (None, None) => 0,
+            let file = by_path.get(rel).copied().or_else(|| ctx.imports.file(rel));
+            let range = (via == rel)
+                .then(|| ctx.imports.range(&root.rel_path, rel))
+                .flatten();
+            let tokens = match file {
+                // An asset's own always-on tokens are already counted.
+                Some(f) if by_path.contains_key(rel) => match range {
+                    Some(_) if f.always_tokens() >= f.tokens() => 0,
+                    Some(r) => range_tokens(f, r),
+                    None => f.tokens().saturating_sub(f.always_tokens()),
+                },
+                Some(f) => range.map_or_else(|| f.tokens(), |r| range_tokens(f, r)),
+                None => 0,
             };
             if tokens == 0 {
                 continue;
@@ -191,10 +202,24 @@ fn imported<'a>(assets: &'a [Asset], ctx: &RuleCtx<'a>, out: &mut Vec<Contributo
                 .imports
                 .iter()
                 .find(|i| resolve(&root.rel_path, &i.path).as_deref() == Some(via))
-                .map_or(Span::new(0, 0), |i| i.span);
+                .map(|i| i.span)
+                .or_else(|| kiro_refs(root).find(|(_, t)| t == via).map(|(r, _)| r.span))
+                .unwrap_or(Span::new(0, 0));
             out.push((tokens, rel, root, span));
         }
     }
+}
+
+/// Estimated tokens of 1-based inclusive `lines` of `f` (clamped to the file).
+fn range_tokens(f: &Asset, (start, end): (u32, u32)) -> u32 {
+    if f.skipped.is_some() || start == 0 || start > end {
+        return 0;
+    }
+    let from = f.lines.line_span(&f.source, start).start as usize;
+    let to = f.lines.line_span(&f.source, end).end as usize;
+    f.source
+        .get(from..to)
+        .map_or(0, |t| tokens::estimate(t, f.calibration()))
 }
 
 #[cfg(test)]

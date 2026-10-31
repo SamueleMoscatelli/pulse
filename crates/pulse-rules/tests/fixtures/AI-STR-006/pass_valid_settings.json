@@ -4,7 +4,7 @@
       {
         "matcher": "Edit|Write",
         "hooks": [
-          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/tests/fixtures/AI-STR-006/check.sh", "timeout": 30 }
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/check.sh", "timeout": 30 }
         ]
       },
       {

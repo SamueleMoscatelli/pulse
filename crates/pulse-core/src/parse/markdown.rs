@@ -24,6 +24,8 @@ pub struct MarkdownView {
     pub html: Vec<Span>,
     pub links: Vec<Link>,
     pub imports: Vec<Import>,
+    /// Kiro `#[[file:…]]` / `#[[folder:…]]` references outside code.
+    pub file_refs: Vec<FileRef>,
     pub paragraphs: Vec<Span>,
     pub tables: Vec<Table>,
 }
@@ -99,6 +101,18 @@ pub struct Import {
     /// The path without the leading `@`.
     pub path: String,
     /// `@` included.
+    pub span: Span,
+}
+
+/// A Kiro `#[[file:<path>]]`, `#[[file:<path>:<line>]]`, `#[[file:<path>:<start>-<end>]]`
+/// or `#[[folder:<path>]]` reference.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileRef {
+    pub folder: bool,
+    pub path: String,
+    /// 1-based inclusive `(start, end)` lines, as written (a single line is `(n, n)`).
+    pub lines: Option<(u32, u32)>,
+    /// `#[[` to `]]`, both included.
     pub span: Span,
 }
 
@@ -196,6 +210,7 @@ impl MarkdownView {
         }
         code.sort_unstable_by_key(|s| s.start);
         scan_imports(source, body_start, &code, &mut view.imports);
+        scan_file_refs(source, body_start, &code, &mut view.file_refs);
         view
     }
 
@@ -418,6 +433,67 @@ fn scan_imports(source: &str, body_start: usize, code: &[Span], out: &mut Vec<Im
             path: path.to_owned(),
             span: Span::new(to_u32(at), to_u32(at + 1 + path.len())),
         });
+    }
+}
+
+/// Kiro `#[[file:…]]` / `#[[folder:…]]` references on one line, outside `code` (sorted).
+fn scan_file_refs(source: &str, body_start: usize, code: &[Span], out: &mut Vec<FileRef>) {
+    let body = &source.as_bytes()[body_start..];
+    let mut code = code.iter().peekable();
+    // End of a line with an unclosed `#[[`: later openers on it can't close either, so
+    // they are skipped (keeps hostile `#[[#[[…` lines linear).
+    let mut unclosed_until = 0;
+    for at in memchr::memmem::find_iter(body, b"#[[").map(|i| body_start + i) {
+        if at < unclosed_until {
+            continue;
+        }
+        while code.next_if(|s| (s.end as usize) <= at).is_some() {}
+        if code.peek().is_some_and(|s| (s.start as usize) <= at) {
+            continue;
+        }
+        let rest = &source[at + 3..];
+        let line = rest.split('\n').next().unwrap_or_default();
+        let Some(close) = line.find("]]") else {
+            unclosed_until = at + 3 + line.len();
+            continue;
+        };
+        let inner = &line[..close];
+        let (folder, target) = if let Some(t) = inner.strip_prefix("file:") {
+            (false, t)
+        } else if let Some(t) = inner.strip_prefix("folder:") {
+            (true, t)
+        } else {
+            continue;
+        };
+        let (path, lines) = match target.rsplit_once(':') {
+            Some((p, r)) if !folder => match parse_line_range(r) {
+                Some(lines) => (p, Some(lines)),
+                None => (target, None),
+            },
+            _ => (target, None),
+        };
+        let path = path.trim();
+        if path.is_empty() {
+            continue;
+        }
+        out.push(FileRef {
+            folder,
+            path: path.to_owned(),
+            lines,
+            span: Span::new(to_u32(at), to_u32(at + 3 + close + 2)),
+        });
+    }
+}
+
+/// `<n>` or `<start>-<end>` (digits only).
+fn parse_line_range(s: &str) -> Option<(u32, u32)> {
+    let num = |n: &str| {
+        (!n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| n.parse::<u32>().unwrap_or(u32::MAX))
+    };
+    match s.split_once('-') {
+        Some((a, b)) => Some((num(a)?, num(b)?)),
+        None => num(s).map(|n| (n, n)),
     }
 }
 
@@ -677,6 +753,34 @@ mod tests {
         );
         let paths: Vec<_> = md.imports.iter().map(|i| i.path.as_str()).collect();
         assert_eq!(paths, ["./local.md", "/abs/p", "name"]);
+    }
+
+    #[test]
+    fn kiro_file_refs_with_lines_and_folders() {
+        let src = "See #[[file:docs/api.md]], #[[file:a.ts:10]] and #[[file:b.md:3-7]].\n\
+                   #[[folder:src/lib]] #[[file:c:d.md]] `#[[file:x.md]]` #[[other:y]] #[[file:]]\n\
+                   #[[file:open.md\n]]\n";
+        let md = parse(src);
+        let refs: Vec<_> = md
+            .file_refs
+            .iter()
+            .map(|r| (r.folder, r.path.as_str(), r.lines))
+            .collect();
+        assert_eq!(
+            refs,
+            [
+                (false, "docs/api.md", None),
+                (false, "a.ts", Some((10, 10))),
+                (false, "b.md", Some((3, 7))),
+                (true, "src/lib", None),
+                (false, "c:d.md", None),
+            ]
+        );
+        let first = md.file_refs[0].span;
+        assert_eq!(
+            &src[first.start as usize..first.end as usize],
+            "#[[file:docs/api.md]]"
+        );
     }
 
     #[test]

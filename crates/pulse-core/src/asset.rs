@@ -200,13 +200,17 @@ impl Asset {
         }
     }
 
-    /// The frontmatter `inclusion` of a discovered (Conditional) Kiro steering file; `None`
-    /// for other assets and invalid YAML.
-    fn kiro_inclusion(&self) -> Option<&str> {
-        if self.kind != AssetKind::ScopedInstructions
-            || self.load != LoadMode::Conditional
-            || !in_dir(&self.rel_path, ".kiro/steering/")
-        {
+    /// Whether this is a discovered (Conditional) Kiro steering file.
+    pub fn is_kiro_steering(&self) -> bool {
+        self.kind == AssetKind::ScopedInstructions
+            && self.load == LoadMode::Conditional
+            && in_dir(&self.rel_path, ".kiro/steering/")
+    }
+
+    /// The frontmatter `inclusion` of a Kiro steering file; `None` for other assets and
+    /// invalid YAML.
+    pub fn kiro_inclusion(&self) -> Option<&str> {
+        if !self.is_kiro_steering() {
             return None;
         }
         let fm = self.markdown().frontmatter.as_ref()?;

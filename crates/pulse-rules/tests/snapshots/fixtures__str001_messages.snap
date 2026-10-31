@@ -1,0 +1,36 @@
+---
+source: crates/pulse-rules/tests/fixtures.rs
+expression: "messages(&fail_fixture_findings(\"AI-STR-001\"))"
+---
+.kiro/steering/fail_auto_no_description.md:1:1 Missing frontmatter key "description" (inclusion: auto)
+  ↳ Close the `---` block, add the required keys and fix misspelled ones.
+.kiro/steering/fail_bad_inclusion.md:2:1 Invalid inclusion "fileMatched": did you mean "fileMatch"?
+  ↳ Close the `---` block, add the required keys and fix misspelled ones.
+.kiro/steering/fail_filematch_bad_pattern.md:3:1 Invalid fileMatchPattern: use a glob string or a list of globs
+  ↳ Close the `---` block, add the required keys and fix misspelled ones.
+.kiro/steering/fail_filematch_no_pattern.md:1:1 Missing frontmatter key "fileMatchPattern" (inclusion: fileMatch)
+  ↳ Close the `---` block, add the required keys and fix misspelled ones.
+.kiro/steering/fail_late_frontmatter.md:2:1 Frontmatter not on the first line: Kiro ignores it and always includes the file
+  ↳ Close the `---` block, add the required keys and fix misspelled ones.
+.kiro/steering/fail_pattern_typo.md:1:1 Missing frontmatter key "fileMatchPattern" (inclusion: fileMatch)
+  ↳ Close the `---` block, add the required keys and fix misspelled ones.
+.kiro/steering/fail_pattern_typo.md:3:1 Unknown frontmatter key "fileMatchPatterns" (did you mean "fileMatchPattern"?)
+  ↳ Close the `---` block, add the required keys and fix misspelled ones.
+fail_missing_description_SKILL.md:1:1 Missing frontmatter key "description" (Claude skill)
+  ↳ Close the `---` block, add the required keys and fix misspelled ones.
+fail_no_apply.instructions.md:1:1 Missing frontmatter key "applyTo" (Copilot instructions)
+  ↳ Close the `---` block, add the required keys and fix misspelled ones.
+fail_no_frontmatter_claude_agent.md:1:1 Missing frontmatter: Claude agent needs name, description
+  ↳ Close the `---` block, add the required keys and fix misspelled ones.
+fail_typo.agent.md:3:1 Unknown frontmatter key "tool" (did you mean "tools"?)
+  ↳ Close the `---` block, add the required keys and fix misspelled ones.
+fail_typo.prompt.md:2:1 Unknown frontmatter key "descripton" (did you mean "description"?)
+  ↳ Close the `---` block, add the required keys and fix misspelled ones.
+fail_typo_only.mdc:1:1 Missing frontmatter key: Cursor rule needs description, globs or alwaysApply
+  ↳ Close the `---` block, add the required keys and fix misspelled ones.
+fail_typo_only.mdc:2:1 Unknown frontmatter key "alwaysapply" (did you mean "alwaysApply"?)
+  ↳ Close the `---` block, add the required keys and fix misspelled ones.
+fail_unknown_key_claude_agent.md:4:1 Unknown frontmatter key "favorite_color" for Claude agent
+  ↳ Close the `---` block, add the required keys and fix misspelled ones.
+fail_unterminated.mdc:1:1 Unterminated frontmatter: no closing "---" line
+  ↳ Close the `---` block, add the required keys and fix misspelled ones.

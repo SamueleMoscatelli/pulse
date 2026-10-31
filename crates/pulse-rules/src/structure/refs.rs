@@ -1,10 +1,12 @@
-//! AI-STR-003: broken `@import`, relative link or skill path, and `@import` cycles.
+//! AI-STR-003: broken `@import`, relative link, skill path or Kiro `#[[file:…]]` reference,
+//! and `@import` cycles.
 //! Project scope: imports resolve against every walked file and the import graph.
 
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::sync::LazyLock;
 
-use pulse_core::refs::{is_file_import, resolve};
+use pulse_core::refs::{is_file_import, kiro_refs, resolve};
 use pulse_core::text::prose::covers;
 use pulse_core::{
     Asset, AssetKind, Category, Finding, KindSet, ProjectRule, RuleCtx, RuleMeta, Severity, Span,
@@ -20,7 +22,7 @@ pub static META: RuleMeta = RuleMeta {
     category: Category::Structure,
     default_severity: Severity::Medium,
     kinds: KindSet::MARKDOWN,
-    summary: "An @import, link or skill path points at a file that does not exist.",
+    summary: "An @import, link, skill path or Kiro #[[file:…]] points at a file that does not exist.",
     remediation: "Fix the path or add the missing file; break import cycles.",
     inline_suppressible: true,
 };
@@ -43,12 +45,14 @@ impl ProjectRule for BrokenReference {
     }
 
     fn check_project(&self, assets: &[Asset], ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
+        let mut by_path: Option<HashMap<&str, &Asset>> = None;
         for asset in assets {
             if !META.kinds.contains(asset.kind) || asset.skipped.is_some() {
                 continue;
             }
             imports(asset, ctx, out);
             links(asset, ctx, out);
+            file_refs(asset, assets, &mut by_path, ctx, out);
             if asset.kind == AssetKind::Skill {
                 skill_paths(asset, ctx, out);
             }
@@ -120,6 +124,71 @@ fn links(asset: &Asset, ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
             ),
         ));
     }
+}
+
+/// Kiro `#[[file:…]]` / `#[[folder:…]]` references to missing targets, and line ranges
+/// past the end of the file (or empty: `0`, start after end).
+fn file_refs<'a>(
+    asset: &Asset,
+    assets: &'a [Asset],
+    by_path: &mut Option<HashMap<&'a str, &'a Asset>>,
+    ctx: &RuleCtx<'_>,
+    out: &mut Vec<Finding>,
+) {
+    for (r, target) in kiro_refs(asset) {
+        if looks_like_example(&r.path) {
+            continue;
+        }
+        let written = asset
+            .source
+            .get(r.span.start as usize..r.span.end as usize)
+            .unwrap_or_default();
+        let quoted = truncate(written, QUOTED);
+        let msg = if r.folder {
+            (!dir_exists(ctx, &target))
+                .then(|| format!("Broken reference `{quoted}`: no such folder"))
+        } else if !exists(ctx, &target) {
+            Some(format!("Broken reference `{quoted}`: no such file"))
+        } else if let Some((start, end)) = r.lines {
+            let by_path = by_path
+                .get_or_insert_with(|| assets.iter().map(|a| (a.rel_path.as_str(), a)).collect());
+            let lines = by_path
+                .get(target.as_str())
+                .copied()
+                .or_else(|| ctx.imports.file(&target))
+                .filter(|f| f.skipped.is_none())
+                .map(line_count);
+            if start == 0 {
+                Some(format!("Broken line range `{quoted}`: lines start at 1"))
+            } else if start > end {
+                Some(format!(
+                    "Broken line range `{quoted}`: starts after it ends"
+                ))
+            } else {
+                lines
+                    .filter(|&n| end > n)
+                    .map(|n| format!("Broken line range `{quoted}`: the file has {n} lines"))
+            }
+        } else {
+            None
+        };
+        if let Some(msg) = msg {
+            out.push(Finding::new(&META, asset, r.span, msg));
+        }
+    }
+}
+
+/// Lines of a file, not counting the empty one after a final newline.
+fn line_count(f: &Asset) -> u32 {
+    let n = f.lines.line_count();
+    let n = if f.source.ends_with('\n') { n - 1 } else { n };
+    u32::try_from(n).unwrap_or(u32::MAX)
+}
+
+/// Whether `rel` is a directory holding walked files, or one on disk.
+fn dir_exists(ctx: &RuleCtx<'_>, rel: &str) -> bool {
+    let dir = format!("{rel}/");
+    ctx.files.iter().any(|f| f.starts_with(&dir)) || ctx.root.join(rel).is_dir()
 }
 
 /// The file part of a relative link destination; `None` for URLs and anchor-only links.

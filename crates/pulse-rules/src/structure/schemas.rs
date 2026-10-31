@@ -136,6 +136,20 @@ pub static COPILOT_AGENT: Schema = Schema {
     ],
 };
 
+/// Kiro steering (https://kiro.dev/docs/steering/); `inclusion` decides the required keys,
+/// checked by AI-STR-001 itself. `title` is not documented but common in real steering (ADR-050).
+pub static KIRO_STEERING: Schema = Schema {
+    label: "Kiro steering",
+    required: Required::None,
+    known: &[
+        "inclusion",
+        "fileMatchPattern",
+        "name",
+        "description",
+        "title",
+    ],
+};
+
 /// The schema of `asset`, from its kind and path. `None` for flavors without a known
 /// schema (`.prompty`, `.claude/rules`, Windsurf, Cline, custom kinds).
 pub fn schema_for(asset: &Asset) -> Option<&'static Schema> {
@@ -148,6 +162,7 @@ pub fn schema_for(asset: &Asset) -> Option<&'static Schema> {
         AssetKind::Agent => Some(&CLAUDE_AGENT),
         AssetKind::Prompt if path.ends_with(".prompt.md") => Some(&COPILOT_PROMPT),
         AssetKind::Prompt if path.ends_with(".md") => Some(&CLAUDE_COMMAND),
+        AssetKind::ScopedInstructions if asset.is_kiro_steering() => Some(&KIRO_STEERING),
         AssetKind::ScopedInstructions if path.ends_with(".mdc") => Some(&CURSOR_RULE),
         AssetKind::ScopedInstructions if path.ends_with(".instructions.md") => {
             Some(&COPILOT_INSTRUCTIONS)
@@ -160,8 +175,6 @@ pub fn schema_for(asset: &Asset) -> Option<&'static Schema> {
 mod tests {
     use std::path::PathBuf;
 
-    use pulse_core::LoadMode;
-
     use super::*;
 
     fn label(rel: &str, kind: AssetKind) -> Option<&'static str> {
@@ -169,7 +182,7 @@ mod tests {
             PathBuf::from(rel),
             rel,
             kind,
-            LoadMode::OnDemand,
+            kind.default_load(),
             String::new(),
         );
         schema_for(&a).map(|s| s.label)
@@ -209,6 +222,10 @@ mod tests {
             Some("Copilot instructions")
         );
         assert_eq!(label(".claude/rules/r.md", ScopedInstructions), None);
+        assert_eq!(
+            label(".kiro/steering/r.md", ScopedInstructions),
+            Some("Kiro steering")
+        );
         assert_eq!(label(".windsurf/rules/r.md", ScopedInstructions), None);
     }
 
@@ -222,6 +239,7 @@ mod tests {
             &COPILOT_INSTRUCTIONS,
             &COPILOT_PROMPT,
             &COPILOT_AGENT,
+            &KIRO_STEERING,
         ] {
             if let Required::All(keys) | Required::AnyOf(keys) = s.required {
                 assert!(keys.iter().all(|k| s.is_known(k)), "{}", s.label);
