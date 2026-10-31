@@ -11,7 +11,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use pulse_core::{AssetKind, ConfigError, DiscoverError, Finding, LoadMode};
+use pulse_core::{AssetKind, AssistantSet, ConfigError, DiscoverError, Finding, LoadMode, Skip};
 
 pub use baseline::{BASELINE_FILE, Baseline, BaselineError};
 pub use gate::{Condition, Gate, GateStatus, GateValue};
@@ -44,6 +44,8 @@ pub struct ScanOptions {
     pub baseline: Option<Baseline>,
     /// Keep only new findings (`--new-only`); also turns on new-code ratings and gate.
     pub new_only: bool,
+    /// Scan only the files these assistants load (`--assistant`); `None` scans for all.
+    pub assistants: Option<AssistantSet>,
 }
 
 impl ScanOptions {
@@ -63,6 +65,14 @@ pub struct AssetMeta {
     pub load: LoadMode,
     pub tokens: u32,
     pub always_tokens: u32,
+}
+
+/// An asset outside the `--assistant` selection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotLoaded {
+    pub rel_path: String,
+    pub kind: AssetKind,
+    pub reason: Skip,
 }
 
 /// Wall-clock time of each scan phase.
@@ -94,6 +104,10 @@ pub struct Report {
     pub gate: Gate,
     /// The baseline the findings were compared with.
     pub baseline: Option<Baseline>,
+    /// The `--assistant` selection; `None` when the scan covers every assistant.
+    pub assistants: Option<AssistantSet>,
+    /// Assets left out by `--assistant`, with the reason, sorted by path.
+    pub not_loaded: Vec<NotLoaded>,
     pub timings: Timings,
 }
 

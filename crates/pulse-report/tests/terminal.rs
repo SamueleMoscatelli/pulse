@@ -16,6 +16,10 @@ fn repo(name: &str) -> PathBuf {
 }
 
 fn render(name: &str, quiet: bool, verbose: bool) -> String {
+    render_width(name, quiet, verbose, None)
+}
+
+fn render_width(name: &str, quiet: bool, verbose: bool, width: Option<usize>) -> String {
     let root = repo(name);
     let config = Config::load(&root, None).unwrap();
     let mut report = scan(&root, &config, &ScanOptions::default()).unwrap();
@@ -29,6 +33,7 @@ fn render(name: &str, quiet: bool, verbose: bool) -> String {
         quiet,
         verbose,
         min_severity: Severity::Info,
+        width,
     };
     let mut out = Vec::new();
     render_terminal(&mut out, &report, &opts).unwrap();
@@ -85,4 +90,52 @@ fn terminal_nothing_always_on() {
 #[test]
 fn terminal_one_assistant() {
     insta::assert_snapshot!(render("single", false, false));
+}
+
+#[test]
+fn terminal_narrow_width_wraps_under_the_text() {
+    let out = render_width("advice", false, true, Some(72));
+    insta::assert_snapshot!(out);
+    assert!(out.lines().all(|l| l.chars().count() <= 72), "{out}");
+}
+
+#[test]
+fn terminal_quiet_ignores_width() {
+    assert_eq!(
+        render_width("mixed", true, false, Some(40)),
+        render("mixed", true, false)
+    );
+}
+
+#[test]
+fn terminal_assistant_scope_lists_skipped_files_with_verbose() {
+    let root = repo("mixed");
+    let config = Config::load(&root, None).unwrap();
+    let opts = ScanOptions {
+        assistants: Some([pulse_core::Assistant::Copilot].into_iter().collect()),
+        ..ScanOptions::default()
+    };
+    let report = scan(&root, &config, &opts).unwrap();
+    let out = |verbose| {
+        let opts = TerminalOptions {
+            root: &root,
+            color: false,
+            quiet: false,
+            verbose,
+            min_severity: Severity::Info,
+            width: None,
+        };
+        let mut out = Vec::new();
+        render_terminal(&mut out, &report, &opts).unwrap();
+        String::from_utf8(out).unwrap()
+    };
+    let brief = out(false);
+    let scope: String = brief
+        .lines()
+        .skip_while(|l| !l.starts_with(" SCOPE"))
+        .take(2)
+        .collect::<Vec<_>>()
+        .join("\n");
+    insta::assert_snapshot!(scope);
+    assert!(out(true).contains("   .cursor/rules/style.mdc"));
 }

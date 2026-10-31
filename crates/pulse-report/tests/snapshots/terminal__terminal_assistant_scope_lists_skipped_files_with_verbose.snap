@@ -1,0 +1,6 @@
+---
+source: crates/pulse-report/tests/terminal.rs
+expression: scope
+---
+ SCOPE          Copilot only (--assistant) · 19 assets scanned
+   Not scanned     14 files Copilot doesn't load were not scanned: 4 for Claude Code · 4 for Cursor · 2 for Cline · 2 for Gemini CLI · 2 for Windsurf · run with -v to list them

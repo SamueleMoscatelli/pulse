@@ -63,14 +63,22 @@ pub enum Source {
 }
 
 /// Computes the [`ContextLoad`] of the in-scope assets.
-pub fn context_load(assets: &[&AssetMeta], window: u64, budget: u64) -> ContextLoad {
+/// With `only`, just those assistants are listed.
+pub fn context_load(
+    assets: &[&AssetMeta],
+    window: u64,
+    budget: u64,
+    only: Option<pulse_core::AssistantSet>,
+) -> ContextLoad {
     let always: Vec<(&AssetMeta, Option<pulse_core::AssistantSet>)> = assets
         .iter()
         .filter(|a| a.always_tokens > 0)
         .map(|&a| (a, pulse_core::loaded_by(&a.rel_path, a.kind)))
         .collect();
-    let (by_assistant, always_on_tokens) =
-        pulse_core::per_assistant(always.iter().map(|(a, s)| (*s, u64::from(a.always_tokens))));
+    let (by_assistant, always_on_tokens) = pulse_core::per_assistant(
+        always.iter().map(|(a, s)| (*s, u64::from(a.always_tokens))),
+        only,
+    );
     let largest = by_assistant.first().map(|&(a, _)| a);
     let (mut skills, mut agents) = ((0, 0), (0, 0));
     let mut contributors = Vec::new();
@@ -431,7 +439,11 @@ mod tests {
             finding("X-ACME-001", Severity::High, "a", [1, 1, 1, 2]),
         ];
         let scoped: Vec<&AssetMeta> = assets.iter().collect();
-        let m = metrics(&findings, &scoped, &context_load(&scoped, 200_000, 8000));
+        let m = metrics(
+            &findings,
+            &scoped,
+            &context_load(&scoped, 200_000, 8000, None),
+        );
         assert_eq!(m.total_tokens, 5000);
         assert_eq!(m.always_on_tokens, 1050);
         assert!((m.context_debt - 0.05).abs() < 1e-12);
@@ -469,7 +481,7 @@ mod tests {
             at(".mcp.json", AssetKind::McpConfig, 40, 0),
         ];
         let scoped: Vec<&AssetMeta> = assets.iter().collect();
-        let load = context_load(&scoped, 1000, 8000);
+        let load = context_load(&scoped, 1000, 8000, None);
         use pulse_core::Assistant::*;
         assert_eq!(
             load.by_assistant,
@@ -507,7 +519,7 @@ mod tests {
             at(".claude/commands/c.md", AssetKind::Prompt, 70, 0),
         ];
         let scoped: Vec<&AssetMeta> = assets.iter().collect();
-        let load = context_load(&scoped, 1000, 8000);
+        let load = context_load(&scoped, 1000, 8000, None);
         assert!(load.by_assistant.is_empty());
         assert_eq!((load.always_on_tokens, load.on_demand_tokens), (5, 70));
     }

@@ -509,3 +509,44 @@ fn custom_rule_bad_regex_exits_two_naming_the_rule() {
         "{stderr}"
     );
 }
+
+#[test]
+fn scan_assistant_lists_what_it_skips() {
+    let out = pulse(&[
+        "scan",
+        "-v",
+        "-C",
+        &root("mixed"),
+        "--assistant",
+        "claude-code",
+    ])
+    .code(0);
+    let text = String::from_utf8_lossy(&out.get_output().stdout).into_owned();
+    assert!(
+        text.contains("SCOPE          Claude Code only (--assistant)"),
+        "{text}"
+    );
+    assert!(text.contains(".cursor/rules/style.mdc"), "{text}");
+    let both = pulse(&[
+        "scan",
+        "-q",
+        "-f",
+        "markdown",
+        "-C",
+        &root("mixed"),
+        "--assistant",
+        "copilot,cursor",
+    ])
+    .code(0);
+    let md = String::from_utf8_lossy(&both.get_output().stdout).into_owned();
+    assert!(
+        md.contains("- Scope: Copilot and Cursor only (--assistant)"),
+        "{md}"
+    );
+    let bad = pulse(&["scan", "-C", &root("mixed"), "--assistant", "claude"]).code(2);
+    let err = String::from_utf8_lossy(&bad.get_output().stderr).into_owned();
+    assert!(
+        err.contains("expected one of copilot, claude-code"),
+        "{err}"
+    );
+}

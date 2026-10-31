@@ -5,7 +5,10 @@ expression: "render(\"clean\")"
 Pulse Quality Gate: PASSED
   ✔ severity ≥ high: 0 issues (allowed 0)
   ✔ context debt: 0% (max 10%)
-  Context load: 69 tokens on every request · 0% of a 200k window (budget 8k)
+  Context load (always-on context): the tokens each assistant reads on every request
+    Copilot: 69 tokens · 0% of 200k window · 0.9% of 8k budget
+    Claude Code: 69 tokens · 0% of 200k window · 0.9% of 8k budget
     Always loaded: CLAUDE.md 69 (Copilot, Claude Code)
     On demand: 38 tokens in skills, agents, prompts and scoped rules, loaded only when used
+    Budget: 8k always-on tokens per assistant (`budgets.always_on` in pulse.toml)
   CRITICAL 0   HIGH 0   MEDIUM 0   LOW 0   INFO 0

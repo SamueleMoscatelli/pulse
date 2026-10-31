@@ -8,8 +8,8 @@ use pulse_engine::{GateStatus, Report};
 
 use crate::context;
 use crate::rel_path;
-use crate::terminal::tokens;
 use crate::terminal::{describe, upper};
+use crate::terminal::{pct, tokens};
 
 /// How to render a [`Report`] as GitHub Actions annotations.
 #[derive(Debug, Clone, Copy)]
@@ -61,17 +61,19 @@ pub fn render<W: Write + ?Sized>(
     let c = &report.context;
     writeln!(
         w,
-        "  Context load: {} (budget {})",
-        context::headline(c),
-        tokens(c.budget)
+        "  Context load (always-on context): {}",
+        context::MEANING
     )?;
-    if context::per_assistant_lines(c) {
-        let each: Vec<String> = c
-            .by_assistant
-            .iter()
-            .map(|&(a, t)| format!("{a} {}", tokens(t)))
-            .collect();
-        writeln!(w, "    By assistant: {}", each.join(" · "))?;
+    let (window_h, budget_h) = context::share_headers(c);
+    for (name, t) in context::rows(c) {
+        let (of_window, of_budget) = context::shares(c, t);
+        writeln!(
+            w,
+            "    {name}: {} tokens · {} {window_h} · {} {budget_h}",
+            tokens(t),
+            pct(of_window),
+            pct(of_budget)
+        )?;
     }
     writeln!(
         w,
@@ -80,6 +82,10 @@ pub fn render<W: Write + ?Sized>(
     )?;
     if c.on_demand_tokens > 0 {
         writeln!(w, "    On demand: {}", context::on_demand(c))?;
+    }
+    writeln!(w, "    Budget: {}", context::budget(c))?;
+    if let (Some(scope), Some(left_out)) = (context::scope(report), context::not_loaded(report)) {
+        writeln!(w, "  Scope: {scope}. {left_out}.")?;
     }
     let m = &report.metrics;
     let counts: Vec<String> = Severity::ALL
