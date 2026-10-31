@@ -2,7 +2,7 @@
 source: crates/pulse-report/tests/terminal.rs
 expression: "render(\"mixed\", false, false)"
 ---
- Pulse 1.1.0-rc.1 · 33 assets · 204 tokens · 8 ms
+ Pulse 1.1.0 · 33 assets · 204 tokens · 8 ms
 
  QUALITY GATE   FAILED
    ✖ severity ≥ high        1 issue    (allowed 0)
