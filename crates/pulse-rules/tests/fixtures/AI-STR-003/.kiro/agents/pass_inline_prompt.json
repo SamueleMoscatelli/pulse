@@ -1,0 +1,5 @@
+{
+  "name": "reviewer",
+  "description": "Reviews code for quality, security and maintainability. Use PROACTIVELY after writing or modifying code, and when the user asks for a review of a diff.",
+  "prompt": "See [the guide](missing.md) and @missing/import.md: not links in a JSON agent."
+}

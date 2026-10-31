@@ -1,0 +1,8 @@
+{
+  "name": "builder",
+  "hooks": {
+    "agentSpawn": [{ "command": "git status" }],
+    "preToolUse": [{ "matcher": "fs_*", "command": "echo checking" }],
+    "stop": [{ "command": "npm test" }]
+  }
+}

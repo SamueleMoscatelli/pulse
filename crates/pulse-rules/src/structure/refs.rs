@@ -1,12 +1,12 @@
-//! AI-STR-003: broken `@import`, relative link, skill path or Kiro `#[[file:…]]` reference,
-//! and `@import` cycles.
+//! AI-STR-003: broken `@import`, relative link, skill path, Kiro `#[[file:…]]` reference or
+//! Kiro agent `file://` URI, and `@import` cycles.
 //! Project scope: imports resolve against every walked file and the import graph.
 
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-use pulse_core::refs::{is_file_import, kiro_refs, resolve};
+use pulse_core::refs::{is_file_import, kiro_refs, resolve, resolve_in};
 use pulse_core::text::prose::covers;
 use pulse_core::{
     Asset, AssetKind, Category, Finding, KindSet, ProjectRule, RuleCtx, RuleMeta, Severity, Span,
@@ -48,6 +48,10 @@ impl ProjectRule for BrokenReference {
         let mut by_path: Option<HashMap<&str, &Asset>> = None;
         for asset in assets {
             if !META.kinds.contains(asset.kind) || asset.skipped.is_some() {
+                continue;
+            }
+            agent_uris(asset, ctx, out);
+            if asset.is_json_agent() {
                 continue;
             }
             imports(asset, ctx, out);
@@ -123,6 +127,43 @@ fn links(asset: &Asset, ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
                 truncate(&link.dest, QUOTED)
             ),
         ));
+    }
+}
+
+/// Kiro agent `file://` URIs to missing files (ADR-053): `prompt` resolves from the agent's
+/// folder; `resources` from the project root (the docs' `file://README.md`) or, failing
+/// that, the agent's folder. Globs, absolute and `~` paths are not checked.
+fn agent_uris(asset: &Asset, ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
+    let Some(agent) = asset.kiro_agent() else {
+        return;
+    };
+    let rel = asset.rel_path.as_str();
+    let project = rel.rfind(".kiro/agents/").map_or("", |i| &rel[..i]);
+    let project = project.strip_suffix('/').unwrap_or(project);
+    let uris = agent.prompt.iter().map(|p| (p, false));
+    for ((uri, span), resource) in uris.chain(agent.resources.iter().map(|r| (r, true))) {
+        let Some(path) = uri.trim().strip_prefix("file://") else {
+            continue;
+        };
+        if path.starts_with('/') || path.contains(['*', '?', '[', '{']) || looks_like_example(path)
+        {
+            continue;
+        }
+        let in_project = || resolve_in(project, path).is_some_and(|t| exists(ctx, &t));
+        let found = match resolve(rel, path) {
+            None => continue,
+            Some(t) => exists(ctx, &t) || (resource && in_project()),
+        };
+        if !found {
+            let span = crate::security::mcp::value_span(asset, *span, uri, 0, uri.len());
+            let quoted = truncate(uri.trim(), QUOTED);
+            out.push(Finding::new(
+                &META,
+                asset,
+                span,
+                format!("Broken `{quoted}`: no such file"),
+            ));
+        }
     }
 }
 

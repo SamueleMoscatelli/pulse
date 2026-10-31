@@ -1,5 +1,5 @@
 //! AI-STR-005: unknown tool in an allow-list (agent `tools`, command `allowed-tools`,
-//! settings permissions). Project scope: `mcp__<server>__…` needs every McpConfig's servers.
+//! settings permissions, Kiro agent `tools`/`allowedTools`). Project scope: `mcp__<server>__…` needs every McpConfig's servers.
 
 use std::collections::BTreeSet;
 
@@ -8,7 +8,7 @@ use pulse_core::{
 };
 
 use crate::lexicon::platform::{
-    CLAUDE_IMPLICIT_SERVERS, CLAUDE_TOOLS, COPILOT_TOOL_ALIASES, COPILOT_TOOLS,
+    CLAUDE_IMPLICIT_SERVERS, CLAUDE_TOOLS, COPILOT_TOOL_ALIASES, COPILOT_TOOLS, KIRO_TOOLS,
 };
 use crate::security::mcp::value_span;
 use crate::util::{distance_within, suggest, truncate};
@@ -35,10 +35,14 @@ pub struct UnknownTool;
 enum Platform {
     Claude,
     Copilot,
+    Kiro,
 }
 
 fn platform(asset: &Asset) -> Option<Platform> {
     let rel = asset.rel_path.as_str();
+    if asset.is_kiro_agent() {
+        return Some(Platform::Kiro);
+    }
     // `*.agent.md` / `*.prompt.md` are Copilot formats wherever they live (P8.7).
     if rel.starts_with(".github/")
         || rel.contains("/.github/")
@@ -100,6 +104,7 @@ impl ProjectRule for UnknownTool {
                 let message = match platform {
                     Platform::Claude => claude_error(entry, servers.as_ref()),
                     Platform::Copilot => copilot_error(entry, servers.as_ref()),
+                    Platform::Kiro => kiro_error(entry),
                 };
                 if let Some(message) = message {
                     out.push(Finding::new(&META, asset, span, message));
@@ -112,7 +117,11 @@ impl ProjectRule for UnknownTool {
                     let off = entry.find(name).unwrap_or(0);
                     each(entry, value_span(asset, *span, entry, off, name.len()));
                 }
-            } else {
+            } else if let Some(agent) = asset.kiro_agent() {
+                for (entry, span) in agent.tools.iter().chain(&agent.allowed_tools) {
+                    each(entry, value_span(asset, *span, entry, 0, entry.len()));
+                }
+            } else if !asset.is_json_agent() {
                 frontmatter_entries(asset, &mut each);
             }
         }
@@ -168,6 +177,29 @@ fn copilot_error(entry: &str, servers: Option<&BTreeSet<String>>) -> Option<Stri
     let s = suggest(name, COPILOT_TOOLS).filter(|s| distance_within(name, s, 1).is_some())?;
     Some(format!(
         "Unknown tool `{}` (did you mean `{s}`?)",
+        truncate(name, QUOTED)
+    ))
+}
+
+/// Kiro: a closed list of built-in names, tags and CLI 2.x names (https://kiro.dev/docs/tools/).
+fn kiro_error(entry: &str) -> Option<String> {
+    let name = entry.trim();
+    // `@builtin`, `@mcp`, `@server`, `@server/tool`, `subagent/<agent>` and wildcards are
+    // selectors: MCP servers may be user-level (`~/.kiro/settings/mcp.json`).
+    if name.is_empty()
+        || name.starts_with('@')
+        || name.starts_with("subagent/")
+        || name.contains(['*', '?'])
+        || KIRO_TOOLS.contains(&name)
+    {
+        return None;
+    }
+    // `*` is never a useful hint.
+    let names: Vec<&str> = KIRO_TOOLS.iter().copied().filter(|t| *t != "*").collect();
+    let hint =
+        suggest(name, &names).map_or_else(String::new, |s| format!(" (did you mean `{s}`?)"));
+    Some(format!(
+        "Unknown Kiro tool `{}`{hint}",
         truncate(name, QUOTED)
     ))
 }

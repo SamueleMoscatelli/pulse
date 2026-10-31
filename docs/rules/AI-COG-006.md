@@ -11,7 +11,7 @@ One finding at the `description` line when any of these holds (the message lists
 - No trigger cue: `use`/`used` followed within 4 words by `when`, `whenever`, `for` or `if` ("Use this agent when …"), `when the user`, or a word starting with `trigger`, `invok` or `proactive`.
 - First person: `I`, `I'm`, `I'll`, `I've`, `I'd` outside quotes or code spans (quoted user speech such as `"I need a review"` is fine).
 
-A missing or empty description is AI-STR-001's, not this rule's.
+Kiro agents (`.kiro/agents/`) are checked too: the frontmatter `description`, or the `description` string of a JSON agent. A missing or empty description is AI-STR-001's, not this rule's.
 
 ## Noncompliant
 ```markdown

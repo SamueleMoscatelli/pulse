@@ -34,6 +34,8 @@ fn kind_of(dir: &Path, name: &str) -> AssetKind {
     }
     if name.contains(".kiro/steering/") {
         AssetKind::ScopedInstructions
+    } else if name.contains(".kiro/agents/") {
+        AssetKind::Agent
     } else if name.contains(".kiro/hooks/") || name.ends_with(".kiro.hook") {
         AssetKind::Hooks
     } else if name.ends_with("SKILL.md") {
@@ -104,7 +106,7 @@ fn run_in(
     };
     let mut out = Vec::new();
     if let Some(rule) = RULES.iter().find(|r| r.meta().id == rule_id) {
-        for a in assets.iter().filter(|a| rule.meta().kinds.contains(a.kind)) {
+        for a in assets.iter().filter(|a| rule.applies_to(a)) {
             rule.check(a, &ctx, &mut out);
         }
     }
@@ -610,6 +612,20 @@ fn eff001_budget_per_kind_and_skill_body_only() {
     assert_eq!(eff001(AssetKind::Skill, "s/SKILL.md", &skill).len(), 1);
     // No budget for MCP configs.
     assert!(eff001(AssetKind::McpConfig, ".mcp.json", &tokens_text(9000)).is_empty());
+}
+
+#[test]
+fn eff001_counts_json_agent_prompt_only() {
+    let agent = |prompt: &str, padding: &str| {
+        let json =
+            format!("{{\"name\": \"a\", \"tools\": [\"{padding}\"], \"prompt\": \"{prompt}\"}}");
+        eff001(AssetKind::Agent, ".kiro/agents/a.json", &json)
+    };
+    // JSON keys and other fields don't count against the agent budget (2500).
+    assert!(agent(&tokens_text(2490), &tokens_text(3000)).is_empty());
+    let over = agent(&tokens_text(2600), "read");
+    assert_eq!(over.len(), 1, "{over:?}");
+    assert_eq!(over[0].token_waste, 100);
 }
 
 #[test]
@@ -2241,4 +2257,51 @@ fn cog004_messages() {
 #[test]
 fn cog006_messages() {
     insta::assert_snapshot!(messages(&fail_fixture_findings("AI-COG-006")));
+}
+
+#[test]
+fn json_agents_reach_only_rules_that_read_json() {
+    let reached = |rel: &str| -> Vec<&str> {
+        let a = asset(rel, AssetKind::Agent, b"{}".to_vec());
+        let mut ids: Vec<&str> = RULES
+            .iter()
+            .filter(|r| r.applies_to(&a))
+            .map(|r| r.meta().id)
+            .collect();
+        ids.sort_unstable();
+        ids
+    };
+    // Raw-text rules, the JSON agent's views, and its `description`; not Markdown prose rules.
+    assert_eq!(
+        reached(".kiro/agents/a.json"),
+        [
+            "AI-COG-006",
+            "AI-EFF-001",
+            "AI-SEC-001",
+            "AI-SEC-002",
+            "AI-SEC-003",
+            "AI-SEC-004",
+            "AI-SEC-005",
+            "AI-SEC-006",
+            "AI-SEC-007",
+            "AI-SEC-008",
+            "AI-SEC-009",
+            "AI-SEC-013",
+            "AI-STR-001",
+            "AI-STR-002",
+            "AI-STR-006",
+        ]
+    );
+    // Markdown agents don't reach the inline `hooks`/`mcpServers` rules.
+    let md = reached(".kiro/agents/a.md");
+    for id in [
+        "AI-SEC-004",
+        "AI-SEC-005",
+        "AI-SEC-006",
+        "AI-SEC-008",
+        "AI-SEC-009",
+        "AI-STR-006",
+    ] {
+        assert!(!md.contains(&id), "{id}");
+    }
 }

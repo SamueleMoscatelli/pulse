@@ -9,7 +9,7 @@ use crate::lexicon::shell::{
 };
 use crate::security::mcp::value_span;
 use crate::security::shell::{ExpKind, Expansion, Pipeline, Word, program, scan};
-use crate::util::truncate;
+use crate::util::{json_views, truncate};
 
 /// Chars of a command quoted in a message.
 const QUOTED: usize = 40;
@@ -26,7 +26,8 @@ pub static RCE_META: RuleMeta = RuleMeta {
     kinds: KindSet::SETTINGS
         .union(KindSet::HOOKS)
         .union(KindSet::SKILL)
-        .union(KindSet::PROMPT),
+        .union(KindSet::PROMPT)
+        .union(KindSet::AGENT),
     summary: "A hook or shell snippet downloads code and runs it (curl | bash).",
     remediation: "Vendor the script, pin it by checksum, or install from a package manager.",
     inline_suppressible: false,
@@ -37,7 +38,9 @@ pub static INTERP_META: RuleMeta = RuleMeta {
     name: "Unsafe interpolation in hook command",
     category: Category::Security,
     default_severity: Severity::High,
-    kinds: KindSet::SETTINGS.union(KindSet::HOOKS),
+    kinds: KindSet::SETTINGS
+        .union(KindSet::HOOKS)
+        .union(KindSet::AGENT),
     summary: "A hook command expands tool input unquoted or executes it.",
     remediation: "Quote expansions (\"$VAR\"), pass data via stdin or arguments, never eval it.",
     inline_suppressible: true,
@@ -71,7 +74,7 @@ fn span_of(asset: &Asset, text: &str, origin: Origin, start: usize, end: usize) 
     }
 }
 
-/// Shell commands of a Settings or Hooks asset's hooks (Kiro `runCommand` and untyped
+/// Shell commands of a Settings, Hooks or JSON agent asset's hooks (Kiro `runCommand` and untyped
 /// actions with a `command` too), noting disabled ones.
 fn hook_commands(asset: &Asset, mut f: impl FnMut(Snippet<'_>)) {
     for entry in asset.hooks() {
@@ -141,6 +144,11 @@ impl Rule for HookRemoteExec {
         &RCE_META
     }
 
+    // Agents: only a Kiro JSON agent's inline hooks.
+    fn applies_to(&self, asset: &Asset) -> bool {
+        json_views(&RCE_META, asset)
+    }
+
     fn check(&self, asset: &Asset, _ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
         let mut each = |(text, origin, note): Snippet<'_>| {
             if !RCE_HINTS.is_match(text) {
@@ -153,7 +161,7 @@ impl Rule for HookRemoteExec {
                 out.push(Finding::new(&RCE_META, asset, span, message + note));
             }
         };
-        if KindSet::MARKDOWN.contains(asset.kind) {
+        if KindSet::MARKDOWN.contains(asset.kind) && !asset.is_json_agent() {
             markdown_snippets(asset, &mut each);
         } else {
             hook_commands(asset, &mut each);
@@ -346,6 +354,11 @@ fn inline_script(src: &str, stage: &[Word<'_>], depth: u8, hits: &mut Vec<(usize
 impl Rule for HookUnsafeInterpolation {
     fn meta(&self) -> &'static RuleMeta {
         &INTERP_META
+    }
+
+    // Agents: only a Kiro JSON agent's inline hooks.
+    fn applies_to(&self, asset: &Asset) -> bool {
+        json_views(&INTERP_META, asset)
     }
 
     fn check(&self, asset: &Asset, _ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {

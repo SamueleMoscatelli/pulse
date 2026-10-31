@@ -2,6 +2,12 @@
 source: crates/pulse-rules/tests/fixtures.rs
 expression: "messages(&fail_fixture_findings(\"AI-STR-001\"))"
 ---
+.kiro/agents/fail_legacy_allowed_tools.json:5:3 Legacy `allowedTools` with no `permissions`: Kiro CLI V3 skips this agent
+  ↳ Run `/upgrade-agent` in Kiro CLI, or replace `allowedTools` with `permissions.rules`.
+.kiro/agents/fail_unknown_key.json:4:3 Unknown agent key "promt" (did you mean "prompt"?)
+  ↳ Fix the misspelled key, or remove a key Kiro does not read.
+.kiro/agents/fail_unknown_key.md:4:1 Unknown frontmatter key "allowedTool" (did you mean "allowedTools"?)
+  ↳ Close the `---` block, add the required keys and fix misspelled ones.
 .kiro/steering/fail_auto_no_description.md:1:1 Missing frontmatter key "description" (inclusion: auto)
   ↳ Close the `---` block, add the required keys and fix misspelled ones.
 .kiro/steering/fail_bad_inclusion.md:2:1 Invalid inclusion "fileMatched": did you mean "fileMatch"?

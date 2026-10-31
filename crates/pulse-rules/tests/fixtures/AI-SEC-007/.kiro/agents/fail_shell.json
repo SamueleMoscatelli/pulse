@@ -1,0 +1,10 @@
+{
+  "name": "code-reviewer",
+  "description": "Reviews code for quality, security and maintainability. Use PROACTIVELY after writing or modifying code, and when the user asks for a review of a diff.",
+  "tools": ["@builtin"],
+  "allowedTools": [
+    "fs_read",
+    "shell"
+  ],
+  "prompt": "You are a senior code reviewer."
+}

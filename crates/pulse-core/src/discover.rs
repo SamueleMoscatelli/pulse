@@ -83,6 +83,8 @@ enum Refine {
     Scoped,
     /// An asset only if its content has the expected shape.
     Sniff(Sniff),
+    /// Loaded only when selected: Kiro custom agents (ADR-053).
+    OnDemand,
 }
 
 /// Content test for files whose name alone is ambiguous.
@@ -144,6 +146,11 @@ const TABLE: &[(&[&str], AssetKind, Refine)] = &[
         ],
         AssetKind::Agent,
         Refine::None,
+    ),
+    (
+        &["**/.kiro/agents/*.md", "**/.kiro/agents/*.json"],
+        AssetKind::Agent,
+        Refine::OnDemand,
     ),
     (
         &[
@@ -417,6 +424,7 @@ fn resolve_load(entry: Entry, rel_path: &str) -> LoadMode {
                 LoadMode::Conditional
             }
         }
+        Refine::OnDemand => LoadMode::OnDemand,
         // Scoped: frontmatter promotion happens in `Asset::effective_load`.
         Refine::Scoped | Refine::None | Refine::Sniff(_) => entry.load,
     }
@@ -775,6 +783,9 @@ mod tests {
             ),
             ("plugin/hooks/hooks.json", Some((Hooks, Always))),
             (".kiro/hooks/fmt.kiro.hook", Some((Hooks, Always))),
+            (".kiro/agents/rev.json", Some((Agent, OnDemand))),
+            ("app/.kiro/agents/rev.md", Some((Agent, OnDemand))),
+            (".kiro/agents/nested/rev.json", None),
             ("app/.kiro/hooks/fmt.json", Some((Hooks, Always))),
             ("hooks/fmt.kiro.hook", Some((Hooks, OnDemand))),
             (".kiro/hooks/nested/fmt.kiro.hook", Some((Hooks, OnDemand))),

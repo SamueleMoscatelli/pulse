@@ -73,20 +73,20 @@
 - **FP guards** Ignore obvious placeholders (`xxx`, `<…>`, `${…}`, `your-`, `example`, `dummy`, `changeme`, all-same-char), plus `$VAR`, `{{…}}` and env lookups; see ADR-020). The generic key may have a `[a-z_]*` suffix and a closing quote before `:`/`=` (no newline across the separator), and its value needs a digit and must not look like code (calls, dotted paths, URLs, `/`-separated words); OpenAI matches need mixed case and a digit; the span is the secret value; overlapping matches keep the earlier provider (ADR-020).
 
 ### AI-SEC-004 — MCP credential not externalized
-- **Sev** High · **Kinds** McpConfig
+- **Sev** High · **Kinds** McpConfig, Kiro JSON agent `mcpServers` (ADR-053)
 - **Detect** A value in `env`, `headers`, Kiro `oauth` (`clientSecret`, ADR-051) or `args` (after a `--token`/`--api-key`/`--password`-like flag) whose key matches `(?i)(key|token|secret|password|auth|bearer)` and whose value is a literal, i.e. not `${env:X}`, `${input:X}`, `${X}`, `$X` or empty.
 - **Fix** Reference an environment variable or VS Code `inputs` (`promptString`, `password: true`).
 - **Note** When AI-SEC-003 also fires on the same span, keep only AI-SEC-003 (the engine dedups by span with severity precedence).
 - **FP guards** A value containing a reference anywhere (`Bearer ${input:X}`), an obvious placeholder (AI-SEC-003 list), a switch/number (`true`, `off`, `4096`), a path or a URL without userinfo is not literal; keys ending in `file`/`path`/`dir`/`url`/`uri`/`type`/`enabled`/`mode` are skipped; Docker `-e KEY=value` args count as env; the span is the value without quotes (ADR-021).
 
 ### AI-SEC-005 — Unpinned MCP server package
-- **Sev** High · **Kinds** McpConfig
+- **Sev** High · **Kinds** McpConfig, Kiro JSON agent `mcpServers` (ADR-053)
 - **Detect** stdio servers whose command is `npx`/`pnpm dlx`/`bunx`/`yarn dlx` with a package arg lacking `@<version>` (or using `@latest`); `uvx`/`pipx run` without `==version` / `@version`; `docker run` with an image lacking a tag/digest or tagged `:latest`. Using `-y`/`--yes` adds "auto-install" to the message.
 - **Detail** npm pinned = exact `MAJOR.MINOR.PATCH[-pre][+build]` (ranges, partial versions and dist-tags are unpinned); `--package`/`--from`/`--spec` values are the packages when present, else the first positional arg; `uv tool run` counts as `uvx`; local paths, URLs, `git+`/protocol specs and variables are skipped (ADR-021).
 - **Fix** Pin an exact version (or a digest for Docker).
 
 ### AI-SEC-006 — Insecure MCP transport
-- **Sev** High · **Kinds** McpConfig
+- **Sev** High · **Kinds** McpConfig, Kiro JSON agent `mcpServers` (ADR-053)
 - **Detect** HTTP/SSE server URL with scheme `http://` and host not in {`localhost`, `127.0.0.1`, `::1`, `*.localhost`}. Medium when the host is a private IP (RFC 1918).
 - **Detail** URLs whose host is a variable (`${…}`) are skipped and all of `127.0.0.0/8` is loopback; `httpUrl`/`serverUrl` count as the URL (ADR-021).
 
@@ -96,14 +96,15 @@
   - Settings: `permissions.allow` contains `Bash`, `Bash(*)`, `Bash(:*)`, or `*`; `WebFetch` without a domain; `defaultMode: "bypassPermissions"`; `enableAllProjectMcpServers: true` (Medium).
   - Agent/Prompt frontmatter: `allowed-tools`/`tools` containing unrestricted `Bash`. This is Medium, because subagents legitimately use it, and High when combined with `WebFetch`/network tools (exfiltration chain).
   - Any asset: text containing `--dangerously-skip-permissions` or `--yolo`.
+  - Kiro agents (`.kiro/agents/*.json` and `*.md`, ADR-053): `allowedTools` pre-approving the shell (`shell`, `execute_bash`, `execute_cmd`, `*`, `@builtin`; Medium, High with a web tool or for `*`/`@builtin`) unless `toolsSettings` restricts that tool; `tools: ["*"]` with no `permissions` (Medium); a `permissions` rule with `effect: allow`, no `exclude` and no `match` or a `*`/`**` match for `shell` (Medium) or `all`/`builtin` (High); write access with no path limit (`allowedTools` `fs_write`/`write`/`fs_append`/`str_replace`/`*`/`@builtin` without `toolsSettings`, or an allow rule for `fs_write`/`filesystem`/`all`/`builtin` matching everything, `~/**` or `~/.kiro/**`) → Medium, since it reaches `~/.kiro` (agents, steering, MCP configs; the docs' warning). A JSON agent's inline `mcpServers` get the McpConfig checks below.
   - McpConfig: `alwaysAllow` (Cline, Roo) / `autoApprove` (Kiro, Cline) lists containing write/exec tools or `*`, on disabled servers too (ADR-051). "Every tool of the server" listed one by one is not detected: the server's tool list is not in the config.
 
 ### AI-SEC-008 — Remote code execution in hook
-- **Sev** Critical · **Kinds** Settings, Hooks, Skill, Prompt · **Inline-suppressible** no
+- **Sev** Critical · **Kinds** Settings, Hooks, Skill, Prompt, Kiro JSON agent `hooks` (ADR-053) · **Inline-suppressible** no
 - **Detect** In hook commands (and in fenced `bash`/`sh` blocks of skills/commands with `!` execution), match pipe-to-shell: `(curl|wget|iwr|Invoke-WebRequest)[^|]*\|\s*(sudo\s+)?(sh|bash|zsh|python3?|node|iex)`, `bash <(curl …)`, `eval "$(curl …)"`, plus base64 decode piped to a shell. Fences: `bash`/`sh`/`shell`/`zsh` in skill and prompt bodies, plus `` !`cmd` `` lines (ADR-023).
 
 ### AI-SEC-009 — Unsafe interpolation in hook command
-- **Sev** High · **Kinds** Settings, Hooks
+- **Sev** High · **Kinds** Settings, Hooks, Kiro JSON agent `hooks` (ADR-053)
 - **Detect** Hook commands that interpolate tool input unquoted into a shell, e.g. `$(jq -r .tool_input.command)` or `$CLAUDE_FILE_PATHS` / `${file}` outside double quotes, or passed to `eval`/`sh -c`. Also a tool-input stage piped into `xargs` (ADR-023).
 - **Fix** Quote expansions; pass data via stdin or arguments; never `eval` tool input.
 
@@ -132,15 +133,15 @@
 
 ### AI-STR-001 — Invalid or missing frontmatter
 - **Sev** High · **Kinds** Skill, Agent, Prompt, ScopedInstructions
-- **Detect** YAML parse errors (report the YAML error line), unterminated `---`, or missing required keys. Required: Skill → `name`, `description`; Claude Agent → `name`, `description`; `.mdc` → at least one of `description`/`globs`/`alwaysApply`; `.instructions.md` → `applyTo`; Kiro steering (`.kiro/steering/`, ADR-050) → known keys `inclusion`, `fileMatchPattern`, `name`, `description`, `title`, `inclusion` one of `always`/`fileMatch`/`manual`/`auto` (typo hint), `fileMatch` needs a non-empty `fileMatchPattern` string or list of strings, `auto` needs `name` and `description`, and a YAML-like `---` block setting `inclusion` below the first line (outside code blocks) is reported, since Kiro then always includes the file. Unknown keys → Low (typo hint via Levenshtein ≤ 2 against the known keys). YAML parse errors are reported once, by AI-STR-002 (ADR-025). Platform comes from the path; Claude commands, `.prompt.md` and `.agent.md` have no required keys but are checked for unknown ones; `.prompty`, `.claude/rules`, Windsurf and Cline have no schema.
+- **Detect** YAML parse errors (report the YAML error line), unterminated `---`, or missing required keys. Required: Skill → `name`, `description`; Claude Agent → `name`, `description`; `.mdc` → at least one of `description`/`globs`/`alwaysApply`; `.instructions.md` → `applyTo`; Kiro steering (`.kiro/steering/`, ADR-050) → known keys `inclusion`, `fileMatchPattern`, `name`, `description`, `title`, `inclusion` one of `always`/`fileMatch`/`manual`/`auto` (typo hint), `fileMatch` needs a non-empty `fileMatchPattern` string or list of strings, `auto` needs `name` and `description`, and a YAML-like `---` block setting `inclusion` below the first line (outside code blocks) is reported, since Kiro then always includes the file. Unknown keys → Low (typo hint via Levenshtein ≤ 2 against the known keys). YAML parse errors are reported once, by AI-STR-002 (ADR-025). Platform comes from the path; Claude commands, `.prompt.md` and `.agent.md` have no required keys but are checked for unknown ones; `.prompty`, `.claude/rules`, Windsurf and Cline have no schema. Kiro agents (ADR-053): `.kiro/agents/*.md` frontmatter and `.kiro/agents/*.json` top-level keys are checked against `KIRO_AGENT` (no required key: `name` defaults to the file name); a JSON agent with CLI 2.x `allowedTools` or `toolsSettings` and no `permissions` → Medium, since Kiro CLI V3 skips the profile until `/upgrade-agent` converts it.
 
 ### AI-STR-002 — Invalid file content
 - **Sev** High · **Kinds** all
 - **Detect** Invalid UTF-8 (lossy-decoded), JSON/JSONC parse error, wrong top-level shape for the kind (e.g. `mcpServers` not an object), files over `max_file_bytes` (Info, "skipped").
 
 ### AI-STR-003 — Broken reference or import
-- **Sev** Medium · **Kinds** md · **Scope** project
-- **Detect** `@path` imports (CLAUDE.md), Kiro `#[[file:<path>]]`, `#[[file:<path>:<line>]]`, `#[[file:<path>:<start>-<end>]]` and `#[[folder:<path>]]` references (in `.kiro/steering/` files, from the workspace root holding `.kiro/`; in `AGENTS.md`, from its folder; ADR-050) whose target is missing or whose line range is empty or past the end of the file, relative Markdown links, and paths in skill bodies (`scripts/x.py`, `references/y.md`) that do not exist relative to the asset (or to the root for `@/`). Skip URLs, anchors-only links and paths in code fences that look like examples (contain `<`, `your-`, `example`). Import cycles (≤ 5 hops) → High. `@` tokens without `/` or `.` are mentions, not imports (ADR-027). A skill path shown only as code (code span or block) is reported only when its first directory exists in the skill or at the root (a likely typo) or a command runs it (`python`, `node`, `bash`, `uv run`, … in `lexicon::shell::SCRIPT_RUNNERS`); otherwise it is a file the skill produces or asks for (ADR-046).
+- **Sev** Medium · **Kinds** md, Kiro JSON agents · **Scope** project
+- **Detect** Kiro agent `file://` URIs (ADR-053): `prompt` from the agent's folder, `resources` from the project root or the agent's folder; globs, absolute and `~` paths are skipped (JSON agents get only this check). `@path` imports (CLAUDE.md), Kiro `#[[file:<path>]]`, `#[[file:<path>:<line>]]`, `#[[file:<path>:<start>-<end>]]` and `#[[folder:<path>]]` references (in `.kiro/steering/` files, from the workspace root holding `.kiro/`; in `AGENTS.md`, from its folder; ADR-050) whose target is missing or whose line range is empty or past the end of the file, relative Markdown links, and paths in skill bodies (`scripts/x.py`, `references/y.md`) that do not exist relative to the asset (or to the root for `@/`). Skip URLs, anchors-only links and paths in code fences that look like examples (contain `<`, `your-`, `example`). Import cycles (≤ 5 hops) → High. `@` tokens without `/` or `.` are mentions, not imports (ADR-027). A skill path shown only as code (code span or block) is reported only when its first directory exists in the skill or at the root (a likely typo) or a command runs it (`python`, `node`, `bash`, `uv run`, … in `lexicon::shell::SCRIPT_RUNNERS`); otherwise it is a file the skill produces or asks for (ADR-046).
 
 ### AI-STR-004 — Name / description constraint violated
 - **Sev** Medium · **Kinds** Skill, Agent, Prompt
@@ -149,11 +150,11 @@
 ### AI-STR-005 — Unknown tool in allow-list
 - **Sev** Medium · **Kinds** Agent, Prompt, Settings
 - **Detect** `tools`/`allowed-tools`/permission entries naming a tool that is neither a known built-in (list in `lexicon::KNOWN_TOOLS`, per platform) nor `mcp__<server>__<tool>` with `<server>` defined in a discovered McpConfig. Levenshtein suggestion in the message.
-- **Scope** Project rule. Claude Code (settings, `.claude/agents`, `.claude/commands`): closed built-in list (`lexicon::platform::CLAUDE_TOOLS`); Copilot (`.github/…`, and `*.agent.md`/`*.prompt.md` anywhere): only one-edit typos of `COPILOT_TOOLS`, compared case-insensitively, with the Copilot aliases (`COPILOT_TOOL_ALIASES`: `Read`, `shell`, `Bash`, `Task`, …) accepted (ADR-046). **FP guards** `mcp__` entries are not checked when the project has no McpConfig, nor for implicit servers (`ide`, `claude_ai_*`, `plugin_*`) or wildcards (ADR-026).
+- **Scope** Project rule. Claude Code (settings, `.claude/agents`, `.claude/commands`): closed built-in list (`lexicon::platform::CLAUDE_TOOLS`); Copilot (`.github/…`, and `*.agent.md`/`*.prompt.md` anywhere): only one-edit typos of `COPILOT_TOOLS`, compared case-insensitively, with the Copilot aliases (`COPILOT_TOOL_ALIASES`: `Read`, `shell`, `Bash`, `Task`, …) accepted (ADR-046). **FP guards** `mcp__` entries are not checked when the project has no McpConfig, nor for implicit servers (`ide`, `claude_ai_*`, `plugin_*`) or wildcards (ADR-026). Kiro agents (`.kiro/agents/`, ADR-053): `tools` and `allowedTools` against the closed list `KIRO_TOOLS` (built-in tool IDs, category tags `read`/`write`/`shell`/`web`/`subagent`, `*`, and CLI 2.x names such as `fs_read`, `execute_cmd`, `use_aws`, `todo_list`; https://kiro.dev/docs/tools/); `@builtin`, `@mcp`, `@server`, `@server/tool`, `subagent/<agent>` and wildcard entries are selectors and are not checked, since MCP servers may be user-level.
 
 ### AI-STR-006 — Invalid hook definition
-- **Sev** High · **Kinds** Settings, Hooks
-- **Detect** Unknown event name (vs `lexicon::platform::{CLAUDE,CURSOR,COPILOT}_HOOK_EVENTS`, Cursor for `.cursor/hooks.json`, Copilot for `.github/hooks/` or hooks using the Copilot keys `bash`/`powershell`/`timeoutSec`; ADR-046), missing `command`/`prompt` on a command/prompt hook, `type` not in the platform's list (Claude: `command`, `prompt`, `http`, `mcp_tool`, `agent`; Cursor: `command`, `prompt`; Copilot: `command`, whose command is `bash`, else `powershell`; Kiro, ADR-052: legacy `*.kiro.hook` `when.type` from `KIRO_LEGACY_HOOK_EVENTS` and `then.type` `askAgent`/`runCommand`, v1 `trigger` from `KIRO_HOOK_TRIGGERS` and `action.type` `agent`/`command`, a missing trigger or action, `runCommand`/`command` without `command`, `askAgent`/`agent` without `prompt`; Kiro matchers may be `@` selectors or `*`/`?` wildcards and `timeout: 0` is valid; findings on a disabled hook say so), matcher that is not a valid regex (`*`, `""` and plain `A|B` lists are not regexes; JS look-around/backreferences are skipped), `timeout` (Copilot `timeoutSec`) ≤ 0 or > 600 s (Medium), a referenced script path (`./…`, `$CLAUDE_PROJECT_DIR/…`, `${CLAUDE_PLUGIN_ROOT}/…`, or relative with a script extension) that does not exist (Medium, ADR-026).
+- **Sev** High · **Kinds** Settings, Hooks, Kiro JSON agent `hooks` (ADR-053)
+- **Detect** Unknown event name (vs `lexicon::platform::{CLAUDE,CURSOR,COPILOT}_HOOK_EVENTS`, Cursor for `.cursor/hooks.json`, Copilot for `.github/hooks/` or hooks using the Copilot keys `bash`/`powershell`/`timeoutSec`; ADR-046), missing `command`/`prompt` on a command/prompt hook, `type` not in the platform's list (Claude: `command`, `prompt`, `http`, `mcp_tool`, `agent`; Cursor: `command`, `prompt`; Copilot: `command`, whose command is `bash`, else `powershell`; Kiro, ADR-052: legacy `*.kiro.hook` `when.type` from `KIRO_LEGACY_HOOK_EVENTS` and `then.type` `askAgent`/`runCommand`, v1 `trigger` from `KIRO_HOOK_TRIGGERS` and `action.type` `agent`/`command`, a missing trigger or action, `runCommand`/`command` without `command`, `askAgent`/`agent` without `prompt`; Kiro JSON agent `hooks` (ADR-053): the v1 array as above, or the CLI 2.x object keyed by `KIRO_AGENT_HOOK_EVENTS` (`agentSpawn`, `userPromptSubmit`, `preToolUse`, `postToolUse`, `stop`) with `{ matcher, command }` entries; Kiro matchers may be `@` selectors or `*`/`?` wildcards and `timeout: 0` is valid; findings on a disabled hook say so), matcher that is not a valid regex (`*`, `""` and plain `A|B` lists are not regexes; JS look-around/backreferences are skipped), `timeout` (Copilot `timeoutSec`) ≤ 0 or > 600 s (Medium), a referenced script path (`./…`, `$CLAUDE_PROJECT_DIR/…`, `${CLAUDE_PLUGIN_ROOT}/…`, or relative with a script extension) that does not exist (Medium, ADR-026).
 
 ### AI-STR-007 — Duplicate asset name
 - **Sev** High · **Kinds** Skill, Agent, Prompt · **Scope** project
@@ -171,7 +172,7 @@ Every EFF finding sets `token_waste`, which feeds context debt (`04-scoring-gate
 
 ### AI-EFF-001 — Asset over token budget
 - **Sev** High (Medium when ≤ 125% of budget) · **Kinds** all
-- **Detect** `tokens(asset) > budget(kind)`. Defaults (`[budgets]`): instructions 3000, scoped_instructions 1500, agent 2500, prompt 2000, skill 5000 (body), tools 3000, custom 3000.
+- **Detect** `tokens(asset) > budget(kind)`. Defaults (`[budgets]`): instructions 3000, scoped_instructions 1500, agent 2500, prompt 2000, skill 5000 (body), tools 3000, custom 3000. A Kiro JSON agent counts its inline `prompt` text only (ADR-053).
 - **token_waste** `tokens - budget`.
 
 ### AI-EFF-002 — Always-on context over budget
@@ -239,7 +240,7 @@ Every EFF finding sets `token_waste`, which feeds context debt (`04-scoring-gate
 - **Report** On the directive in the file loaded later (the nested file; in the always-on set, the later path or the imported file), referencing the earlier one: `Contradicts CLAUDE.md:3: "Use pnpm" vs "Use npm"`. Pairs within one file are AI-COG-001's. A document title (first heading, level 1) is not a section scope across files (ADR-033).
 
 ### AI-COG-006 — Weak routing description
-- **Sev** Medium · **Kinds** Skill, Agent, Kiro `inclusion: auto` steering (ADR-050)
+- **Sev** Medium · **Kinds** Skill, Agent (Kiro JSON agents: the `description` string, ADR-053), Kiro `inclusion: auto` steering (ADR-050)
 - **Detect** Description < 20 words, or lacking a trigger cue (`use when`, `use for`, `when the user`, `proactively`, `trigger`, `invoke`; see ADR-032 for the matched forms), or written in first person ("I can…"). The model routes on descriptions, so weak ones cause missed or wrong invocations.
 
 ### AI-COG-007 — Unstructured long instructions

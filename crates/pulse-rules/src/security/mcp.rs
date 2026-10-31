@@ -1,5 +1,5 @@
 //! MCP config security: AI-SEC-004 literal credentials, AI-SEC-005 unpinned server packages,
-//! AI-SEC-006 insecure transport.
+//! AI-SEC-006 insecure transport. Kiro JSON agents' inline `mcpServers` are checked too.
 
 use std::net::Ipv4Addr;
 
@@ -11,7 +11,7 @@ use crate::lexicon::mcp::{
     NPM_AUTO_INSTALL_FLAGS, NPM_PACKAGE_FLAGS, NPM_VALUE_FLAGS, PY_PACKAGE_FLAGS, PY_VALUE_FLAGS,
 };
 use crate::lexicon::secrets::is_placeholder;
-use crate::util::truncate;
+use crate::util::{json_views, truncate};
 
 /// Chars of a name, package or URL quoted in a message.
 const QUOTED: usize = 40;
@@ -21,7 +21,7 @@ pub static META_004: RuleMeta = RuleMeta {
     name: "MCP credential not externalized",
     category: Category::Security,
     default_severity: Severity::High,
-    kinds: KindSet::MCP_CONFIG,
+    kinds: KindSet::MCP_CONFIG.union(KindSet::AGENT),
     summary: "An MCP server credential (env, header or CLI flag) is written as a literal value.",
     remediation: "Reference an environment variable (${env:X}) or a VS Code input with password: true.",
     inline_suppressible: true,
@@ -32,7 +32,7 @@ pub static META_005: RuleMeta = RuleMeta {
     name: "Unpinned MCP server package",
     category: Category::Security,
     default_severity: Severity::High,
-    kinds: KindSet::MCP_CONFIG,
+    kinds: KindSet::MCP_CONFIG.union(KindSet::AGENT),
     summary: "MCP server package is not pinned to an exact version.",
     remediation: "Pin an exact version (npx pkg@1.2.3, uvx pkg==1.2.3, image@sha256:...).",
     inline_suppressible: true,
@@ -43,7 +43,7 @@ pub static META_006: RuleMeta = RuleMeta {
     name: "Insecure MCP transport",
     category: Category::Security,
     default_severity: Severity::High,
-    kinds: KindSet::MCP_CONFIG,
+    kinds: KindSet::MCP_CONFIG.union(KindSet::AGENT),
     summary: "A remote MCP server is reached over plain http://.",
     remediation: "Use https:// (plain http is fine only for localhost).",
     inline_suppressible: true,
@@ -55,6 +55,10 @@ pub struct LiteralMcpCredential;
 impl Rule for LiteralMcpCredential {
     fn meta(&self) -> &'static RuleMeta {
         &META_004
+    }
+
+    fn applies_to(&self, asset: &Asset) -> bool {
+        json_views(&META_004, asset)
     }
 
     fn check(&self, asset: &Asset, _ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
@@ -189,6 +193,10 @@ pub struct UnpinnedMcpPackage;
 impl Rule for UnpinnedMcpPackage {
     fn meta(&self) -> &'static RuleMeta {
         &META_005
+    }
+
+    fn applies_to(&self, asset: &Asset) -> bool {
+        json_views(&META_005, asset)
     }
 
     fn check(&self, asset: &Asset, _ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
@@ -391,6 +399,10 @@ pub struct InsecureMcpTransport;
 impl Rule for InsecureMcpTransport {
     fn meta(&self) -> &'static RuleMeta {
         &META_006
+    }
+
+    fn applies_to(&self, asset: &Asset) -> bool {
+        json_views(&META_006, asset)
     }
 
     fn check(&self, asset: &Asset, _ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {

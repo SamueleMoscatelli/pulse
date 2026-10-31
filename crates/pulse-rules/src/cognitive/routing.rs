@@ -1,6 +1,8 @@
 //! Weak routing description (AI-COG-006).
 
-use pulse_core::{Asset, AssetKind, Category, Finding, KindSet, Rule, RuleCtx, RuleMeta, Severity};
+use pulse_core::{
+    Asset, AssetKind, Category, Finding, KindSet, Rule, RuleCtx, RuleMeta, Severity, Span,
+};
 
 use super::directives::{Word, is, lemma, same, words};
 use crate::lexicon::routing::{
@@ -43,19 +45,17 @@ impl Rule for WeakRouting {
         &META
     }
 
+    // Kiro JSON agents: the `description` string.
+    fn json_agents(&self) -> bool {
+        true
+    }
+
     fn check(&self, asset: &Asset, _ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
         if asset.kind == AssetKind::ScopedInstructions && asset.kiro_inclusion() != Some("auto") {
             return;
         }
-        let Some(fm) = asset.markdown().frontmatter.as_ref() else {
-            return;
-        };
         // A missing or empty description is AI-STR-001's.
-        let Some(desc) = fm
-            .get("description")
-            .and_then(|v| v.as_str())
-            .filter(|d| !d.trim().is_empty())
-        else {
+        let Some((desc, span)) = description(asset).filter(|(d, _)| !d.trim().is_empty()) else {
             return;
         };
         let mut ws = Vec::new();
@@ -83,10 +83,6 @@ impl Rule for WeakRouting {
             why.push("first person".into());
             fix.push("write it in the third person (\"Reviews …\", not \"I review …\")");
         }
-        let span = fm
-            .key_lines
-            .get("description")
-            .map_or(fm.span, |&l| asset.lines.line_span(&asset.source, l));
         let msg = format!(
             "Weak routing description \"{}\": {}",
             truncate(desc.trim(), 24),
@@ -95,6 +91,22 @@ impl Rule for WeakRouting {
         let fix = format!(concat!("{}. ", template!()), capitalize(&fix.join("; ")));
         out.push(Finding::new(&META, asset, span, msg).with_fix(fix));
     }
+}
+
+/// The description and the span reported for it: a JSON agent's `description` string, else
+/// the frontmatter key's line.
+fn description(asset: &Asset) -> Option<(&str, Span)> {
+    if asset.is_json_agent() {
+        let (d, span) = asset.kiro_agent()?.description.as_ref()?;
+        return Some((d, *span));
+    }
+    let fm = asset.markdown().frontmatter.as_ref()?;
+    let desc = fm.get("description")?.as_str()?;
+    let span = fm
+        .key_lines
+        .get("description")
+        .map_or(fm.span, |&l| asset.lines.line_span(&asset.source, l));
+    Some((desc, span))
 }
 
 /// Whether the words of `desc` carry an AI-COG-006 trigger cue: `trigger*`/`invok*`/

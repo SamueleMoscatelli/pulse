@@ -1,0 +1,7 @@
+{
+  "name": "builder",
+  "hooks": [
+    { "name": "git-status", "trigger": "SessionStart", "action": { "type": "command", "command": "git status" } }
+  ],
+  "permissions": { "rules": [] }
+}

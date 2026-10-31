@@ -1,6 +1,6 @@
 # AI-SEC-008 — Remote code execution in hook
 
-**Severity:** Critical · **Category:** Security · **Applies to:** settings and hook files (hook commands), skills and prompts/commands (`bash`/`sh`/`shell`/`zsh` fences and `` !`cmd` `` lines) · **Inline-suppressible:** no
+**Severity:** Critical · **Category:** Security · **Applies to:** settings, hook files and Kiro JSON agents (hook commands), skills and prompts/commands (`bash`/`sh`/`shell`/`zsh` fences and `` !`cmd` `` lines) · **Inline-suppressible:** no
 
 ## Why it matters
 Hooks run automatically, with your user's permissions, every time the agent starts a session or uses a tool. A hook that downloads a script and pipes it into a shell runs whatever that URL serves today: one compromised server, DNS hijack or typo-squatted domain is enough to own every machine that opens the repository. Skills and commands that tell the agent to run `curl … | bash` carry the same risk.

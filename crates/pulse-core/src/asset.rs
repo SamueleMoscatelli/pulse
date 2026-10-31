@@ -6,7 +6,7 @@ use std::sync::{Arc, OnceLock};
 use serde_yaml_ng::Value;
 
 use crate::model::{AssetKind, KindSet, LoadMode, Location, Origin, Span};
-use crate::parse::{JsonDoc, MarkdownView, McpView, SettingsView, ToolsView};
+use crate::parse::{AgentView, JsonDoc, MarkdownView, McpView, SettingsView, ToolsView};
 use crate::text::prose::Prose;
 use crate::text::{LineIndex, Normalized, normalize, tokens};
 
@@ -34,6 +34,7 @@ pub struct Asset {
     mcp: OnceLock<McpView>,
     settings: OnceLock<SettingsView>,
     tools_view: OnceLock<ToolsView>,
+    agent: OnceLock<AgentView>,
     normalized: OnceLock<Normalized>,
     prose: OnceLock<Prose>,
     tokens: OnceLock<u32>,
@@ -68,6 +69,7 @@ impl Asset {
             mcp: OnceLock::new(),
             settings: OnceLock::new(),
             tools_view: OnceLock::new(),
+            agent: OnceLock::new(),
             normalized: OnceLock::new(),
             prose: OnceLock::new(),
             tokens: OnceLock::new(),
@@ -134,10 +136,46 @@ impl Asset {
         self.mcp.get_or_init(|| McpView::build(self.json()))
     }
 
-    /// The settings view (Settings assets; a Hooks asset fills only `hooks`), built on first use.
+    /// The settings view (Settings assets; a Hooks asset or a JSON agent fills only `hooks`),
+    /// built on first use.
     pub fn settings(&self) -> &SettingsView {
-        self.settings
-            .get_or_init(|| SettingsView::build(self.json()))
+        self.settings.get_or_init(|| {
+            if self.is_json_agent() {
+                SettingsView::build_agent(self.json())
+            } else {
+                SettingsView::build(self.json())
+            }
+        })
+    }
+
+    /// Whether this is a Kiro custom agent (`.kiro/agents/`, ADR-053).
+    pub fn is_kiro_agent(&self) -> bool {
+        self.kind == AssetKind::Agent && in_dir(&self.rel_path, ".kiro/agents/")
+    }
+
+    /// Whether this is an agent written in JSON (Kiro `.kiro/agents/*.json`): Markdown views
+    /// don't apply to it.
+    pub fn is_json_agent(&self) -> bool {
+        self.kind == AssetKind::Agent && self.rel_path.ends_with(".json")
+    }
+
+    /// The Kiro agent view (JSON or frontmatter), built on first use; `None` for other assets.
+    pub fn kiro_agent(&self) -> Option<&AgentView> {
+        self.is_kiro_agent().then(|| self.agent_view())
+    }
+
+    fn agent_view(&self) -> &AgentView {
+        self.agent.get_or_init(|| {
+            if self.is_json_agent() {
+                AgentView::build(self.json())
+            } else {
+                self.markdown()
+                    .frontmatter
+                    .as_ref()
+                    .map(|fm| AgentView::from_frontmatter(fm, &self.source, &self.lines))
+                    .unwrap_or_default()
+            }
+        })
     }
 
     /// The hook entries of a Settings or Hooks asset.
@@ -162,10 +200,14 @@ impl Asset {
             .get_or_init(|| Prose::new(&self.source, self.markdown()))
     }
 
-    /// Estimated tokens of the whole file; Markdown kinds count fenced code at the code rate.
+    /// Estimated tokens of the whole file; Markdown kinds count fenced code at the code rate,
+    /// and a JSON agent counts its inline `prompt` only.
     pub fn tokens(&self) -> u32 {
         *self.tokens.get_or_init(|| {
-            if KindSet::MARKDOWN.contains(self.kind) {
+            if self.is_json_agent() {
+                let prompt = self.agent_view().prompt.as_ref();
+                prompt.map_or(0, |(p, _)| tokens::estimate(p, self.calibration))
+            } else if KindSet::MARKDOWN.contains(self.kind) {
                 let code: Vec<Span> = self.markdown().code_spans().collect();
                 tokens::estimate_markdown(&self.source, &code, self.calibration)
             } else {

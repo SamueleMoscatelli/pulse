@@ -1,6 +1,6 @@
 # AI-SEC-004 — MCP credential not externalized
 
-**Severity:** High · **Category:** Security · **Applies to:** MCP configs · **Inline-suppressible:** yes
+**Severity:** High · **Category:** Security · **Applies to:** MCP configs, Kiro JSON agent `mcpServers` · **Inline-suppressible:** yes
 
 ## Why it matters
 MCP config files (`.mcp.json`, `.vscode/mcp.json`, `.cursor/mcp.json`, `.kiro/settings/mcp.json`) are usually committed and shared. A token written into one is readable by everyone with access to the repo, ends up in backups and forks, and can't be rotated per developer. Clients can resolve environment variables and prompted inputs at launch, so the value never needs to be in the file.

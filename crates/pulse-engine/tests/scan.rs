@@ -577,6 +577,15 @@ fn kiro_loads_always_steering_agents_md_and_descriptions() {
     assert_eq!(load(".kiro/hooks/review.kiro.hook"), LoadMode::Always);
     assert_eq!(load(".kiro/hooks/lint.json"), LoadMode::Always);
     assert_eq!(load("hooks/review.kiro.hook"), LoadMode::OnDemand);
+    // Custom agents, JSON and Markdown: loaded when selected; valid ones have no findings.
+    assert_eq!(load(".kiro/agents/reviewer.json"), LoadMode::OnDemand);
+    assert_eq!(load(".kiro/agents/planner.md"), LoadMode::OnDemand);
+    let agent_findings: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.location.path.to_string_lossy().contains("agents/"))
+        .collect();
+    assert!(agent_findings.is_empty(), "{agent_findings:?}");
     assert!(
         report
             .findings

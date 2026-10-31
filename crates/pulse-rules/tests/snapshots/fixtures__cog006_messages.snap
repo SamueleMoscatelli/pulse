@@ -2,6 +2,10 @@
 source: crates/pulse-rules/tests/fixtures.rs
 expression: "messages(&fail_fixture_findings(\"AI-COG-006\"))"
 ---
+.kiro/agents/fail_weak.json:3:18 Weak routing description "I help with code.": 4 words (< 20), no trigger cue, first person
+  ↳ Say what it covers; add "Use when …" with the requests, keywords and file types that should trigger it; write it in the third person ("Reviews …", not "I review …"). Template: "<What it does>. Use when <requests, keywords, file types>. [Not for <what a sibling handles>.]"
+.kiro/agents/fail_weak.md:3:1 Weak routing description "Helps with code.": 3 words (< 20), no trigger cue
+  ↳ Say what it covers; add "Use when …" with the requests, keywords and file types that should trigger it. Template: "<What it does>. Use when <requests, keywords, file types>. [Not for <what a sibling handles>.]"
 .kiro/steering/fail_auto_weak.md:4:1 Weak routing description "Deployment notes.": 2 words (< 20), no trigger cue
   ↳ Say what it covers; add "Use when …" with the requests, keywords and file types that should trigger it. Template: "<What it does>. Use when <requests, keywords, file types>. [Not for <what a sibling handles>.]"
 fail_first_person_agent.md:3:1 Weak routing description "I can review your pull…": no trigger cue, first person

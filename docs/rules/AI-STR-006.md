@@ -1,6 +1,6 @@
 # AI-STR-006 — Invalid hook definition
 
-**Severity:** High (timeouts and missing scripts: Medium) · **Category:** Structure · **Applies to:** settings and hook files · **Inline-suppressible:** yes
+**Severity:** High (timeouts and missing scripts: Medium) · **Category:** Structure · **Applies to:** settings, hook files and Kiro JSON agent `hooks` · **Inline-suppressible:** yes
 
 ## Why it matters
 A hook that the agent cannot run fails silently: a misspelled event never fires, a broken matcher never matches, and a script path that does not exist errors on every tool call. Guardrails you think are in place (formatting, linting, blocking dangerous commands) are simply not running.
@@ -8,6 +8,7 @@ A hook that the agent cannot run fails silently: a misspelled event never fires,
 ## What triggers it
 - An event name that the platform does not know (Claude Code: `PreToolUse`, `PostToolUse`, `Stop`, …; Cursor `.cursor/hooks.json`: `beforeShellExecution`, `afterFileEdit`, …; GitHub Copilot, under `.github/hooks/` or with `bash`/`powershell`/`timeoutSec` keys: `sessionStart`, `preToolUse`, `userPromptSubmitted`, …; Kiro v1 `trigger`: `PostFileSave`, `PreToolUse`, `Stop`, …; Kiro legacy `*.kiro.hook` `when.type`: `fileEdited`, `agentStop`, `userTriggered`, …). The message suggests the closest valid name.
 - A `type` the platform does not support (Claude Code: `command`, `prompt`, `http`, `mcp_tool`, `agent`; Cursor: `command`, `prompt`; Copilot: `command`, run with `bash` or `powershell`; Kiro: `command`, `agent`; Kiro legacy `then.type`: `runCommand`, `askAgent`).
+- Kiro JSON agent `hooks` (`.kiro/agents/*.json`): the v1 array is checked like a `.kiro/hooks/` file; the CLI 2.x object form takes the events `agentSpawn`, `userPromptSubmit`, `preToolUse`, `postToolUse` and `stop`, each with `{ "matcher", "command" }` entries.
 - A Kiro hook with no `trigger` (legacy: `when.type`) or no `action` (legacy: `then`).
 - A `command` or `prompt` hook with no (or an empty) `command`/`prompt`; for Kiro, a `command`/`runCommand` action without `command` or an `agent`/`askAgent` action without `prompt`.
 - A matcher that is not a valid regular expression. `*`, `""` and plain lists like `Edit|Write` are fine; matchers using JavaScript-only syntax (look-around, backreferences) are not checked. Kiro matchers may also be tool selectors (`@mcp`, `@postgres/query`) or `*`/`?` wildcards (`mcp_*`); legacy `patterns` are globs and are not checked.

@@ -1,6 +1,6 @@
 # AI-SEC-005 — Unpinned MCP server package
 
-**Severity:** High · **Category:** Security · **Applies to:** MCP configs · **Inline-suppressible:** yes
+**Severity:** High · **Category:** Security · **Applies to:** MCP configs, Kiro JSON agent `mcpServers` · **Inline-suppressible:** yes
 
 ## Why it matters
 An MCP server runs on your machine with your credentials. When the config launches it with `npx some-server` or `uvx some-server`, every start fetches whatever version the registry serves at that moment, so a compromised or hijacked release runs automatically with no review. Pinning an exact version (or an image digest) makes upgrades a deliberate, reviewable change.

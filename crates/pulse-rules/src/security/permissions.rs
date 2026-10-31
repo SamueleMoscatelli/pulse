@@ -1,13 +1,16 @@
 //! AI-SEC-007 over-permissive agent permissions: settings allow-lists and modes, agent and
-//! command `tools` frontmatter, permission-bypass flags, MCP auto-approve lists.
+//! command `tools` frontmatter, Kiro agents, permission-bypass flags, MCP auto-approve lists.
 
 use memchr::memmem;
+use pulse_core::parse::{AgentView, PermissionRule};
 use pulse_core::{
     Asset, AssetKind, Category, Finding, KindSet, Rule, RuleCtx, RuleMeta, Severity, Span,
 };
 
 use crate::lexicon::permissions::{
-    BYPASS_FLAGS, NETWORK_TOOLS, UNRESTRICTED_BASH, UNRESTRICTED_WEBFETCH, WRITE_EXEC_WORDS,
+    BYPASS_FLAGS, KIRO_SHELL_CAPABILITIES, KIRO_SHELL_SETTINGS, KIRO_SHELL_TOOLS, KIRO_WEB_TOOLS,
+    KIRO_WRITE_CAPABILITIES, KIRO_WRITE_SETTINGS, KIRO_WRITE_TOOLS, NETWORK_TOOLS,
+    UNRESTRICTED_BASH, UNRESTRICTED_WEBFETCH, WRITE_EXEC_WORDS,
 };
 use crate::security::mcp::value_span;
 use crate::util::truncate;
@@ -37,6 +40,15 @@ impl Rule for OverPermissive {
     fn check(&self, asset: &Asset, _ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
         match asset.kind {
             AssetKind::Settings => settings(asset, out),
+            AssetKind::Agent if asset.kiro_agent().is_some() => {
+                if let Some(agent) = asset.kiro_agent() {
+                    kiro_agent(asset, agent, out);
+                }
+                // Inline `mcpServers`.
+                if asset.is_json_agent() {
+                    auto_approve(asset, out);
+                }
+            }
             AssetKind::Agent | AssetKind::Prompt => frontmatter(asset, out),
             AssetKind::McpConfig => auto_approve(asset, out),
             _ => {}
@@ -110,6 +122,121 @@ fn frontmatter(asset: &Asset, out: &mut Vec<Finding>) {
         let span = frontmatter_span(asset, fm.key_lines.get(key).copied(), fm.body_span, bash);
         out.push(finding(asset, span, severity, message));
     }
+}
+
+/// Kiro agents (ADR-053): shell pre-approved in `allowedTools`, `tools: ["*"]` with no
+/// `permissions`, a `permissions` rule allowing every shell command, and unrestricted write
+/// access, which reaches `~/.kiro` (agents, steering, MCP configs: the docs' warning).
+fn kiro_agent(asset: &Asset, agent: &AgentView, out: &mut Vec<Finding>) {
+    let mut out = KiroFix(out);
+    let allowed = |list: &[&str]| {
+        agent
+            .allowed_tools
+            .iter()
+            .find(|(t, _)| list.contains(&t.as_str()))
+    };
+    // AI-SEC-007 FP guard: CLI 2.x `toolsSettings` restricts the tool's commands or paths.
+    let restricted = |list: &[&str]| {
+        agent
+            .tools_settings
+            .iter()
+            .any(|t| list.contains(&t.as_str()))
+    };
+    let at = |(t, s): &(String, Span)| value_span(asset, *s, t, 0, t.len());
+    if let Some(shell) = allowed(KIRO_SHELL_TOOLS).filter(|_| !restricted(KIRO_SHELL_SETTINGS)) {
+        let name = truncate(&shell.0, QUOTED);
+        let (severity, message) = match allowed(KIRO_WEB_TOOLS) {
+            _ if matches!(shell.0.as_str(), "*" | "@builtin") => (
+                Severity::High,
+                format!(
+                    "`{name}` in `allowedTools` pre-approves every tool, shell and web included"
+                ),
+            ),
+            Some((web, _)) => (
+                Severity::High,
+                format!(
+                    "Unrestricted shell `{name}` with `{}` in `allowedTools` (exfiltration chain)",
+                    truncate(web, QUOTED)
+                ),
+            ),
+            None => (
+                Severity::Medium,
+                format!(
+                    "Unrestricted shell `{name}` in `allowedTools`: any command runs unprompted"
+                ),
+            ),
+        };
+        out.push(finding(asset, at(shell), severity, message));
+    }
+    if !agent.has_permissions()
+        && let Some(star) = agent.tools.iter().find(|(t, _)| t == "*")
+    {
+        let message =
+            "`tools: [\"*\"]` with no `permissions`: every tool, shell included".to_owned();
+        out.push(finding(asset, at(star), Severity::Medium, message));
+    }
+    for rule in agent
+        .rules
+        .iter()
+        .filter(|r| allows_every(r, |g| matches!(g, "*" | "**")))
+    {
+        let cap = rule.capability.as_deref().unwrap_or_default();
+        if KIRO_SHELL_CAPABILITIES.contains(&cap) {
+            let severity = bash_severity(cap != "shell");
+            let message = format!(
+                "Permission rule allows every shell command (capability `{}`)",
+                truncate(cap, QUOTED)
+            );
+            out.push(finding(asset, rule.span, severity, message));
+        }
+    }
+    let write = allowed(KIRO_WRITE_TOOLS)
+        .filter(|_| !restricted(KIRO_WRITE_SETTINGS))
+        .map(at)
+        .or_else(|| {
+            agent
+                .rules
+                .iter()
+                .find(|r| {
+                    let cap = r.capability.as_deref().unwrap_or_default();
+                    KIRO_WRITE_CAPABILITIES.contains(&cap) && allows_every(r, reaches_kiro_home)
+                })
+                .map(|r| r.span)
+        });
+    if let Some(span) = write {
+        let message =
+            "Unrestricted write access: the agent can edit `~/.kiro` (agents, steering, MCP)";
+        out.push(finding(asset, span, Severity::Medium, message.to_owned()));
+    }
+}
+
+/// Pushes findings with the Kiro remediation instead of the Claude one.
+struct KiroFix<'a>(&'a mut Vec<Finding>);
+
+impl KiroFix<'_> {
+    fn push(&mut self, f: Finding) {
+        self.0.push(f.with_fix(
+            "Ask before shell and writes: use `permissions.rules` with specific `match` globs (`git *`, `src/**`).",
+        ));
+    }
+}
+
+/// Whether `rule` allows with no `exclude` and a `match` (none means every target) that
+/// has a glob passing `every`.
+fn allows_every(rule: &PermissionRule, every: impl Fn(&str) -> bool) -> bool {
+    rule.effect.as_deref() == Some("allow")
+        && rule.exclude.is_empty()
+        && rule
+            .matches
+            .as_ref()
+            .is_none_or(|m| m.iter().any(|g| every(g.trim())))
+}
+
+/// Whether a write glob covers `~/.kiro`: everything, the home folder or `~/.kiro` itself.
+fn reaches_kiro_home(glob: &str) -> bool {
+    matches!(glob, "*" | "**" | "**/*" | "/**")
+        || glob.starts_with("~/*")
+        || glob.starts_with("~/.kiro")
 }
 
 /// Unrestricted Bash alone is Medium (subagents legitimately use it); with a network tool

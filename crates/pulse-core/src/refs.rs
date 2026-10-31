@@ -107,7 +107,7 @@ impl ImportGraph {
         let known: HashSet<&str> = assets.iter().map(|a| a.rel_path.as_str()).collect();
         let mut queue = VecDeque::new();
         for a in assets {
-            if KindSet::MARKDOWN.contains(a.kind) && a.skipped.is_none() {
+            if KindSet::MARKDOWN.contains(a.kind) && a.skipped.is_none() && !a.is_json_agent() {
                 graph.add_edges(a, files, &mut queue, 1);
             }
         }

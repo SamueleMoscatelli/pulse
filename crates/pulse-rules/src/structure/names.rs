@@ -48,7 +48,7 @@ impl ProjectRule for DuplicateName {
     fn check_project(&self, assets: &[Asset], _ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
         let mut ordered: Vec<&Asset> = assets
             .iter()
-            .filter(|a| META.kinds.contains(a.kind) && a.skipped.is_none())
+            .filter(|a| META.kinds.contains(a.kind) && a.skipped.is_none() && !a.is_json_agent())
             .collect();
         // "First" is the first in path order, whatever order discovery produced.
         ordered.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));

@@ -9,7 +9,7 @@ use serde::de::DeserializeOwned;
 
 use crate::asset::Asset;
 use crate::config::{CONFIG_FILE, Config, ConfigError};
-use crate::model::{Finding, RuleMeta};
+use crate::model::{Finding, KindSet, RuleMeta};
 use crate::placement::Misplaced;
 use crate::refs::ImportGraph;
 
@@ -17,6 +17,17 @@ use crate::refs::ImportGraph;
 pub trait Rule: Sync {
     fn meta(&self) -> &'static RuleMeta;
     fn check(&self, asset: &Asset, ctx: &RuleCtx<'_>, out: &mut Vec<Finding>);
+    /// Whether `check` runs on `asset`: its kind is in `meta().kinds`, and a JSON agent
+    /// reaches only rules that read JSON (see [`Rule::json_agents`]).
+    fn applies_to(&self, asset: &Asset) -> bool {
+        self.meta().kinds.contains(asset.kind) && (!asset.is_json_agent() || self.json_agents())
+    }
+    /// Whether this rule reads JSON agents (Kiro `.kiro/agents/*.json`, ADR-053). By default,
+    /// rules that also cover a non-Markdown kind do (they read raw text or JSON views), and
+    /// Markdown-only rules don't.
+    fn json_agents(&self) -> bool {
+        self.meta().kinds.intersection(KindSet::MARKDOWN) != self.meta().kinds
+    }
     /// Validates this rule's options once per scan, before any check (e.g. by calling
     /// [`RuleCtx::options`] with the rule's options type).
     fn validate(&self, _ctx: &RuleCtx<'_>) -> Result<(), ConfigError> {
