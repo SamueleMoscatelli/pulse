@@ -4,6 +4,31 @@ All notable changes to Pulse are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Pulse follows
 [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+Kiro support, measured on `affaan-m/ECC` and `mehtadman87/kiro-config`
+(`docs/eval/kiro.md`).
+
+### Added
+
+- Kiro as an assistant: `.kiro/steering/` files follow their `inclusion` mode (`always`,
+  `fileMatch`, `manual`, `auto`), `.kiro/skills/` and the root `AGENTS.md` load for Kiro, and
+  `--assistant kiro` and the CONTEXT LOAD block report Kiro's always-on tokens.
+- Kiro steering checks (AI-STR-001): `inclusion` values, `fileMatchPattern`, `auto` needing
+  `name` and `description`, and frontmatter Kiro ignores because it is not on the first line.
+  AI-STR-003 checks `#[[file:…]]` and `#[[folder:…]]` references, line ranges included.
+- Kiro MCP config `.kiro/settings/mcp.json`: `autoApprove` lists (AI-SEC-007), `oauth`
+  secrets (AI-SEC-004), and disabled servers are still checked.
+- Kiro hooks, legacy `*.kiro.hook` and current `.kiro/hooks/*.json`: events, action types,
+  missing commands or prompts, matchers and timeouts (AI-STR-006), and remote code or unsafe
+  interpolation in hook commands (AI-SEC-008/009).
+- Kiro custom agents `.kiro/agents/*.json` and `*.md`: shell or write access pre-approved
+  without limits (AI-SEC-007), unknown tool names (AI-STR-005), legacy profiles that Kiro CLI
+  V3 skips until `/upgrade-agent` (AI-STR-001), missing `file://` prompts and resources
+  (AI-STR-003), weak descriptions (AI-COG-006), and the inline hooks and MCP servers.
+- Kiro powers (`POWER.md`, or `plugin.json` with `keywords`): their steering, hooks, MCP
+  config and skills are scanned as library assets, with no "not loaded" finding.
+
 ## 1.1.0 - 2026-10-31
 
 Fewer false positives, clearer advice and full coverage of library repos, measured on
