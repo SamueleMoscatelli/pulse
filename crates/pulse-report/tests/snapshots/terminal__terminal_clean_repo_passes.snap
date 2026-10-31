@@ -2,7 +2,7 @@
 source: crates/pulse-report/tests/terminal.rs
 expression: "render(\"clean\", false, false)"
 ---
- Pulse 1.2.0-rc.1 · 2 assets · 107 tokens · 8 ms
+ Pulse 1.2.0 · 2 assets · 107 tokens · 8 ms
 
  QUALITY GATE   PASSED
    ✔ severity ≥ high        0 issues   (allowed 0)
