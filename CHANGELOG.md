@@ -4,10 +4,10 @@ All notable changes to Pulse are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Pulse follows
 [semantic versioning](https://semver.org/).
 
-## Unreleased
+## 1.2.0-rc.1 - 2026-10-31
 
-Kiro support, measured on `affaan-m/ECC` and `mehtadman87/kiro-config`
-(`docs/eval/kiro.md`).
+Release candidate for 1.2.0: Kiro support, measured on `affaan-m/ECC` and
+`mehtadman87/kiro-config` (`docs/eval/kiro.md`).
 
 ### Added
 
