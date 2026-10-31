@@ -36,7 +36,7 @@ jobs:
   # Performance budgets (spec 00-overview) on Apple M-series. Non-blocking: shared runners
   # are noisy, so a red bench is a signal to look at, not a merge gate.
   bench:
-    runs-on: macos-14
+    runs-on: macos-15
     continue-on-error: true
     steps:
       - uses: actions/checkout@v7
