@@ -13,7 +13,7 @@ expression: out
           "informationUri": "https://github.com/SamueleMoscatelli/pulse",
           "name": "pulse",
           "rules": [],
-          "version": "1.2.0-rc.1"
+          "version": "1.2.0"
         }
       }
     }

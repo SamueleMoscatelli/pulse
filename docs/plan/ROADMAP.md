@@ -77,7 +77,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [x] P9.7 Kiro powers as libraries
 - [x] P9.8 Evaluation report and release
 - [x] P9.9 AI-SEC-002: quoted mentions
-- [ ] P9.10 Release 1.2.0
+- [x] P9.10 Release 1.2.0
 
 ## Post-release follow-ups
 Homebrew tap, Marketplace listing, usage tracking and the release routine: [post-release.md](post-release.md).

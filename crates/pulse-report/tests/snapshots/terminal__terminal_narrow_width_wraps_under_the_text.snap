@@ -2,7 +2,7 @@
 source: crates/pulse-report/tests/terminal.rs
 expression: out
 ---
- Pulse 1.2.0-rc.1 · 2 assets · 89 tokens · 8 ms
+ Pulse 1.2.0 · 2 assets · 89 tokens · 8 ms
 
  QUALITY GATE   PASSED
    ✔ severity ≥ high        0 issues   (allowed 0)

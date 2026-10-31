@@ -34,7 +34,7 @@ change incompatibly:
 - the JSON report schema (`pulse/report@1`) and the SARIF output
 
 Minor releases can add rules and improve detections, so an upgrade may report new findings: pin
-a version in CI (`version: 1.1.0` in the Action, `rev:` in pre-commit) and upgrade on purpose.
+a version in CI (`version: 1.2.0` in the Action, `rev:` in pre-commit) and upgrade on purpose.
 The terminal output is for people and may change in any release.
 
 ## Quickstart
@@ -58,7 +58,7 @@ or I/O error.
 
 ```text
 $ pulse scan
- Pulse 1.2.0-rc.1 · 33 assets · 204 tokens · 10 ms
+ Pulse 1.2.0 · 33 assets · 204 tokens · 10 ms
 
  QUALITY GATE   FAILED
    ✖ severity ≥ high        1 issue    (allowed 0)
@@ -155,7 +155,7 @@ steps:
   - uses: actions/checkout@v7
   - uses: SamueleMoscatelli/pulse@v1  # the action; follows every 1.x release
     with:
-      version: latest        # the binary; pin one, e.g. 1.1.0, for stable CI
+      version: latest        # the binary; pin one, e.g. 1.2.0, for stable CI
       args: --new-only       # extra `pulse ci` flags
       sarif: true            # also upload a SARIF report to code scanning
 ```
@@ -168,7 +168,7 @@ The action downloads the release binary for the runner, verifies its checksum an
 ```yaml
 repos:
   - repo: https://github.com/SamueleMoscatelli/pulse
-    rev: v1.1.0
+    rev: v1.2.0
     hooks:
       - id: pulse
 ```

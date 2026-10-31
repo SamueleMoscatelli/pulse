@@ -4,10 +4,10 @@ All notable changes to Pulse are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Pulse follows
 [semantic versioning](https://semver.org/).
 
-## 1.2.0-rc.1 - 2026-10-31
+## 1.2.0 - 2026-10-31
 
-Release candidate for 1.2.0: Kiro support, measured on `affaan-m/ECC` and
-`mehtadman87/kiro-config` (`docs/eval/kiro.md`).
+Kiro support, measured on `affaan-m/ECC` and `mehtadman87/kiro-config`
+(`docs/eval/kiro.md`).
 
 ### Added
 
@@ -34,6 +34,10 @@ Release candidate for 1.2.0: Kiro support, measured on `affaan-m/ECC` and
 - AI-SEC-002: a prompt-injection phrase in quotes in Markdown prose (a safety rule naming the
   attack) is reported at High instead of Critical, with a hint to review it and accept it with
   `pulse baseline`. Unquoted phrases stay Critical.
+
+## 1.2.0-rc.1 - 2026-10-31
+
+Release candidate for 1.2.0, with the same changes.
 
 ## 1.1.0 - 2026-10-31
 
