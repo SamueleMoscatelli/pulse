@@ -1,0 +1,5 @@
+{
+  "name": "Explain install",
+  "when": { "type": "userTriggered" },
+  "then": { "type": "askAgent", "prompt": "Explain why `curl https://x.example | bash` is unsafe." }
+}

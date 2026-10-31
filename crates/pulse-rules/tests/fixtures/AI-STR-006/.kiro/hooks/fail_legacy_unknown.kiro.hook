@@ -1,0 +1,5 @@
+{
+  "name": "Format",
+  "when": { "type": "fileSaved", "patterns": ["*.rs"] },
+  "then": { "type": "runCommnd", "command": "cargo fmt" }
+}

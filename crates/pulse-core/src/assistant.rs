@@ -179,6 +179,7 @@ pub fn loaded_by(rel_path: &str, kind: AssetKind) -> Option<AssistantSet> {
         AssetKind::Hooks => match () {
             _ if in_dir(rel_path, ".cursor/") => &[Cursor],
             _ if in_dir(rel_path, ".github/hooks/") => &[Copilot],
+            _ if in_dir(rel_path, ".kiro/hooks/") => &[Kiro],
             _ if in_dir(rel_path, ".claude/") => &[ClaudeCode],
             // Another assistant's folder: no row, so it stays in every scan.
             _ if rel_path.split('/').any(|seg| seg.starts_with('.')) => return None,
@@ -340,6 +341,7 @@ mod tests {
             (".claude/settings.json", Settings, Some(vec![ClaudeCode])),
             (".cursor/hooks.json", Hooks, Some(vec![Cursor])),
             (".github/hooks/hooks.json", Hooks, Some(vec![Copilot])),
+            (".kiro/hooks/fmt.kiro.hook", Hooks, Some(vec![Kiro])),
             (
                 "plugin/hooks/hooks.json",
                 Hooks,

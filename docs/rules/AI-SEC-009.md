@@ -12,7 +12,7 @@ Hook commands receive data the agent controls: file paths in `$CLAUDE_FILE_PATHS
 - Any of the above passed to `eval`, `source`, or `sh`/`bash -c`, even when quoted.
 - A stage reading tool input piped into `xargs` (`jq -r … | xargs rm`).
 
-Piping into `xargs` is flagged even with `-0` or `-I{}`: read the value into a quoted variable instead. Assignments (`f=$(jq …)`), single-quoted text, other variables (`$CLAUDE_PROJECT_DIR`) and prompt hooks are not flagged.
+Piping into `xargs` is flagged even with `-0` or `-I{}`: read the value into a quoted variable instead. Assignments (`f=$(jq …)`), single-quoted text, other variables (`$CLAUDE_PROJECT_DIR`) and prompt hooks (Kiro `agent`/`askAgent` actions included) are not flagged. Kiro `command`/`runCommand` actions are checked; findings on a disabled hook end with "(the hook is disabled)".
 
 ## Noncompliant
 ```json

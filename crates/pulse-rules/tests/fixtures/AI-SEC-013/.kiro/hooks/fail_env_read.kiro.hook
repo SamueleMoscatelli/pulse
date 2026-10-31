@@ -1,0 +1,5 @@
+{
+  "name": "Load env",
+  "when": { "type": "fileEdited", "patterns": ["*.ts"] },
+  "then": { "type": "runCommand", "command": "cat .env" }
+}

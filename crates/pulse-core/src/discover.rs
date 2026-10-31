@@ -114,7 +114,12 @@ const TABLE: &[(&[&str], AssetKind, Refine)] = &[
         Refine::None,
     ),
     (
-        &["**/.cursor/hooks.json", "**/hooks/hooks.json"],
+        &[
+            "**/.cursor/hooks.json",
+            "**/hooks/hooks.json",
+            "**/.kiro/hooks/*.kiro.hook",
+            "**/.kiro/hooks/*.json",
+        ],
         AssetKind::Hooks,
         Refine::None,
     ),
@@ -206,6 +211,7 @@ const LIBRARY_TABLE: &[(&[&str], AssetKind, Refine)] = &[
         AssetKind::Hooks,
         Refine::Sniff(Sniff::Hooks),
     ),
+    (&["**/*.kiro.hook"], AssetKind::Hooks, Refine::None),
     (
         &["**/mcp.json"],
         AssetKind::McpConfig,
@@ -325,6 +331,14 @@ impl Classifier {
         self.set
             .matches_candidate_into(&Candidate::new(rel_path), scratch);
         let entry = *self.entries.get(*scratch.iter().min()?)?;
+        // AI-STR-008: a hook in a near-miss Kiro folder (`.kiro/hook/`) is misplaced, not a
+        // library copy.
+        if entry.origin == Origin::LibraryRow
+            && rel_path.ends_with(".kiro.hook")
+            && near_miss(rel_path).is_some()
+        {
+            return None;
+        }
         let (load, origin) = if entry.origin != Origin::Custom && self.in_library(rel_path) {
             (LoadMode::OnDemand, Origin::Library)
         } else {
@@ -760,6 +774,12 @@ mod tests {
                 Some((ScopedInstructions, Conditional)),
             ),
             ("plugin/hooks/hooks.json", Some((Hooks, Always))),
+            (".kiro/hooks/fmt.kiro.hook", Some((Hooks, Always))),
+            ("app/.kiro/hooks/fmt.json", Some((Hooks, Always))),
+            ("hooks/fmt.kiro.hook", Some((Hooks, OnDemand))),
+            (".kiro/hooks/nested/fmt.kiro.hook", Some((Hooks, OnDemand))),
+            (".kiro/hooks/README.md", None),
+            (".kiro/hook/fmt.kiro.hook", None),
             (".vscode/mcp.json", Some((McpConfig, Always))),
             (".kiro/settings/mcp.json", Some((McpConfig, Always))),
             // Examples are not loaded by Kiro.

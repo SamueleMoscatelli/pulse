@@ -1,0 +1,25 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "lint-on-save",
+      "trigger": "PostFileSave",
+      "matcher": "\\.(ts|tsx)$",
+      "action": { "type": "command", "command": "npx eslint --fix" },
+      "timeout": 0
+    },
+    {
+      "name": "mcp-audit",
+      "trigger": "PreToolUse",
+      "matcher": "@postgres/query",
+      "action": { "type": "agent", "prompt": "Check the query is read-only." }
+    },
+    {
+      "name": "shell-guard",
+      "trigger": "preToolUse",
+      "matcher": "mcp_*",
+      "action": { "type": "agent", "prompt": "Explain the tool call first." },
+      "enabled": false
+    }
+  ]
+}

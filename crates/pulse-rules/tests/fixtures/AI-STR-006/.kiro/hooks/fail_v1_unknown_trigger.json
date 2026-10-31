@@ -1,0 +1,10 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "fmt",
+      "trigger": "PostFileEdit",
+      "action": { "type": "shell", "command": "cargo fmt" }
+    }
+  ]
+}

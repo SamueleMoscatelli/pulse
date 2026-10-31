@@ -1,0 +1,5 @@
+{
+  "name": "Typecheck",
+  "when": { "type": "fileEdited", "patterns": ["*.ts"] },
+  "then": { "type": "runCommand", "prompt": "npx tsc --noEmit" }
+}

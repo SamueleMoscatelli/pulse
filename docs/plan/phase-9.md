@@ -87,6 +87,7 @@ copy from `kirodotdev-labs/awesome-kiro` (CC BY-NC). Every card reports its befo
 - **Size** M · **Depends** P9.3, P9.5
 - **Read** ADR-041, `scripts/spec.sh "Discovery table"`, `scripts/spec.sh "pulse.toml"`
 - **Do** A folder holding `POWER.md` (legacy) or `plugin.json` with `keywords` (current Agent Plugins format) is a power root. Its `steering/*.md`, `hooks/*.kiro.hook` and `hooks/*.json`, `mcp.json` and `skills/**/SKILL.md` are Kiro library assets (OnDemand, every rule runs, ADR-041 semantics), so a power repo like kiro-config gets the same checks as a live `.kiro/`. `POWER.md` itself: an Instructions-like library asset, so text rules run on it. Without a power root, a `steering/` folder at the repo root is not an asset (no false discovery in unrelated repos).
+  - From P9.5: a power's `hooks/*.kiro.hook` are already library assets (`**/*.kiro.hook` row), and AI-STR-008 reports them as "N Kiro hooks in `hooks/` are not loaded" (kiro-config: 1 finding); power hooks must not get that finding.
 - **Done when** check is green; fixtures for a `POWER.md` power and a `plugin.json` power (steering, hooks, mcp, skills), and a bare `steering/` folder that stays undiscovered; kiro-config's steering and hooks are assets; always-on tokens unchanged; `compare.sh` delta in the PR.
 
 ## P9.8 — Evaluation report and release

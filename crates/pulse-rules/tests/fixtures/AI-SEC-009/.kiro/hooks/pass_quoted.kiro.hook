@@ -1,0 +1,5 @@
+{
+  "name": "Lint file",
+  "when": { "type": "fileEdited", "patterns": ["*.py"] },
+  "then": { "type": "runCommand", "command": "ruff check \"$KIRO_HOOK_FILE\"" }
+}

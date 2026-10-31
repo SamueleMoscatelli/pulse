@@ -1,0 +1,12 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "lint",
+      "trigger": "PostFileSave",
+      "matcher": "\\.(ts|tsx$",
+      "action": { "type": "command", "command": "npx eslint --fix" },
+      "timeout": -1
+    }
+  ]
+}

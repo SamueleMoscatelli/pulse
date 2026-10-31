@@ -7,7 +7,7 @@ Patterns are globset globs relative to the scan root. `**/` means "at any depth"
 | # | Pattern(s) | AssetKind | LoadMode | Format |
 |---|---|---|---|---|
 | 1 | `**/.claude/settings.json`, `**/.claude/settings.local.json` | Settings | Always | JSONC |
-| 2 | `**/.cursor/hooks.json`, `**/hooks/hooks.json` | Hooks | Always | JSONC |
+| 2 | `**/.cursor/hooks.json`, `**/hooks/hooks.json`, `**/.kiro/hooks/*.kiro.hook`, `**/.kiro/hooks/*.json` | Hooks | Always | JSONC |
 | 3 | `**/.mcp.json`, `**/.vscode/mcp.json`, `**/.cursor/mcp.json`, `**/claude_desktop_config.json`, `**/.gemini/settings.json`, `**/.kiro/settings/mcp.json` | McpConfig | Always | JSONC |
 | 4 | `**/SKILL.md` | Skill | Always (frontmatter) / OnDemand (body) | MD+FM |
 | 5 | `**/.claude/agents/**/*.md`, `**/.github/agents/*.agent.md`, `**/.github/chatmodes/*.chatmode.md` | Agent | Always (description) / OnDemand (body) | MD+FM |
@@ -15,7 +15,7 @@ Patterns are globset globs relative to the scan root. `**/` means "at any depth"
 | 7 | `**/.cursor/rules/**/*.mdc`, `**/.claude/rules/**/*.md`, `**/.github/instructions/**/*.instructions.md`, `**/.windsurf/rules/**/*.md`, `**/.clinerules/**/*.md`, `**/.kiro/steering/**/*.md` | ScopedInstructions | Conditional* | MD+FM |
 | 8 | `**/CLAUDE.md`, `**/CLAUDE.local.md`, `**/AGENTS.md`, `**/GEMINI.md`, `**/.github/copilot-instructions.md`, `**/.cursorrules`, `**/.windsurfrules`, `**/.clinerules` (file) | Instructions | Always** | MD |
 | 9 | `**/*.tools.json`, `**/tools/*.json` (content-sniffed, see below) | Tools | Always | JSON |
-| 10 | Library rows (ADR-041): `**/*.agent.md`, `**/*.chatmode.md` → Agent; `**/*.prompt.md` → Prompt; `**/*.instructions.md` → ScopedInstructions; `**/hooks.json` (content-sniffed) → Hooks; `**/mcp.json` (content-sniffed) → McpConfig | per pattern | OnDemand*** | as rows 2–7 |
+| 10 | Library rows (ADR-041): `**/*.agent.md`, `**/*.chatmode.md` → Agent; `**/*.prompt.md` → Prompt; `**/*.instructions.md` → ScopedInstructions; `**/hooks.json` (content-sniffed) and `**/*.kiro.hook` (not in a near-miss Kiro folder such as `.kiro/hook/`, ADR-052) → Hooks; `**/mcp.json` (content-sniffed) → McpConfig | per pattern | OnDemand*** | as rows 2–7 |
 | 11 | `[[scan.custom]]` entries in `pulse.toml` | Custom (declared kind) | declared | declared |
 
 \* ScopedInstructions become **Always** when their frontmatter says so: `.mdc` with `alwaysApply: true`; `.claude/rules` and `.github/instructions` without `paths`/`applyTo`, or with `applyTo: "**"`. Kiro steering follows `inclusion` (ADR-049): `always` or no `inclusion` (no frontmatter included) → Always; `fileMatch` → Conditional; `manual` → OnDemand; `auto` → OnDemand, with its `description` counted as always-on, like a skill's. Invalid YAML or another value keeps Conditional.
@@ -41,7 +41,7 @@ Matching order: built-in rows 1–10, then `[[scan.custom]]`, then `scan.include
 | Instructions, ScopedInstructions, Agent, Prompt, Skill | `markdown()`: frontmatter (YAML mapping + span + key line map), body span, headings (level, text, span), code fences (lang, span), HTML comments (span), links/images (dest, span), `@path` imports (CLAUDE.md style, span), paragraphs (span) |
 | McpConfig | `mcp()`: servers map → `{ name, transport: Stdio{command,args,env} | Http{url,headers} | Sse{url,headers}, span }`. Handles `mcpServers` (Claude/Cursor/Gemini/Kiro) and `servers` + `inputs` (VS Code); per server also `disabled`/`enabled`, `autoApprove`/`alwaysAllow`, Kiro `disabledTools` and the string members of Kiro `oauth` (ADR-051) |
 | Settings | `settings()`: `permissions.{allow,deny,ask}` with spans, `hooks` (event → matchers → commands with spans), `env`, misc flags (`enableAllProjectMcpServers`, `defaultMode`) |
-| Hooks | `hooks()`: same hook model as Settings |
+| Hooks | `hooks()`: same hook model as Settings; Kiro files (legacy `when`/`then`, v1 `hooks` array) are read by shape, one entry per hook with its `enabled` flag (ADR-052) |
 | Tools | `tools()`: list of `{ name, description, schema, span }` |
 | all | `source()`, `line_index()`, `normalized()`, `tokens()` |
 

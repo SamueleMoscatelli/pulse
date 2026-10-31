@@ -1,0 +1,8 @@
+{
+  "name": "Review on save",
+  "version": "1",
+  "enabled": true,
+  "description": "Ask for a review when a TypeScript file changes",
+  "when": { "type": "fileEdited", "patterns": ["*.ts", "*.tsx"] },
+  "then": { "type": "askAgent", "prompt": "Review the edited file for bugs." }
+}

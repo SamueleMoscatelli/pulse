@@ -573,6 +573,18 @@ fn kiro_loads_always_steering_agents_md_and_descriptions() {
     assert_eq!(load(".kiro/steering/release.md"), LoadMode::OnDemand);
     assert_eq!(load(".kiro/steering/api.md"), LoadMode::OnDemand);
     assert_eq!(load("pkg/AGENTS.md"), LoadMode::Conditional);
+    // Hooks: installed under `.kiro/hooks/`, a library copy elsewhere.
+    assert_eq!(load(".kiro/hooks/review.kiro.hook"), LoadMode::Always);
+    assert_eq!(load(".kiro/hooks/lint.json"), LoadMode::Always);
+    assert_eq!(load("hooks/review.kiro.hook"), LoadMode::OnDemand);
+    assert!(
+        report
+            .findings
+            .iter()
+            .filter(|f| f.location.path.to_string_lossy().contains("hooks"))
+            .all(|f| f.rule_id == "AI-STR-008" && f.message.ends_with("move it to `.kiro/hooks/`")),
+        "valid Kiro hooks have no findings; the library copy is not loaded"
+    );
 
     // Kiro: `always` and unmarked steering, root AGENTS.md, the `auto` steering's and the
     // skill's descriptions; not CLAUDE.md, nested AGENTS.md, fileMatch or manual steering.
@@ -606,6 +618,7 @@ fn kiro_loads_always_steering_agents_md_and_descriptions() {
             ".kiro/hook/format.kiro.hook",
             ".kiro/skill/notes/README.md",
             ".kiro/steerings/legacy.md",
+            "hooks/review.kiro.hook",
         ]
     );
 
@@ -620,6 +633,6 @@ fn kiro_loads_always_steering_agents_md_and_descriptions() {
         .iter()
         .map(|n| n.rel_path.as_str())
         .collect();
-    assert_eq!(skipped, ["CLAUDE.md"]);
+    assert_eq!(skipped, ["CLAUDE.md", "hooks/review.kiro.hook"]);
     assert_eq!(report.context.by_assistant, [(Assistant::Kiro, kiro)]);
 }

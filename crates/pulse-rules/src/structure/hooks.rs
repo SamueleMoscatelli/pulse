@@ -1,14 +1,15 @@
-//! AI-STR-006: invalid hook definition (Claude settings / plugin hooks, Cursor and Copilot
-//! hooks).
+//! AI-STR-006: invalid hook definition (Claude settings / plugin hooks, Cursor, Copilot and
+//! Kiro hooks).
 
 use std::path::Path;
 
-use pulse_core::parse::{HookCmd, HookEntry};
+use pulse_core::parse::{HookCmd, HookEntry, HookFormat};
 use pulse_core::{Asset, Category, Finding, KindSet, Rule, RuleCtx, RuleMeta, Severity, Span};
 
 use crate::lexicon::platform::{
     CLAUDE_HOOK_EVENTS, CLAUDE_HOOK_TYPES, COPILOT_HOOK_EVENTS, COPILOT_HOOK_TYPES,
-    CURSOR_HOOK_EVENTS, CURSOR_HOOK_TYPES,
+    CURSOR_HOOK_EVENTS, CURSOR_HOOK_TYPES, KIRO_HOOK_TRIGGERS, KIRO_HOOK_TYPES,
+    KIRO_LEGACY_HOOK_EVENTS, KIRO_LEGACY_HOOK_TYPES,
 };
 use crate::security::shell::scan;
 use crate::util::{suggest, truncate};
@@ -37,19 +38,27 @@ const SCRIPT_EXTS: &[&str] = &[
 
 pub struct InvalidHook;
 
+/// Hook types that need a text field, as `(type, field)`.
+const STANDARD_FIELDS: &[(&str, &str)] = &[("command", "command"), ("prompt", "prompt")];
+const KIRO_FIELDS: &[(&str, &str)] = &[("agent", "prompt"), ("command", "command")];
+const KIRO_LEGACY_FIELDS: &[(&str, &str)] = &[("askAgent", "prompt"), ("runCommand", "command")];
+
 /// The hook dialect of an asset and where its relative paths resolve.
 struct Dialect<'a> {
     events: &'static [&'static str],
     types: &'static [&'static str],
+    /// `(type, field)` pairs: a hook of that type needs that text.
+    fields: &'static [(&'static str, &'static str)],
+    /// Kiro: `(event key, action key)`, `0` timeouts allowed, wildcard and `@` matchers.
+    kiro: Option<(&'static str, &'static str)>,
     /// Scan-root-relative project root (`""` or `dir/`); `None` for plugin hooks.
     project: Option<&'a str>,
     /// Scan-root-relative plugin root, for `${CLAUDE_PLUGIN_ROOT}`.
     plugin: Option<&'a str>,
 }
 
-/// The dialect of the hooks at `rel`; `copilot` when they use the Copilot keys (`bash`,
-/// `timeoutSec`).
-fn dialect(rel: &str, copilot: bool) -> Dialect<'_> {
+/// The dialect of the hooks at `rel` in `format`.
+fn dialect(rel: &str, format: HookFormat) -> Dialect<'_> {
     let prefix = |dir: &str| {
         let at = if rel.starts_with(dir) {
             Some(0)
@@ -58,10 +67,41 @@ fn dialect(rel: &str, copilot: bool) -> Dialect<'_> {
         };
         at.map(|i| &rel[..i])
     };
+    // Kiro runs commands in the project root; a library copy elsewhere is not checked for
+    // script paths.
+    let kiro = |events, types, fields, keys| Dialect {
+        events,
+        types,
+        fields,
+        kiro: Some(keys),
+        project: prefix(".kiro/hooks/"),
+        plugin: None,
+    };
+    match format {
+        HookFormat::KiroLegacy => {
+            return kiro(
+                KIRO_LEGACY_HOOK_EVENTS,
+                KIRO_LEGACY_HOOK_TYPES,
+                KIRO_LEGACY_FIELDS,
+                ("when.type", "then"),
+            );
+        }
+        HookFormat::Kiro => {
+            return kiro(
+                KIRO_HOOK_TRIGGERS,
+                KIRO_HOOK_TYPES,
+                KIRO_FIELDS,
+                ("trigger", "action"),
+            );
+        }
+        HookFormat::Standard | HookFormat::Copilot => {}
+    }
     if let Some(project) = prefix(".cursor/") {
         return Dialect {
             events: CURSOR_HOOK_EVENTS,
             types: CURSOR_HOOK_TYPES,
+            fields: STANDARD_FIELDS,
+            kiro: None,
             project: Some(project),
             plugin: None,
         };
@@ -69,10 +109,12 @@ fn dialect(rel: &str, copilot: bool) -> Dialect<'_> {
     // Copilot: scripts resolve from the repository root once installed in `.github/hooks/`;
     // a library copy elsewhere (`hooks/<name>/hooks.json`) is not checked for them.
     let installed = prefix(".github/hooks/");
-    if copilot || installed.is_some() {
+    if format == HookFormat::Copilot || installed.is_some() {
         return Dialect {
             events: COPILOT_HOOK_EVENTS,
             types: COPILOT_HOOK_TYPES,
+            fields: STANDARD_FIELDS,
+            kiro: None,
             project: installed,
             plugin: None,
         };
@@ -80,6 +122,8 @@ fn dialect(rel: &str, copilot: bool) -> Dialect<'_> {
     let claude = |project, plugin| Dialect {
         events: CLAUDE_HOOK_EVENTS,
         types: CLAUDE_HOOK_TYPES,
+        fields: STANDARD_FIELDS,
+        kiro: None,
         project,
         plugin,
     };
@@ -99,24 +143,46 @@ impl Rule for InvalidHook {
     }
 
     fn check(&self, asset: &Asset, ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
-        let d = dialect(&asset.rel_path, asset.settings().copilot_hooks);
-        let mut push = |span: Span, severity: Severity, message: String| {
-            let mut f = Finding::new(&META, asset, span, message);
-            f.severity = severity;
-            out.push(f);
-        };
+        let d = dialect(&asset.rel_path, asset.settings().hook_format);
         for entry in asset.hooks() {
-            if !d.events.contains(&entry.event.as_str()) {
+            let mut push = |span: Span, severity: Severity, message: String| {
+                let message = message + entry.disabled_note();
+                let mut f = Finding::new(&META, asset, span, message);
+                f.severity = severity;
+                out.push(f);
+            };
+            if let Some((event_key, action_key)) = d.kiro {
+                if entry.event.is_empty() {
+                    push(
+                        entry.event_span,
+                        Severity::High,
+                        format!("Hook has no `{event_key}`"),
+                    );
+                }
+                if entry.hooks.is_empty() {
+                    push(
+                        entry.event_span,
+                        Severity::High,
+                        format!("Hook has no `{action_key}`"),
+                    );
+                }
+            }
+            if !entry.event.is_empty() && !d.events.contains(&entry.event.as_str()) {
                 let hint = suggest(&entry.event, d.events)
                     .map_or_else(String::new, |s| format!(" (did you mean `{s}`?)"));
                 let event = truncate(&entry.event, QUOTED);
+                let what = match d.kiro {
+                    Some((key, _)) if key.contains('.') => format!("`{key}`"),
+                    Some((key, _)) => key.to_owned(),
+                    None => "event".to_owned(),
+                };
                 push(
                     entry.event_span,
                     Severity::High,
-                    format!("Unknown hook event `{event}`{hint}"),
+                    format!("Unknown hook {what} `{event}`{hint}"),
                 );
             }
-            if let Some(message) = matcher_error(entry) {
+            if let Some(message) = matcher_error(entry, d.kiro.is_some()) {
                 let span = entry.matcher_span.unwrap_or(entry.event_span);
                 push(span, Severity::High, message);
             }
@@ -134,28 +200,51 @@ fn check_cmd(
     ctx: &RuleCtx<'_>,
     push: &mut impl FnMut(Span, Severity, String),
 ) {
-    if !d.types.contains(&h.kind.as_str()) {
+    let field = d.fields.iter().find(|(t, _)| *t == h.kind).map(|f| f.1);
+    if h.kind.is_empty() {
+        let action = d.kiro.map_or("hook", |k| k.1);
+        push(
+            h.command_span,
+            Severity::High,
+            format!("Hook `{action}` has no `type`"),
+        );
+    } else if !d.types.contains(&h.kind.as_str()) {
         let kind = truncate(&h.kind, QUOTED);
+        let hint = if d.kiro.is_some() {
+            suggest(&h.kind, d.types)
+                .map_or_else(String::new, |s| format!(" (did you mean `{s}`?)"))
+        } else {
+            String::new()
+        };
         let span = h.kind_span.unwrap_or(h.command_span);
-        push(span, Severity::High, format!("Unknown hook type `{kind}`"));
-    } else if matches!(h.kind.as_str(), "command" | "prompt") && h.command.trim().is_empty() {
+        push(
+            span,
+            Severity::High,
+            format!("Unknown hook type `{kind}`{hint}"),
+        );
+    } else if let Some(field) = field
+        && h.command.trim().is_empty()
+    {
         let kind = &h.kind;
         push(
             h.command_span,
             Severity::High,
-            format!("`{kind}` hook has no `{kind}`"),
+            format!("`{kind}` hook has no `{field}`"),
         );
     }
+    // Kiro: `0` disables the timeout.
+    let min_ok = |t: f64| if d.kiro.is_some() { t >= 0.0 } else { t > 0.0 };
     if let Some(t) = h.timeout
-        && (t <= 0.0 || t > MAX_TIMEOUT)
+        && (!min_ok(t) || t > MAX_TIMEOUT)
     {
+        let bound = if d.kiro.is_some() { ">= 0" } else { "> 0" };
         push(
             h.timeout_span.unwrap_or(h.command_span),
             Severity::Medium,
-            format!("Hook timeout {t} s must be > 0 and <= 600 s"),
+            format!("Hook timeout {t} s must be {bound} and <= 600 s"),
         );
     }
-    if h.kind == "command" {
+    if field == Some("command") {
         for (start, end, path) in missing_scripts(&h.command, d, ctx) {
             let span = crate::security::mcp::value_span(
                 asset,
@@ -174,9 +263,15 @@ fn check_cmd(
     }
 }
 
-/// Why the matcher of `entry` cannot work, if it cannot.
-fn matcher_error(entry: &HookEntry) -> Option<String> {
+/// Why the matcher of `entry` cannot work, if it cannot; `kiro` also accepts tool selectors
+/// (`@mcp`, `@server/tool`) and `*`/`?` wildcards.
+fn matcher_error(entry: &HookEntry, kiro: bool) -> Option<String> {
     let m = entry.matcher.as_deref()?;
+    // AI-STR-006 FP guard: Kiro selectors and wildcard patterns are not regexes.
+    let wildcard = || !m.contains(['(', ')', '[', ']', '{', '}', '\\', '+', '|', '^', '$']);
+    if kiro && (m.starts_with('@') || wildcard()) {
+        return None;
+    }
     // `""`, `*` and plain names or `|`/`,` lists are not regexes (Claude docs).
     let plain = m
         .bytes()
@@ -281,22 +376,31 @@ mod tests {
 
     #[test]
     fn dialect_by_path() {
-        let d = dialect("app/.cursor/hooks.json", false);
+        let d = dialect("app/.cursor/hooks.json", HookFormat::Standard);
         assert_eq!(d.events, CURSOR_HOOK_EVENTS);
         assert_eq!(d.project, Some("app/"));
-        let d = dialect(".claude/settings.json", false);
+        let d = dialect(".claude/settings.json", HookFormat::Standard);
         assert_eq!((d.project, d.plugin), (Some(""), None));
-        let d = dialect("plugins/fmt/hooks/hooks.json", false);
+        let d = dialect("plugins/fmt/hooks/hooks.json", HookFormat::Standard);
         assert_eq!((d.project, d.plugin), (None, Some("plugins/fmt/")));
-        let d = dialect(".github/hooks/audit.json", false);
+        let d = dialect(".github/hooks/audit.json", HookFormat::Standard);
         assert_eq!((d.events, d.project), (COPILOT_HOOK_EVENTS, Some("")));
-        let d = dialect("hooks/audit/hooks.json", true);
+        let d = dialect("hooks/audit/hooks.json", HookFormat::Copilot);
         assert_eq!((d.events, d.project), (COPILOT_HOOK_EVENTS, None));
+        let d = dialect("app/.kiro/hooks/fmt.kiro.hook", HookFormat::KiroLegacy);
+        assert_eq!(
+            (d.events, d.project),
+            (KIRO_LEGACY_HOOK_EVENTS, Some("app/"))
+        );
+        let d = dialect("hooks/fmt.kiro.hook", HookFormat::KiroLegacy);
+        assert_eq!(d.project, None);
+        let d = dialect(".kiro/hooks/fmt.json", HookFormat::Kiro);
+        assert_eq!((d.types, d.project), (KIRO_HOOK_TYPES, Some("")));
     }
 
     #[test]
     fn resolve_only_checkable_paths() {
-        let d = dialect("app/.claude/settings.json", false);
+        let d = dialect("app/.claude/settings.json", HookFormat::Standard);
         let r = |w| resolve(w, &d);
         assert_eq!(
             r("$CLAUDE_PROJECT_DIR/.claude/hooks/fmt").as_deref(),
@@ -328,12 +432,20 @@ mod tests {
             matcher: Some(m.into()),
             matcher_span: None,
             hooks: Vec::new(),
+            enabled: true,
         };
         for ok in ["", "*", "Edit|Write", "mcp__.*", "^Notebook", "(?!Bash).*"] {
-            assert_eq!(matcher_error(&entry(ok)), None, "{ok}");
+            assert_eq!(matcher_error(&entry(ok), false), None, "{ok}");
         }
         for bad in ["Edit(", "[Bash", "*Bash"] {
-            assert!(matcher_error(&entry(bad)).is_some(), "{bad}");
+            assert!(matcher_error(&entry(bad), false).is_some(), "{bad}");
+        }
+        // Kiro: selectors and wildcards are fine, broken regexes are not.
+        for ok in ["*.ts", "mcp_?", "@postgres/query", "read", r"\.(ts|tsx)$"] {
+            assert_eq!(matcher_error(&entry(ok), true), None, "{ok}");
+        }
+        for bad in [r"\.(ts|tsx$", "*(Bash"] {
+            assert!(matcher_error(&entry(bad), true).is_some(), "{bad}");
         }
     }
 }

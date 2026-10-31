@@ -10,7 +10,7 @@ Hooks run automatically, with your user's permissions, every time the agent star
 - A downloader inside a process or command substitution run by a shell or `eval`/`source`: `bash <(curl …)`, `eval "$(wget -qO- …)"`, `sh -c "$(curl …)"`, `iex (iwr …)`.
 - `base64 -d` (or `openssl base64 -d`) output piped to a shell or passed to `eval`.
 
-An interpreter that reads a script file, a module or inline code (`bash install.sh`, `python3 -m json.tool`, `node -e …`) is not reading the download, so it is not flagged. Fences in other languages (`text`, `console`, none) are not scanned.
+An interpreter that reads a script file, a module or inline code (`bash install.sh`, `python3 -m json.tool`, `node -e …`) is not reading the download, so it is not flagged. Fences in other languages (`text`, `console`, none) are not scanned. Kiro hooks are checked through their `command`/`runCommand` actions; findings on a disabled hook (`"enabled": false`) end with "(the hook is disabled)", since turning it back on runs the command.
 
 ## Noncompliant
 ```json
