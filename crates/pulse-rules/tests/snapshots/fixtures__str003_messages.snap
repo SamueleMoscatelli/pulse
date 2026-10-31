@@ -1,0 +1,28 @@
+---
+source: crates/pulse-rules/tests/fixtures.rs
+expression: "messages(&fail_fixture_findings(\"AI-STR-003\"))"
+---
+.kiro/steering/fail_bad_range.md:4:9 Broken line range `#[[file:docs/kiro/api.md:4-9]]`: the file has 5 lines
+  ↳ Fix the path or add the missing file; break import cycles.
+.kiro/steering/fail_bad_range.md:5:8 Broken line range `#[[file:docs/kiro/api.md:0]]`: lines start at 1
+  ↳ Fix the path or add the missing file; break import cycles.
+.kiro/steering/fail_bad_range.md:6:12 Broken line range `#[[file:docs/kiro/api.md:5-2]]`: starts after it ends
+  ↳ Fix the path or add the missing file; break import cycles.
+.kiro/steering/fail_missing_file.md:4:5 Broken reference `#[[file:docs/kiro/openapi.yaml]]`: no such file
+  ↳ Fix the path or add the missing file; break import cycles.
+.kiro/steering/fail_missing_folder.md:4:19 Broken reference `#[[folder:docs/specs]]`: no such folder
+  ↳ Fix the path or add the missing file; break import cycles.
+fail_agents/AGENTS.md:3:6 Broken reference `#[[file:notes.md]]`: no such file
+  ↳ Fix the path or add the missing file; break import cycles.
+fail_broken_import.md:3:8 Broken import `@docs/missing.md`: no such file
+  ↳ Fix the path or add the missing file; break import cycles.
+fail_broken_link.md:1:17 Broken link `docs/guide.md`: no such file
+  ↳ Fix the path or add the missing file; break import cycles.
+fail_cycle_a.md:1:15 Import cycle: `@fail_cycle_b.md` imports this file back
+  ↳ Fix the path or add the missing file; break import cycles.
+fail_cycle_b.md:1:24 Import cycle: `@fail_cycle_a.md` imports this file back
+  ↳ Fix the path or add the missing file; break import cycles.
+fail_missing_script_SKILL.md:7:13 Broken path `scripts/fill_form.py`: no such file in the skill
+  ↳ Fix the path or add the missing file; break import cycles.
+fail_run_in_block_SKILL.md:8:8 Broken path `scripts/build_preview.py`: no such file in the skill
+  ↳ Fix the path or add the missing file; break import cycles.

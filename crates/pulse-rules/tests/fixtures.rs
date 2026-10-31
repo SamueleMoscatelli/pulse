@@ -2,7 +2,9 @@
 //!
 //! Every `tests/fixtures/<RULE-ID>/` directory runs only that rule: `fail_*` files must
 //! produce ≥ 1 finding (exactly the `line:col` set of a sibling `.expect`, when present),
-//! `pass_*` files none. Every registered rule needs fixtures and `docs/rules/<ID>.md`; a
+//! `pass_*` files none. Fixtures may sit in subdirectories (`.kiro/steering/fail_x.md`), or
+//! inside a `fail_*`/`pass_*` directory when the file name matters (`pass_x/AGENTS.md`); the
+//! rule directory is the scan root. Every registered rule needs fixtures and `docs/rules/<ID>.md`; a
 //! `_generated` file stands in for `fail_*` when the fail cases are generated below.
 
 #![allow(clippy::unwrap_used)] // helpers outside #[test] fns
@@ -30,7 +32,9 @@ fn kind_of(dir: &Path, name: &str) -> AssetKind {
     if let Ok(k) = fs::read_to_string(dir.join("_kind")) {
         return k.trim().parse().unwrap();
     }
-    if name.ends_with("SKILL.md") {
+    if name.contains(".kiro/steering/") {
+        AssetKind::ScopedInstructions
+    } else if name.ends_with("SKILL.md") {
         AssetKind::Skill
     } else if name.ends_with(".mdc") {
         AssetKind::ScopedInstructions
@@ -113,6 +117,39 @@ fn is_fixture(name: &str) -> bool {
     (name.starts_with("fail_") || name.starts_with("pass_")) && !name.ends_with(".expect")
 }
 
+/// Every file under `dir`, as sorted `/`-separated paths relative to it.
+fn walk(dir: &Path) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in fs::read_dir(&d).unwrap() {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                stack.push(p);
+            } else {
+                let rel = p.strip_prefix(dir).unwrap().to_str().unwrap();
+                out.push(rel.replace('\\', "/"));
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+/// The `fail_`/`pass_` component that makes `rel` a fixture: its file name, or the
+/// directory it sits in.
+fn fixture_role(rel: &str) -> Option<&str> {
+    let (dir, name) = rel.rsplit_once('/').unwrap_or(("", rel));
+    if name.ends_with(".expect") {
+        return None;
+    }
+    if is_fixture(name) {
+        return Some(name);
+    }
+    let parent = dir.rsplit('/').next().unwrap_or_default();
+    is_fixture(parent).then_some(parent)
+}
+
 #[test]
 fn fixtures() {
     let mut failures = Vec::new();
@@ -124,25 +161,32 @@ fn fixtures() {
     dirs.sort();
     for dir in dirs {
         let rule_id = dir.file_name().unwrap().to_str().unwrap().to_owned();
-        let mut names: Vec<String> = fs::read_dir(&dir)
-            .unwrap()
-            .map(|e| e.unwrap().file_name().into_string().unwrap())
-            .filter(|n| is_fixture(n))
+        let walked = walk(&dir);
+        let names: Vec<&String> = walked
+            .iter()
+            .filter(|n| fixture_role(n).is_some())
             .collect();
-        names.sort();
         let assets: Vec<Asset> = names
             .iter()
             .map(|n| asset(n, kind_of(&dir, n), fs::read(dir.join(n)).unwrap()))
             .collect();
-        let findings = run(&rule_id, &assets);
-        for name in &names {
+        let files: HashSet<String> = walked.iter().cloned().collect();
+        let findings = run_in(
+            &rule_id,
+            &assets,
+            &OptionsStore::empty(),
+            &Config::default(),
+            &dir,
+            &files,
+        );
+        for name in names {
             let actual: BTreeSet<String> = findings
                 .iter()
                 .filter(|f| f.location.path.as_ref() == Path::new(name))
                 .map(|f| format!("{}:{}", f.location.line, f.location.col))
                 .collect();
             let fixture = format!("{rule_id}/{name}");
-            if name.starts_with("pass_") {
+            if fixture_role(name).is_some_and(|r| r.starts_with("pass_")) {
                 if !actual.is_empty() {
                     failures.push(format!("{fixture}: expected none, got {actual:?}"));
                 }
@@ -1184,6 +1228,50 @@ fn eff002_counts_resolved_imports() {
 }
 
 #[test]
+fn eff002_counts_kiro_refs_of_always_steering() {
+    let root = fixtures_dir().join("AI-EFF-002");
+    let config = Config::parse("[budgets]\nalways_on = 1\n", Path::new("pulse.toml")).unwrap();
+    let steering = |inclusion: &str, refs: &str| {
+        asset(
+            ".kiro/steering/a.md",
+            AssetKind::ScopedInstructions,
+            format!("---\ninclusion: {inclusion}\nname: a\ndescription: d\n---\nSee {refs}\n")
+                .into_bytes(),
+        )
+    };
+    let files: HashSet<String> = [".kiro/steering/a.md", "docs/imported.md"]
+        .map(str::to_owned)
+        .into();
+    let imported_tokens = |a: Asset| -> Option<u32> {
+        let f = run_in(
+            "AI-EFF-002",
+            &[a],
+            &OptionsStore::empty(),
+            &config,
+            &root,
+            &files,
+        );
+        let msg = &f.first()?.message;
+        let rest = msg.split("docs/imported.md ").nth(1)?;
+        rest.split([',', ' ']).next()?.parse().ok()
+    };
+    let whole = imported_tokens(steering("always", "#[[file:docs/imported.md]]")).unwrap();
+    let range = imported_tokens(steering("always", "#[[file:docs/imported.md:3-4]]")).unwrap();
+    assert!(0 < range && range < whole, "{range} vs {whole}");
+    // A whole-file reference wins over a range of the same file.
+    let both = steering(
+        "always",
+        "#[[file:docs/imported.md:1]] #[[file:docs/imported.md]]",
+    );
+    assert_eq!(imported_tokens(both), Some(whole));
+    // `auto` steering loads on demand: only its description is always on.
+    assert_eq!(
+        imported_tokens(steering("auto", "#[[file:docs/imported.md]]")),
+        None
+    );
+}
+
+#[test]
 fn str003_skill_paths_resolve_from_skill_dir_or_root() {
     let skill = asset(
         ".claude/skills/ship/SKILL.md",
@@ -2048,22 +2136,43 @@ fn messages(findings: &[Finding]) -> String {
         .collect()
 }
 
-/// Findings of `rule_id` over its `fail_*` fixtures.
+/// Findings of `rule_id` over its `fail_*` fixtures, with the rule directory as scan root.
 fn fail_fixture_findings(rule_id: &str) -> Vec<Finding> {
     let dir = fixtures_dir().join(rule_id);
-    let mut names: Vec<String> = fs::read_dir(&dir)
-        .unwrap()
-        .map(|e| e.unwrap().file_name().into_string().unwrap())
-        .filter(|n| n.starts_with("fail_") && is_fixture(n))
-        .collect();
-    names.sort();
-    let assets: Vec<Asset> = names
+    let walked = walk(&dir);
+    let assets: Vec<Asset> = walked
         .iter()
+        .filter(|n| fixture_role(n).is_some_and(|r| r.starts_with("fail_")))
         .map(|n| asset(n, kind_of(&dir, n), fs::read(dir.join(n)).unwrap()))
         .collect();
-    let mut f = run(rule_id, &assets);
-    f.sort_by(|a, b| a.location.path.cmp(&b.location.path));
+    let files: HashSet<String> = walked.iter().cloned().collect();
+    let config = Config::default();
+    let mut f = run_in(
+        rule_id,
+        &assets,
+        &OptionsStore::empty(),
+        &config,
+        &dir,
+        &files,
+    );
+    f.sort_by(|a, b| {
+        (&a.location.path, a.location.line, a.location.col).cmp(&(
+            &b.location.path,
+            b.location.line,
+            b.location.col,
+        ))
+    });
     f
+}
+
+#[test]
+fn str001_messages() {
+    insta::assert_snapshot!(messages(&fail_fixture_findings("AI-STR-001")));
+}
+
+#[test]
+fn str003_messages() {
+    insta::assert_snapshot!(messages(&fail_fixture_findings("AI-STR-003")));
 }
 
 #[test]

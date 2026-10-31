@@ -6,7 +6,7 @@ use pulse_core::{
     Asset, AssetKind, Category, Finding, KindSet, Rule, RuleCtx, RuleMeta, Severity, Span,
 };
 
-use crate::structure::schemas::{Required, Schema, schema_for};
+use crate::structure::schemas::{KIRO_STEERING, Required, Schema, schema_for};
 use crate::util::truncate;
 
 /// Chars of a key or name quoted in a message.
@@ -60,6 +60,8 @@ impl Rule for InvalidFrontmatter {
                     asset.lines.line_span(&asset.source, 1),
                     "Unterminated frontmatter: no closing \"---\" line",
                 ));
+            } else if asset.is_kiro_steering() {
+                late_frontmatter(asset, out);
             } else if let Some(schema) = schema_for(asset)
                 && schema.required != Required::None
             {
@@ -111,6 +113,9 @@ impl Rule for InvalidFrontmatter {
                 }
             }
         }
+        if std::ptr::eq(schema, &KIRO_STEERING) {
+            kiro_inclusion(asset, fm, opener, out);
+        }
         for key in map.keys().filter_map(|k| k.as_str()) {
             if schema.is_known(key) {
                 continue;
@@ -125,6 +130,124 @@ impl Rule for InvalidFrontmatter {
             out.push(f);
         }
     }
+}
+
+/// Kiro steering `inclusion` modes (https://kiro.dev/docs/steering/).
+const KIRO_MODES: &[&str] = &["always", "fileMatch", "manual", "auto"];
+
+/// Kiro steering: `inclusion` is one of [`KIRO_MODES`]; `fileMatch` needs a string or
+/// string-list `fileMatchPattern`; `auto` needs `name` and `description`.
+fn kiro_inclusion(asset: &Asset, fm: &Frontmatter, opener: Span, out: &mut Vec<Finding>) {
+    let Some(value) = fm.get("inclusion").filter(|v| !v.is_null()) else {
+        return;
+    };
+    let mode = value.as_str().map(str::trim);
+    let mut push = |span: Span, msg: String| out.push(Finding::new(&META_001, asset, span, msg));
+    match mode {
+        Some("fileMatch") => {
+            let glob = |s: Option<&str>| s.is_some_and(|s| !s.trim().is_empty());
+            match fm.get("fileMatchPattern").filter(|v| !v.is_null()) {
+                None => push(
+                    opener,
+                    "Missing frontmatter key \"fileMatchPattern\" (inclusion: fileMatch)".into(),
+                ),
+                Some(p)
+                    if !glob(p.as_str())
+                        && !p.as_sequence().is_some_and(|l| {
+                            !l.is_empty() && l.iter().all(|g| glob(g.as_str()))
+                        }) =>
+                {
+                    push(
+                        key_span(asset, fm, "fileMatchPattern"),
+                        "Invalid fileMatchPattern: use a glob string or a list of globs".into(),
+                    );
+                }
+                Some(_) => {}
+            }
+        }
+        Some("auto") => {
+            for key in ["name", "description"] {
+                if fm.get(key).is_none_or(|v| v.is_null()) {
+                    push(
+                        opener,
+                        format!("Missing frontmatter key \"{key}\" (inclusion: auto)"),
+                    );
+                }
+            }
+        }
+        Some("always" | "manual") => {}
+        _ => {
+            let hint = mode
+                .and_then(|m| {
+                    KIRO_MODES
+                        .iter()
+                        .filter_map(|k| Some((levenshtein_within(m, k, TYPO_DISTANCE)?, *k)))
+                        .min_by_key(|&(d, _)| d)
+                })
+                .map_or_else(
+                    || "use always, fileMatch, manual or auto".to_owned(),
+                    |(_, k)| format!("did you mean \"{k}\"?"),
+                );
+            let written =
+                mode.map_or_else(String::new, |m| format!(" \"{}\"", truncate(m, QUOTED)));
+            push(
+                key_span(asset, fm, "inclusion"),
+                format!("Invalid inclusion{written}: {hint}"),
+            );
+        }
+    }
+}
+
+/// Kiro reads frontmatter only on the first line: a later `---` block (outside code
+/// blocks) that sets `inclusion` is ignored, so the file loads as `always`.
+fn late_frontmatter(asset: &Asset, out: &mut Vec<Finding>) {
+    let mut code = asset.markdown().code_blocks.iter().peekable();
+    // The open `---` line, and whether the block so far sets `inclusion`.
+    let mut open: Option<(u32, bool)> = None;
+    for (i, line) in asset.source.lines().enumerate() {
+        let n = u32::try_from(i + 1).unwrap_or(u32::MAX);
+        while code.next_if(|b| b.lines.1 < n).is_some() {}
+        if code.peek().is_some_and(|b| b.lines.0 <= n) {
+            open = None;
+            continue;
+        }
+        let line = line.trim_end();
+        match open {
+            _ if line == "---" => {
+                if let Some((start, true)) = open {
+                    out.push(Finding::new(
+                        &META_001,
+                        asset,
+                        asset.lines.line_span(&asset.source, start),
+                        "Frontmatter not on the first line: Kiro ignores it and always includes the file",
+                    ));
+                    return;
+                }
+                open = Some((n, false));
+            }
+            Some((start, inclusion)) => {
+                // AI-STR-001 FP guard: every line between two thematic breaks must look
+                // like YAML (`key: value`, a `- item` or an indented continuation).
+                open = yaml_like(line)
+                    .then(|| (start, inclusion || yaml_key(line) == Some("inclusion")));
+            }
+            None => {}
+        }
+    }
+}
+
+/// The key of a top-level `key: value` line.
+fn yaml_key(line: &str) -> Option<&str> {
+    let (key, _) = line.split_once(':')?;
+    (!key.is_empty()
+        && key
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-'))
+    .then_some(key)
+}
+
+fn yaml_like(line: &str) -> bool {
+    line.is_empty() || line.starts_with([' ', '\t', '-', '#']) || yaml_key(line).is_some()
 }
 
 /// Whether `source` starts a frontmatter block (optional BOM, then a `---` line).

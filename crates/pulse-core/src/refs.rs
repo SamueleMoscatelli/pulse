@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
+use crate::parse::FileRef;
 use crate::{Asset, AssetKind, KindSet, LoadMode};
 
 /// Import hops followed from a file (Claude Code's limit).
@@ -14,12 +15,17 @@ pub const MAX_DEPTH: usize = 5;
 /// normalized scan-root-relative path. A leading `/` means the scan root. `None` when the
 /// target can't be checked: empty, home-relative (`~`) or escaping the scan root.
 pub fn resolve(from: &str, target: &str) -> Option<String> {
+    resolve_in(from.rsplit_once('/').map_or("", |(dir, _)| dir), target)
+}
+
+/// Like [`resolve`], relative to the scan-root-relative directory `dir` (`""` is the root).
+pub fn resolve_in(dir: &str, target: &str) -> Option<String> {
     if target.is_empty() || target.starts_with('~') {
         return None;
     }
     let (base, rest) = match target.strip_prefix('/') {
         Some(rest) => ("", rest),
-        None => (from.rsplit_once('/').map_or("", |(dir, _)| dir), target),
+        None => (dir, target),
     };
     let mut parts: Vec<&str> = Vec::new();
     for part in base.split('/').chain(rest.split('/')) {
@@ -43,7 +49,39 @@ pub fn is_file_import(path: &str) -> bool {
     path.contains(['/', '.'])
 }
 
-/// Resolved `@imports` of every Markdown asset and, transitively up to [`MAX_DEPTH`] hops,
+/// The directory Kiro `#[[file:…]]` references in `rel` resolve from: the workspace root
+/// (the folder holding `.kiro/`) for steering files, the containing folder for `AGENTS.md`.
+/// `None` for files where Kiro doesn't expand references.
+pub fn kiro_ref_base(rel: &str) -> Option<&str> {
+    const STEERING: &str = ".kiro/steering/";
+    if let Some(i) = rel
+        .match_indices(STEERING)
+        .map(|(i, _)| i)
+        .find(|&i| i == 0 || rel.as_bytes()[i - 1] == b'/')
+    {
+        return Some(rel[..i].trim_end_matches('/'));
+    }
+    match rel.rsplit_once('/') {
+        Some((dir, "AGENTS.md")) => Some(dir),
+        None if rel == "AGENTS.md" => Some(""),
+        _ => None,
+    }
+}
+
+/// Resolves the Kiro `#[[file:…]]` / `#[[folder:…]]` references of `asset`, in source
+/// order, paired with their resolved paths; empty where Kiro doesn't expand them.
+pub fn kiro_refs(asset: &Asset) -> impl Iterator<Item = (&FileRef, String)> {
+    let base = kiro_ref_base(&asset.rel_path);
+    let refs = if base.is_some() && KindSet::MARKDOWN.contains(asset.kind) {
+        asset.markdown().file_refs.as_slice()
+    } else {
+        &[]
+    };
+    refs.iter()
+        .filter_map(move |r| Some((r, resolve_in(base?, &r.path)?)))
+}
+
+/// Resolved `@imports` (and Kiro `#[[file:…]]` references) of every Markdown asset and, transitively up to [`MAX_DEPTH`] hops,
 /// of the walked files they import. Imported files that aren't assets are read once
 /// (bounded by `scan.max_file_bytes`) and kept for their tokens.
 #[derive(Debug, Default)]
@@ -52,6 +90,8 @@ pub struct ImportGraph {
     edges: HashMap<String, Vec<String>>,
     /// Imported walked files that aren't assets, keyed by relative path.
     files: HashMap<String, Asset>,
+    /// `(from, target)` edges that only bring in a line range (Kiro `#[[file:p:3-7]]`).
+    ranges: HashMap<(String, String), (u32, u32)>,
 }
 
 impl ImportGraph {
@@ -91,7 +131,7 @@ impl ImportGraph {
         queue: &mut VecDeque<(String, usize)>,
         depth: usize,
     ) {
-        let targets: Vec<String> = file
+        let mut targets: Vec<String> = file
             .markdown()
             .imports
             .iter()
@@ -99,6 +139,27 @@ impl ImportGraph {
             .filter_map(|i| resolve(&file.rel_path, &i.path))
             .filter(|t| files.contains(t))
             .collect();
+        let mut whole: HashSet<String> = targets.iter().cloned().collect();
+        for (r, target) in kiro_refs(file) {
+            if r.folder || !files.contains(&target) {
+                continue;
+            }
+            let key = (file.rel_path.clone(), target.clone());
+            match r.lines {
+                Some(lines) if !whole.contains(&target) => {
+                    // The first range wins; a whole-file reference anywhere overrides it.
+                    self.ranges.entry(key).or_insert(lines);
+                }
+                Some(_) => {}
+                None => {
+                    self.ranges.remove(&key);
+                    whole.insert(target.clone());
+                }
+            }
+            if !targets.contains(&target) {
+                targets.push(target);
+            }
+        }
         if targets.is_empty() {
             return;
         }
@@ -109,6 +170,14 @@ impl ImportGraph {
     /// Resolved, existing import targets of `rel`.
     pub fn imports(&self, rel: &str) -> &[String] {
         self.edges.get(rel).map_or(&[], Vec::as_slice)
+    }
+
+    /// The 1-based inclusive line range that `from` brings in from `target`, when it
+    /// references only those lines.
+    pub fn range(&self, from: &str, target: &str) -> Option<(u32, u32)> {
+        self.ranges
+            .get(&(from.to_owned(), target.to_owned()))
+            .copied()
     }
 
     /// An imported walked file that isn't an asset.
@@ -258,6 +327,38 @@ mod tests {
         assert_eq!(r["docs/b.md"], "docs/a.md");
         assert!(g.closes_cycle("CLAUDE.md", "docs/a.md"));
         assert!(!g.closes_cycle("docs/a.md", "docs/missing.md"));
+    }
+
+    #[test]
+    fn kiro_refs_resolve_from_workspace_root_or_agents_dir() {
+        assert_eq!(kiro_ref_base(".kiro/steering/a.md"), Some(""));
+        assert_eq!(kiro_ref_base("pkg/.kiro/steering/x/a.md"), Some("pkg"));
+        assert_eq!(kiro_ref_base("AGENTS.md"), Some(""));
+        assert_eq!(kiro_ref_base("pkg/AGENTS.md"), Some("pkg"));
+        for rel in ["CLAUDE.md", "my.kiro/steering/a.md", "docs/x.md"] {
+            assert_eq!(kiro_ref_base(rel), None, "{rel}");
+        }
+    }
+
+    #[test]
+    fn graph_follows_kiro_refs_and_keeps_line_ranges() {
+        let steering = Asset::new(
+            Path::new(".kiro/steering/a.md"),
+            ".kiro/steering/a.md",
+            AssetKind::ScopedInstructions,
+            LoadMode::Conditional,
+            "#[[file:docs/a.md:2-3]] #[[file:docs/b.md:1]] #[[file:docs/b.md]] \
+             #[[folder:docs]] #[[file:docs/missing.md]]\n"
+                .to_owned(),
+        );
+        let files: HashSet<String> = [".kiro/steering/a.md", "docs/a.md", "docs/b.md"]
+            .map(str::to_owned)
+            .into();
+        let g = ImportGraph::build(&[steering], &files, Path::new("."), 1 << 20, 1.0);
+        let from = ".kiro/steering/a.md";
+        assert_eq!(g.imports(from), ["docs/a.md", "docs/b.md"]);
+        assert_eq!(g.range(from, "docs/a.md"), Some((2, 3)));
+        assert_eq!(g.range(from, "docs/b.md"), None);
     }
 
     #[test]

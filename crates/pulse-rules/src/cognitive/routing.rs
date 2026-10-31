@@ -1,6 +1,6 @@
 //! Weak routing description (AI-COG-006).
 
-use pulse_core::{Asset, Category, Finding, KindSet, Rule, RuleCtx, RuleMeta, Severity};
+use pulse_core::{Asset, AssetKind, Category, Finding, KindSet, Rule, RuleCtx, RuleMeta, Severity};
 
 use super::directives::{Word, is, lemma, same, words};
 use crate::lexicon::routing::{
@@ -21,8 +21,11 @@ pub static META: RuleMeta = RuleMeta {
     name: "Weak routing description",
     category: Category::Cognitive,
     default_severity: Severity::Medium,
-    kinds: KindSet::SKILL.union(KindSet::AGENT),
-    summary: "A skill or agent description is too short, lacks a trigger cue, or is in first person.",
+    // Scoped instructions: only Kiro `inclusion: auto` steering, which routes on its description.
+    kinds: KindSet::SKILL
+        .union(KindSet::AGENT)
+        .union(KindSet::SCOPED_INSTRUCTIONS),
+    summary: "A skill, agent or auto steering description is too short, lacks a trigger cue, or is in first person.",
     remediation: concat!(
         "Say what it does and when to use it, in the third person. ",
         template!()
@@ -41,6 +44,9 @@ impl Rule for WeakRouting {
     }
 
     fn check(&self, asset: &Asset, _ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
+        if asset.kind == AssetKind::ScopedInstructions && asset.kiro_inclusion() != Some("auto") {
+            return;
+        }
         let Some(fm) = asset.markdown().frontmatter.as_ref() else {
             return;
         };

@@ -1,9 +1,9 @@
 # AI-COG-006 — Weak routing description
 
-**Severity:** Medium · **Category:** Cognitive · **Applies to:** skills, agents · **Inline-suppressible:** yes
+**Severity:** Medium · **Category:** Cognitive · **Applies to:** skills, agents, Kiro `inclusion: auto` steering · **Inline-suppressible:** yes
 
 ## Why it matters
-The model decides whether to load a skill or delegate to an agent from its `description` alone. A description that is too short, never says when to use it, or speaks as "I" leads to missed or wrong invocations.
+The model decides whether to load a skill, delegate to an agent or include a Kiro `inclusion: auto` steering file from its `description` alone. A description that is too short, never says when to use it, or speaks as "I" leads to missed or wrong invocations.
 
 ## What triggers it
 One finding at the `description` line when any of these holds (the message lists which, and the fix says what to add for each):
