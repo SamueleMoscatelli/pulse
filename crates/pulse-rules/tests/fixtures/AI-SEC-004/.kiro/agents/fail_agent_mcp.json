@@ -1,0 +1,6 @@
+{
+  "name": "gh",
+  "mcpServers": {
+    "github": { "command": "github-mcp-server", "env": { "GITHUB_TOKEN": "ghp_literalvaluehere1234" } }
+  }
+}

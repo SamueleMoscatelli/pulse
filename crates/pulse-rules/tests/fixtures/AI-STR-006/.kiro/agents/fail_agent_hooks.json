@@ -1,0 +1,7 @@
+{
+  "name": "builder",
+  "hooks": {
+    "agentSpwan": [{ "command": "git status" }],
+    "preToolUse": [{ "matcher": "execute_bash", "command": "" }]
+  }
+}

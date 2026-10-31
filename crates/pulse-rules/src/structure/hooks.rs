@@ -8,18 +8,20 @@ use pulse_core::{Asset, Category, Finding, KindSet, Rule, RuleCtx, RuleMeta, Sev
 
 use crate::lexicon::platform::{
     CLAUDE_HOOK_EVENTS, CLAUDE_HOOK_TYPES, COPILOT_HOOK_EVENTS, COPILOT_HOOK_TYPES,
-    CURSOR_HOOK_EVENTS, CURSOR_HOOK_TYPES, KIRO_HOOK_TRIGGERS, KIRO_HOOK_TYPES,
-    KIRO_LEGACY_HOOK_EVENTS, KIRO_LEGACY_HOOK_TYPES,
+    CURSOR_HOOK_EVENTS, CURSOR_HOOK_TYPES, KIRO_AGENT_HOOK_EVENTS, KIRO_AGENT_HOOK_TYPES,
+    KIRO_HOOK_TRIGGERS, KIRO_HOOK_TYPES, KIRO_LEGACY_HOOK_EVENTS, KIRO_LEGACY_HOOK_TYPES,
 };
 use crate::security::shell::scan;
-use crate::util::{suggest, truncate};
+use crate::util::{json_views, suggest, truncate};
 
 pub static META: RuleMeta = RuleMeta {
     id: "AI-STR-006",
     name: "Invalid hook definition",
     category: Category::Structure,
     default_severity: Severity::High,
-    kinds: KindSet::SETTINGS.union(KindSet::HOOKS),
+    kinds: KindSet::SETTINGS
+        .union(KindSet::HOOKS)
+        .union(KindSet::AGENT),
     summary: "A hook has an unknown event or type, no command, a broken matcher or script path.",
     remediation: "Fix the hook so the agent runs it: valid event, type, matcher, timeout and path.",
     inline_suppressible: true,
@@ -68,13 +70,13 @@ fn dialect(rel: &str, format: HookFormat) -> Dialect<'_> {
         at.map(|i| &rel[..i])
     };
     // Kiro runs commands in the project root; a library copy elsewhere is not checked for
-    // script paths.
+    // script paths. Agent hooks (ADR-053) sit in `.kiro/agents/`.
     let kiro = |events, types, fields, keys| Dialect {
         events,
         types,
         fields,
         kiro: Some(keys),
-        project: prefix(".kiro/hooks/"),
+        project: prefix(".kiro/hooks/").or_else(|| prefix(".kiro/agents/")),
         plugin: None,
     };
     match format {
@@ -92,6 +94,14 @@ fn dialect(rel: &str, format: HookFormat) -> Dialect<'_> {
                 KIRO_HOOK_TYPES,
                 KIRO_FIELDS,
                 ("trigger", "action"),
+            );
+        }
+        HookFormat::KiroAgent => {
+            return kiro(
+                KIRO_AGENT_HOOK_EVENTS,
+                KIRO_AGENT_HOOK_TYPES,
+                STANDARD_FIELDS,
+                ("event", "command"),
             );
         }
         HookFormat::Standard | HookFormat::Copilot => {}
@@ -140,6 +150,10 @@ fn dialect(rel: &str, format: HookFormat) -> Dialect<'_> {
 impl Rule for InvalidHook {
     fn meta(&self) -> &'static RuleMeta {
         &META
+    }
+
+    fn applies_to(&self, asset: &Asset) -> bool {
+        json_views(&META, asset)
     }
 
     fn check(&self, asset: &Asset, ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {

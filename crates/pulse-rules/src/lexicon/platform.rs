@@ -98,6 +98,69 @@ pub const KIRO_HOOK_TRIGGERS: &[&str] = &[
     "userPromptSubmit",
 ];
 
+/// Kiro CLI 2.x agent `hooks` events (the object form, kiro.dev/docs/custom-agents/
+/// configuration-reference and cli/v3/hooks-migration).
+pub const KIRO_AGENT_HOOK_EVENTS: &[&str] = &[
+    "agentSpawn",
+    "postToolUse",
+    "preToolUse",
+    "stop",
+    "userPromptSubmit",
+];
+
+/// Kiro CLI 2.x agent hook types: a hook runs a `command`.
+pub const KIRO_AGENT_HOOK_TYPES: &[&str] = &["command"];
+
+/// Kiro agent `tools`/`allowedTools` names (https://kiro.dev/docs/tools/): built-in tool IDs,
+/// category tags (`read`, `write`, `shell`, `web`, `subagent`), the `*` selector and CLI 2.x
+/// names still found in agents (`fs_read`, `execute_cmd`, `use_aws`, `todo_list`, …).
+/// `@builtin`, `@mcp`, `@server`, `@server/tool` and `subagent/<agent>` are selectors.
+pub const KIRO_TOOLS: &[&str] = &[
+    "*",
+    "aws",
+    "code",
+    "control_bash_process",
+    "control_pwsh_process",
+    "createHook",
+    "delegate",
+    "delete_file",
+    "disclose_context",
+    "execute_bash",
+    "execute_cmd",
+    "file_search",
+    "fs_append",
+    "fs_read",
+    "fs_write",
+    "get_process_output",
+    "glob",
+    "goal",
+    "grep",
+    "grep_search",
+    "introspect",
+    "invoke_sub_agent",
+    "kiro_powers",
+    "knowledge",
+    "list_directory",
+    "list_processes",
+    "read",
+    "read_file",
+    "remote_web_search",
+    "session",
+    "shell",
+    "str_replace",
+    "subagent",
+    "task",
+    "thinking",
+    "todo",
+    "todo_list",
+    "tool_search",
+    "use_aws",
+    "web",
+    "web_fetch",
+    "web_search",
+    "write",
+];
+
 /// Kiro IDE 0.x `*.kiro.hook` `when.type`s, plus `manual` (in use in the corpus).
 pub const KIRO_LEGACY_HOOK_EVENTS: &[&str] = &[
     "agentSpawn",
@@ -249,6 +312,9 @@ mod tests {
             CURSOR_HOOK_TYPES,
             COPILOT_HOOK_EVENTS,
             KIRO_HOOK_TRIGGERS,
+            KIRO_AGENT_HOOK_EVENTS,
+            KIRO_AGENT_HOOK_TYPES,
+            KIRO_TOOLS,
             KIRO_LEGACY_HOOK_EVENTS,
             KIRO_HOOK_TYPES,
             KIRO_LEGACY_HOOK_TYPES,

@@ -1,6 +1,6 @@
 # AI-SEC-006 — Insecure MCP transport
 
-**Severity:** High (Medium for private network hosts) · **Category:** Security · **Applies to:** MCP configs · **Inline-suppressible:** yes
+**Severity:** High (Medium for private network hosts) · **Category:** Security · **Applies to:** MCP configs, Kiro JSON agent `mcpServers` · **Inline-suppressible:** yes
 
 ## Why it matters
 Over plain `http://`, everything between the client and a remote MCP server travels unencrypted: auth headers, tool calls and their results, often including code and data from your workspace. Anyone on the network path can read or change it, and a tampered tool result is a prompt injection.

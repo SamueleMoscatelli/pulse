@@ -1,6 +1,7 @@
 //! Settings / hooks view: Claude `settings.json` (`permissions`, `hooks`, `env`, flags) and
 //! standalone hook files (Claude plugin `hooks/hooks.json`, Cursor `.cursor/hooks.json`,
-//! Copilot `.github/hooks/*.json`, Kiro `.kiro/hooks/*.kiro.hook` and `.kiro/hooks/*.json`).
+//! Copilot `.github/hooks/*.json`, Kiro `.kiro/hooks/*.kiro.hook` and `.kiro/hooks/*.json`), and
+//! the inline `hooks` of a Kiro JSON agent.
 
 use crate::model::Span;
 use crate::parse::json::{JsonDoc, JsonNode, Shape, ViewError};
@@ -33,8 +34,11 @@ pub enum HookFormat {
     Copilot,
     /// Kiro IDE 0.x `*.kiro.hook`: one hook with `when { type }` and `then { type }`.
     KiroLegacy,
-    /// Kiro v1 (`.kiro/hooks/*.json`): `hooks: [{ trigger, matcher, action { type } }]`.
+    /// Kiro v1 (`.kiro/hooks/*.json`, agent `hooks` arrays): `hooks: [{ trigger, matcher,
+    /// action { type } }]`.
     Kiro,
+    /// Kiro CLI 2.x agent `hooks`: an object keyed by camelCase event, `[{ matcher, command }]`.
+    KiroAgent,
 }
 
 /// One matcher group under a hook event (a Kiro hook is one entry).
@@ -132,6 +136,27 @@ impl SettingsView {
                 "hooks" if hooks(&mut sh, n, &mut v.hooks) => v.hook_format = HookFormat::Copilot,
                 _ => {}
             }
+        }
+        v.errors = sh.errors;
+        v
+    }
+
+    /// The inline `hooks` of a Kiro JSON agent: the CLI 2.x object keyed by event or the v1
+    /// array (ADR-053).
+    pub fn build_agent(doc: &JsonDoc) -> Self {
+        let mut v = Self::default();
+        let mut sh = Shape::default();
+        let Some(list) = doc.root.as_ref().and_then(|r| r.get("hooks")) else {
+            return v;
+        };
+        if list.as_array().is_some() {
+            v.hook_format = HookFormat::Kiro;
+            for h in sh.array(list, "hooks") {
+                v.hooks.extend(kiro_hook(&mut sh, h));
+            }
+        } else {
+            v.hook_format = HookFormat::KiroAgent;
+            hooks(&mut sh, list, &mut v.hooks);
         }
         v.errors = sh.errors;
         v

@@ -2,6 +2,12 @@
 source: crates/pulse-rules/tests/fixtures.rs
 expression: "messages(&fail_fixture_findings(\"AI-STR-003\"))"
 ---
+.kiro/agents/fail_missing_prompt.json:4:14 Broken `file://./prompts/missing.md`: no such file
+  ↳ Fix the path or add the missing file; break import cycles.
+.kiro/agents/fail_missing_prompt.json:5:45 Broken `file://docs/missing.md`: no such file
+  ↳ Fix the path or add the missing file; break import cycles.
+.kiro/agents/fail_missing_resource.md:5:5 Broken `file://docs/gone.md`: no such file
+  ↳ Fix the path or add the missing file; break import cycles.
 .kiro/steering/fail_bad_range.md:4:9 Broken line range `#[[file:docs/kiro/api.md:4-9]]`: the file has 5 lines
   ↳ Fix the path or add the missing file; break import cycles.
 .kiro/steering/fail_bad_range.md:5:8 Broken line range `#[[file:docs/kiro/api.md:0]]`: lines start at 1

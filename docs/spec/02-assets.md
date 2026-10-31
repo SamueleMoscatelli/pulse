@@ -11,6 +11,7 @@ Patterns are globset globs relative to the scan root. `**/` means "at any depth"
 | 3 | `**/.mcp.json`, `**/.vscode/mcp.json`, `**/.cursor/mcp.json`, `**/claude_desktop_config.json`, `**/.gemini/settings.json`, `**/.kiro/settings/mcp.json` | McpConfig | Always | JSONC |
 | 4 | `**/SKILL.md` | Skill | Always (frontmatter) / OnDemand (body) | MD+FM |
 | 5 | `**/.claude/agents/**/*.md`, `**/.github/agents/*.agent.md`, `**/.github/chatmodes/*.chatmode.md` | Agent | Always (description) / OnDemand (body) | MD+FM |
+| 5b | `**/.kiro/agents/*.md`, `**/.kiro/agents/*.json` (Kiro custom agents, ADR-053) | Agent | OnDemand | MD+FM / JSONC |
 | 6 | `**/.claude/commands/**/*.md`, `**/.github/prompts/*.prompt.md`, `**/*.prompty` | Prompt | OnDemand | MD+FM |
 | 7 | `**/.cursor/rules/**/*.mdc`, `**/.claude/rules/**/*.md`, `**/.github/instructions/**/*.instructions.md`, `**/.windsurf/rules/**/*.md`, `**/.clinerules/**/*.md`, `**/.kiro/steering/**/*.md` | ScopedInstructions | Conditional* | MD+FM |
 | 8 | `**/CLAUDE.md`, `**/CLAUDE.local.md`, `**/AGENTS.md`, `**/GEMINI.md`, `**/.github/copilot-instructions.md`, `**/.cursorrules`, `**/.windsurfrules`, `**/.clinerules` (file) | Instructions | Always** | MD |
@@ -42,6 +43,7 @@ Matching order: built-in rows 1–10, then `[[scan.custom]]`, then `scan.include
 | McpConfig | `mcp()`: servers map → `{ name, transport: Stdio{command,args,env} | Http{url,headers} | Sse{url,headers}, span }`. Handles `mcpServers` (Claude/Cursor/Gemini/Kiro) and `servers` + `inputs` (VS Code); per server also `disabled`/`enabled`, `autoApprove`/`alwaysAllow`, Kiro `disabledTools` and the string members of Kiro `oauth` (ADR-051) |
 | Settings | `settings()`: `permissions.{allow,deny,ask}` with spans, `hooks` (event → matchers → commands with spans), `env`, misc flags (`enableAllProjectMcpServers`, `defaultMode`) |
 | Hooks | `hooks()`: same hook model as Settings; Kiro files (legacy `when`/`then`, v1 `hooks` array) are read by shape, one entry per hook with its `enabled` flag (ADR-052) |
+| Agent (Kiro, ADR-053) | `kiro_agent()`: top-level keys, `name`, `description`, `prompt` (inline or `file://`), `tools`, `allowedTools`, `toolsSettings` tool names, `permissions.rules` (`capability`, `match`, `effect`, `exclude`), string `resources`, `includeMcpJson`, `model`; from the JSON document or the Markdown frontmatter. A JSON agent's inline `hooks` (CLI 2.x object keyed by camelCase event, or the v1 array) fill `hooks()`, its `mcpServers` fill `mcp()`, and `tokens()` counts its inline `prompt` only. Markdown views don't apply to JSON agents: only rules that read raw text or JSON views run on them (`Rule::json_agents`) |
 | Tools | `tools()`: list of `{ name, description, schema, span }` |
 | all | `source()`, `line_index()`, `normalized()`, `tokens()` |
 

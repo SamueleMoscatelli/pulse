@@ -48,6 +48,11 @@ impl Rule for Exfiltration {
         &META
     }
 
+    // Prose rule: a JSON agent's `prompt` string is not read yet (backlog, ADR-053).
+    fn json_agents(&self) -> bool {
+        false
+    }
+
     fn validate(&self, ctx: &RuleCtx<'_>) -> Result<(), ConfigError> {
         ctx.options::<Options>(META.id).map(drop)
     }

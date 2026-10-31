@@ -1,7 +1,7 @@
 //! Small helpers shared by rules.
 
 use pulse_core::text::levenshtein_within;
-use pulse_core::{Asset, Finding, RuleMeta, Severity, Span};
+use pulse_core::{Asset, AssetKind, Finding, RuleMeta, Severity, Span};
 
 /// Hits from which a per-asset summary finding is reported instead of one per hit.
 pub const AGGREGATE_MIN: usize = 3;
@@ -75,6 +75,12 @@ pub fn aggregate<'a>(
         .iter()
         .fold(0, |sum: u32, h| sum.saturating_add(h.token_waste));
     out.push(f);
+}
+
+/// [`pulse_core::Rule::applies_to`] for rules that read the JSON views of a JSON agent (its
+/// inline `hooks`, `mcpServers`): of the agents, only JSON ones reach them.
+pub fn json_views(meta: &RuleMeta, asset: &Asset) -> bool {
+    meta.kinds.contains(asset.kind) && (asset.kind != AssetKind::Agent || asset.is_json_agent())
 }
 
 /// `s` cut to at most `max` chars, with `…` appended when cut.

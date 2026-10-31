@@ -155,6 +155,7 @@ pub fn loaded_by(rel_path: &str, kind: AssetKind) -> Option<AssistantSet> {
             _ => &[Copilot, ClaudeCode],
         },
         AssetKind::Agent => match () {
+            _ if in_dir(rel_path, ".kiro/agents/") => &[Kiro],
             _ if in_dir(rel_path, ".claude/agents/") => &[Copilot, ClaudeCode],
             _ if in_dir(rel_path, ".github/agents/") || in_dir(rel_path, ".github/chatmodes/") => {
                 &[Copilot]
@@ -342,6 +343,7 @@ mod tests {
             (".cursor/hooks.json", Hooks, Some(vec![Cursor])),
             (".github/hooks/hooks.json", Hooks, Some(vec![Copilot])),
             (".kiro/hooks/fmt.kiro.hook", Hooks, Some(vec![Kiro])),
+            (".kiro/agents/rev.json", Agent, Some(vec![Kiro])),
             (
                 "plugin/hooks/hooks.json",
                 Hooks,

@@ -1,0 +1,9 @@
+{
+  "name": "reviewer",
+  "description": "Reviews changed code for correctness and style. Use after a change, or when the user asks for a review of a diff or a pull request.",
+  "prompt": "Review the diff. Report problems with file and line.",
+  "tools": ["read", "shell"],
+  "permissions": {
+    "rules": [{ "capability": "shell", "match": ["git diff *"], "effect": "allow" }]
+  }
+}

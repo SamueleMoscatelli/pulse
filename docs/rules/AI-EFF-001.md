@@ -7,6 +7,7 @@ Every token in an AI asset costs context window, money and latency each time the
 
 ## What triggers it
 - An asset's estimated tokens exceed the `[budgets]` entry for its kind. Defaults: instructions 3000, scoped_instructions 1500, agent 2500, prompt 2000, skill 5000, tools 3000, custom 3000.
+- A Kiro JSON agent (`.kiro/agents/*.json`) counts its inline `prompt` text only.
 - For skills only the body counts; the frontmatter `description` is always-on context (AI-EFF-002).
 - Up to 125% of the budget the finding is Medium; beyond that it is High. The excess tokens are reported as token waste.
 - MCP configs, settings and hooks have no token budget.

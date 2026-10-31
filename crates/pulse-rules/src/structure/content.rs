@@ -54,6 +54,22 @@ impl Rule for InvalidContent {
             AssetKind::McpConfig => json(asset, &asset.mcp().errors, out),
             AssetKind::Settings | AssetKind::Hooks => json(asset, &asset.settings().errors, out),
             AssetKind::Tools => json(asset, &asset.tools().errors, out),
+            AssetKind::Agent if asset.is_json_agent() => {
+                // Inline `hooks` and `mcpServers`; the root's type is reported once.
+                let mut shape = asset.settings().errors.clone();
+                if let Some(agent) = asset.kiro_agent() {
+                    shape.extend_from_slice(&agent.errors);
+                }
+                if asset
+                    .json()
+                    .root
+                    .as_ref()
+                    .is_some_and(|r| r.as_object().is_some())
+                {
+                    shape.extend_from_slice(&asset.mcp().errors);
+                }
+                json(asset, &shape, out);
+            }
             kind if KindSet::MARKDOWN.contains(kind) => frontmatter(asset, out),
             _ => {}
         }

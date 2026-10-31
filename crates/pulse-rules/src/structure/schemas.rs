@@ -150,12 +150,42 @@ pub static KIRO_STEERING: Schema = Schema {
     ],
 };
 
+/// Kiro custom agents, JSON keys or Markdown frontmatter (ADR-053): the documented fields
+/// (https://kiro.dev/docs/custom-agents/configuration-reference/), CLI 2.x ones still in use
+/// (`allowedTools`, `toolsSettings`, `toolAliases`, `useLegacyMcpJson`, `keyboardShortcut`)
+/// and `excludedTools` (https://kiro.dev/docs/tools/). `name` defaults to the file name.
+pub static KIRO_AGENT: Schema = Schema {
+    label: "Kiro agent",
+    required: Required::None,
+    known: &[
+        "name",
+        "description",
+        "prompt",
+        "model",
+        "tools",
+        "allowedTools",
+        "excludedTools",
+        "toolAliases",
+        "toolsSettings",
+        "permissions",
+        "resources",
+        "hooks",
+        "mcpServers",
+        "includeMcpJson",
+        "useLegacyMcpJson",
+        "welcomeMessage",
+        "keyboardShortcut",
+        "$schema",
+    ],
+};
+
 /// The schema of `asset`, from its kind and path. `None` for flavors without a known
 /// schema (`.prompty`, `.claude/rules`, Windsurf, Cline, custom kinds).
 pub fn schema_for(asset: &Asset) -> Option<&'static Schema> {
     let path = asset.rel_path.as_str();
     match asset.kind {
         AssetKind::Skill => Some(&CLAUDE_SKILL),
+        AssetKind::Agent if asset.is_kiro_agent() => Some(&KIRO_AGENT),
         AssetKind::Agent if path.ends_with(".agent.md") || path.ends_with(".chatmode.md") => {
             Some(&COPILOT_AGENT)
         }
@@ -196,6 +226,8 @@ mod tests {
             Some("Claude skill")
         );
         assert_eq!(label(".claude/agents/a.md", Agent), Some("Claude agent"));
+        assert_eq!(label(".kiro/agents/a.md", Agent), Some("Kiro agent"));
+        assert_eq!(label(".kiro/agents/a.json", Agent), Some("Kiro agent"));
         assert_eq!(
             label(".github/agents/a.agent.md", Agent),
             Some("Copilot agent")
@@ -240,6 +272,7 @@ mod tests {
             &COPILOT_PROMPT,
             &COPILOT_AGENT,
             &KIRO_STEERING,
+            &KIRO_AGENT,
         ] {
             if let Required::All(keys) | Required::AnyOf(keys) = s.required {
                 assert!(keys.iter().all(|k| s.is_known(k)), "{}", s.label);

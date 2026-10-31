@@ -73,7 +73,7 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
         .map(|f| {
             let asset = read(f, max_bytes, calibration);
             // Parsed here, in parallel: the serial import graph below needs every view.
-            if KindSet::MARKDOWN.contains(asset.kind) {
+            if KindSet::MARKDOWN.contains(asset.kind) && !asset.is_json_agent() {
                 asset.markdown();
             }
             asset
@@ -99,7 +99,7 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
             for rule in rules.asset_rules() {
                 let meta = rule.meta();
                 // A skipped asset has no content: only AI-STR-002 reports it.
-                if meta.kinds.contains(asset.kind)
+                if rule.applies_to(asset)
                     && (asset.skipped.is_none() || meta.id == structure::content::META.id)
                 {
                     rule.check(asset, &ctx, &mut out);

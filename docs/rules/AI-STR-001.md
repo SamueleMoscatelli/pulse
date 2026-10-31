@@ -1,6 +1,6 @@
 # AI-STR-001 — Invalid or missing frontmatter
 
-**Severity:** High (unknown keys: Low) · **Category:** Structure · **Applies to:** skills, agents, prompts, scoped instructions (including Kiro steering) · **Inline-suppressible:** yes
+**Severity:** High (unknown keys: Low) · **Category:** Structure · **Applies to:** skills, agents (Kiro JSON agents included), prompts, scoped instructions (including Kiro steering) · **Inline-suppressible:** yes
 
 ## Why it matters
 Agents read an asset's frontmatter to decide whether and when to load it. A skill without a `description` is never picked, a Cursor rule without `globs`/`alwaysApply`/`description` never applies, and a misspelled key is silently ignored, so the asset quietly does nothing.
@@ -12,6 +12,8 @@ Agents read an asset's frontmatter to decide whether and when to load it. A skil
   - Cursor rule (`.mdc`): at least one of `description`, `globs`, `alwaysApply`.
   - Copilot instructions (`.instructions.md`): `applyTo`.
   - Kiro steering (`.kiro/steering/`): `inclusion` must be `always`, `fileMatch`, `manual` or `auto` (with a "did you mean" hint); `fileMatch` needs `fileMatchPattern` (a glob or a list of globs); `auto` needs `name` and `description`. Known keys: `inclusion`, `fileMatchPattern`, `name`, `description`, `title`.
+- Kiro agents (`.kiro/agents/`): no required key (`name` defaults to the file name); Markdown frontmatter and JSON top-level keys are checked against the known ones (`name`, `description`, `prompt`, `model`, `tools`, `allowedTools`, `excludedTools`, `toolAliases`, `toolsSettings`, `permissions`, `resources`, `hooks`, `mcpServers`, `includeMcpJson`, `useLegacyMcpJson`, `welcomeMessage`, `keyboardShortcut`, `$schema`).
+- A Kiro JSON agent with CLI 2.x `allowedTools` or `toolsSettings` and no `permissions` (Medium): Kiro CLI V3 skips the profile until `/upgrade-agent` converts it to `permissions.rules`.
 - Kiro steering whose frontmatter is not on the first line (a comment or blank line above the `---` block): Kiro ignores it and always includes the file.
 - A required key with a null value counts as missing.
 - An unknown key (Low), with a "did you mean" hint when a known key is within 2 edits.

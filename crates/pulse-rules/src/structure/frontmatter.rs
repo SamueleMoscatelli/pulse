@@ -6,7 +6,7 @@ use pulse_core::{
     Asset, AssetKind, Category, Finding, KindSet, Rule, RuleCtx, RuleMeta, Severity, Span,
 };
 
-use crate::structure::schemas::{KIRO_STEERING, Required, Schema, schema_for};
+use crate::structure::schemas::{KIRO_AGENT, KIRO_STEERING, Required, Schema, schema_for};
 use crate::util::truncate;
 
 /// Chars of a key or name quoted in a message.
@@ -51,7 +51,15 @@ impl Rule for InvalidFrontmatter {
         &META_001
     }
 
+    fn json_agents(&self) -> bool {
+        true
+    }
+
     fn check(&self, asset: &Asset, _ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
+        if asset.is_json_agent() {
+            json_agent(asset, out);
+            return;
+        }
         let Some(fm) = asset.markdown().frontmatter.as_ref() else {
             if opens_frontmatter(&asset.source) {
                 out.push(Finding::new(
@@ -129,6 +137,43 @@ impl Rule for InvalidFrontmatter {
             f.severity = Severity::Low;
             out.push(f);
         }
+    }
+}
+
+/// Kiro JSON agents (ADR-053): CLI 2.x `allowedTools`/`toolsSettings` with no `permissions`
+/// (Kiro CLI V3 skips the profile until `/upgrade-agent` converts it), and unknown keys.
+fn json_agent(asset: &Asset, out: &mut Vec<Finding>) {
+    let Some(agent) = asset.kiro_agent() else {
+        return;
+    };
+    if !agent.has_permissions()
+        && let Some((key, span)) = agent
+            .keys
+            .iter()
+            .find(|(k, _)| k == "allowedTools" || k == "toolsSettings")
+    {
+        let mut f = Finding::new(
+            &META_001,
+            asset,
+            *span,
+            format!("Legacy `{key}` with no `permissions`: Kiro CLI V3 skips this agent"),
+        )
+        .with_fix(
+            "Run `/upgrade-agent` in Kiro CLI, or replace `allowedTools` with `permissions.rules`.",
+        );
+        f.severity = Severity::Medium;
+        out.push(f);
+    }
+    for (key, span) in agent.keys.iter().filter(|(k, _)| !KIRO_AGENT.is_known(k)) {
+        let quoted = truncate(key, QUOTED);
+        let message = match suggestion(&KIRO_AGENT, key) {
+            Some(hint) => format!("Unknown agent key \"{quoted}\" (did you mean \"{hint}\"?)"),
+            None => format!("Unknown agent key \"{quoted}\" for {}", KIRO_AGENT.label),
+        };
+        let mut f = Finding::new(&META_001, asset, *span, message)
+            .with_fix("Fix the misspelled key, or remove a key Kiro does not read.");
+        f.severity = Severity::Low;
+        out.push(f);
     }
 }
 
