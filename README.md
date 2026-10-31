@@ -18,7 +18,8 @@ Pulse answers three questions:
 
 It understands Claude Code (`CLAUDE.md`, agents, commands, rules, skills, settings),
 GitHub Copilot (`copilot-instructions.md`, `*.instructions.md`, `*.prompt.md`, agents, chat
-modes), `AGENTS.md`, `GEMINI.md`, Cursor, Windsurf and Cline rules, hook configs, MCP configs
+modes), Kiro (`.kiro/steering/` with its inclusion modes, `.kiro/skills/`), `AGENTS.md`,
+`GEMINI.md`, Cursor, Windsurf and Cline rules, hook configs, MCP configs
 (`.mcp.json`, `.vscode/mcp.json`, `claude_desktop_config.json`, …) and tool definitions;
 other paths can be declared in `pulse.toml`.
 
@@ -49,8 +50,8 @@ pulse rules                # every rule with its effective severity
 
 Reports: `--format terminal|json|sarif|markdown|github`. Accept today's findings with
 `pulse baseline`, then gate only on new ones with `pulse ci --new-only`; `--changed-since <ref>`
-limits the scan to changed files, and `--assistant copilot` (or `claude-code`, `cursor`, …) to
-the files one assistant loads. Exit codes: `0` passed, `1` gate failed, `2` usage, config
+limits the scan to changed files, and `--assistant copilot` (or `claude-code`, `cursor`, `kiro`,
+…) to the files one assistant loads. Exit codes: `0` passed, `1` gate failed, `2` usage, config
 or I/O error.
 
 ### Sample output
@@ -72,6 +73,7 @@ $ pulse scan
    Cline           █░░░░░░░░░░░░░░░░░░░       32              0%          0.4%
    Gemini CLI      █░░░░░░░░░░░░░░░░░░░       32              0%          0.4%
    Codex           █░░░░░░░░░░░░░░░░░░░       32              0%          0.4%
+   Kiro            █░░░░░░░░░░░░░░░░░░░       32              0%          0.4%
    Always loaded   agent.tools.json 15 · tools/fetch.json 14 · 3 agent descriptions 7 · CLAUDE.md 6 · … (Copilot)
    On demand       90 tokens in skills, agents, prompts and scoped rules, loaded only when used
    Budget          8k always-on tokens per assistant (`budgets.always_on` in pulse.toml). Bars show the share of the 200k context window; they turn yellow above 75% of the budget and red above it.

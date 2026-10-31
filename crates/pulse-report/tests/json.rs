@@ -73,7 +73,7 @@ fn json_context_load_by_assistant() {
     let mixed: serde_json::Value = serde_json::from_str(&render("mixed", Severity::Info)).unwrap();
     let m = &mixed["metrics"];
     let list = m["context_load_by_assistant"].as_array().unwrap();
-    assert_eq!(list.len(), 7, "{list:?}");
+    assert_eq!(list.len(), 8, "{list:?}");
     // Largest first; the top-level numbers are the largest assistant's.
     assert_eq!(list[0]["assistant"], "copilot");
     assert_eq!(list[0]["always_on_tokens"], m["always_on_tokens"]);

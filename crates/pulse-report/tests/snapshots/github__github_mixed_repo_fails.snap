@@ -18,6 +18,7 @@ Pulse Quality Gate: FAILED
     Cline: 32 tokens · 0% of 200k window · 0.4% of 8k budget
     Gemini CLI: 32 tokens · 0% of 200k window · 0.4% of 8k budget
     Codex: 32 tokens · 0% of 200k window · 0.4% of 8k budget
+    Kiro: 32 tokens · 0% of 200k window · 0.4% of 8k budget
     Always loaded: agent.tools.json 15 · tools/fetch.json 14 · 3 agent descriptions 7 · CLAUDE.md 6 · … (Copilot)
     On demand: 90 tokens in skills, agents, prompts and scoped rules, loaded only when used
     Budget: 8k always-on tokens per assistant (`budgets.always_on` in pulse.toml)

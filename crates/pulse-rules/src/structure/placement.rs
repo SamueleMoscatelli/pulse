@@ -46,7 +46,7 @@ const PLUGIN_MANIFESTS: &[&str] = &[
 ];
 
 /// Platform folders that hold a `skills/` folder.
-const SKILL_PLATFORMS: &[&str] = &[".agents", ".claude", ".github"];
+const SKILL_PLATFORMS: &[&str] = &[".agents", ".claude", ".github", ".kiro"];
 
 /// How a library-row asset is named in a message, and where it belongs.
 struct Group {

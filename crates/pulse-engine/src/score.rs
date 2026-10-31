@@ -490,6 +490,7 @@ mod tests {
                 (Cursor, 305),
                 (Windsurf, 305),
                 (Codex, 305),
+                (Kiro, 305),
                 (ClaudeCode, 155)
             ]
         );

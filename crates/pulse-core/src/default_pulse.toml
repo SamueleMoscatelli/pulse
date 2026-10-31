@@ -27,7 +27,8 @@ prompt = 2000
 skill = 5000
 tools = 3000
 custom = 3000
-always_on = 8000
+always_on = 8000             # per assistant: Copilot, Claude Code, Cursor, Windsurf, Cline,
+                             # Gemini CLI, Codex, Kiro (each loads its own files)
 description = 150
 mcp_servers = 8              # count
 tools_count = 40             # count

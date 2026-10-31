@@ -1,0 +1,1 @@
+{"name": "Format", "version": "1", "when": {"type": "fileEdited", "patterns": ["*.rs"]}, "then": {"type": "askAgent", "prompt": "Format the edited file."}}

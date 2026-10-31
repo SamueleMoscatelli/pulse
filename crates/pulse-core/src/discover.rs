@@ -155,6 +155,7 @@ const TABLE: &[(&[&str], AssetKind, Refine)] = &[
             "**/.github/instructions/**/*.instructions.md",
             "**/.windsurf/rules/**/*.md",
             "**/.clinerules/**/*.md",
+            "**/.kiro/steering/**/*.md",
         ],
         AssetKind::ScopedInstructions,
         Refine::Scoped,

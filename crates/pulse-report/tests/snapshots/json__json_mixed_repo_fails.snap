@@ -73,6 +73,11 @@ expression: "render(\"mixed\", Severity::Info)"
         "assistant": "codex",
         "always_on_tokens": 32,
         "context_load": 0.00016
+      },
+      {
+        "assistant": "kiro",
+        "always_on_tokens": 32,
+        "context_load": 0.00016
       }
     ],
     "context_debt": 0.0,
