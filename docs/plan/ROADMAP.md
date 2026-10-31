@@ -68,7 +68,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [x] P8.8 Evaluation report and release candidate
 
 ## Phase 9 — Kiro support (v1.2.0)
-- [ ] P9.1 Kiro corpus baseline
+- [x] P9.1 Kiro corpus baseline
 - [ ] P9.2 Kiro as an assistant: discovery and load modes
 - [ ] P9.3 Steering frontmatter and file references
 - [ ] P9.4 Kiro MCP config

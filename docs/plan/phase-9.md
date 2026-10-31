@@ -16,7 +16,7 @@ what is documented.
 
 Corpus, cloned next to this repo:
 - `affaan-m/ECC` (`../ECC`, MIT) pinned at `b38be6a` (2026-10-29): a live `.kiro/` with 22 steering
-  files (always/fileMatch/manual), 43 skills, 33 JSON + 33 Markdown agents, 14 `*.kiro.hook` hooks,
+  files (always/fileMatch/manual), 43 skills, 33 JSON + 33 Markdown agents, 13 `*.kiro.hook` hooks,
   `settings/mcp.json.example`.
 - `mehtadman87/kiro-config` (`../kiro-config`, MIT) pinned at `89f77b9` (2026-04-03): a power
   (`POWER.md`) with 31 steering files, 24 `*.kiro.hook` hooks and specs at the root, not under
