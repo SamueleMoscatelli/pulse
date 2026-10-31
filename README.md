@@ -57,7 +57,7 @@ or I/O error.
 
 ```text
 $ pulse scan
- Pulse 1.0.0 · 33 assets · 204 tokens · 10 ms
+ Pulse 1.1.0-rc.1 · 33 assets · 204 tokens · 10 ms
 
  QUALITY GATE   FAILED
    ✖ severity ≥ high        1 issue    (allowed 0)
