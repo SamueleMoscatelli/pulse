@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "hooks": {
+    "SessionStart": [
+      { "type": "command", "bash": ".github/hooks/audit/session-start.sh", "timeoutSec": 5 }
+    ],
+    "postToolUse": [{ "type": "command", "powershell": "./log.ps1", "timeoutSec": 0 }]
+  }
+}

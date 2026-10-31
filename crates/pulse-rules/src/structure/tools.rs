@@ -7,7 +7,9 @@ use pulse_core::{
     Asset, AssetKind, Category, Finding, KindSet, ProjectRule, RuleCtx, RuleMeta, Severity, Span,
 };
 
-use crate::lexicon::platform::{CLAUDE_IMPLICIT_SERVERS, CLAUDE_TOOLS, COPILOT_TOOLS};
+use crate::lexicon::platform::{
+    CLAUDE_IMPLICIT_SERVERS, CLAUDE_TOOLS, COPILOT_TOOL_ALIASES, COPILOT_TOOLS,
+};
 use crate::security::mcp::value_span;
 use crate::util::{distance_within, suggest, truncate};
 
@@ -37,7 +39,12 @@ enum Platform {
 
 fn platform(asset: &Asset) -> Option<Platform> {
     let rel = asset.rel_path.as_str();
-    if rel.starts_with(".github/") || rel.contains("/.github/") {
+    // `*.agent.md` / `*.prompt.md` are Copilot formats wherever they live (P8.7).
+    if rel.starts_with(".github/")
+        || rel.contains("/.github/")
+        || rel.ends_with(".agent.md")
+        || rel.ends_with(".prompt.md")
+    {
         Some(Platform::Copilot)
     } else if rel.ends_with(".prompty") {
         None
@@ -149,8 +156,10 @@ fn claude_error(entry: &str, servers: Option<&BTreeSet<String>>) -> Option<Strin
 fn copilot_error(entry: &str, servers: Option<&BTreeSet<String>>) -> Option<String> {
     let name = entry.trim();
     // Tool sets (`server/*`, `edit/editFiles`) and MCP servers by name are not checked.
+    let known = |list: &[&str]| list.iter().any(|t| t.eq_ignore_ascii_case(name));
     if name.contains(['/', '.', '*'])
-        || COPILOT_TOOLS.contains(&name)
+        || known(COPILOT_TOOLS)
+        || known(COPILOT_TOOL_ALIASES)
         || servers.is_some_and(|s| s.contains(name))
     {
         return None;

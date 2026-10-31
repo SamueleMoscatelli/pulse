@@ -140,7 +140,7 @@
 
 ### AI-STR-003 — Broken reference or import
 - **Sev** Medium · **Kinds** md · **Scope** project
-- **Detect** `@path` imports (CLAUDE.md), relative Markdown links, and paths in skill bodies (`scripts/x.py`, `references/y.md`) that do not exist relative to the asset (or to the root for `@/`). Skip URLs, anchors-only links and paths in code fences that look like examples (contain `<`, `your-`, `example`). Import cycles (≤ 5 hops) → High. `@` tokens without `/` or `.` are mentions, not imports (ADR-027).
+- **Detect** `@path` imports (CLAUDE.md), relative Markdown links, and paths in skill bodies (`scripts/x.py`, `references/y.md`) that do not exist relative to the asset (or to the root for `@/`). Skip URLs, anchors-only links and paths in code fences that look like examples (contain `<`, `your-`, `example`). Import cycles (≤ 5 hops) → High. `@` tokens without `/` or `.` are mentions, not imports (ADR-027). A skill path shown only as code (code span or block) is reported only when its first directory exists in the skill or at the root (a likely typo) or a command runs it (`python`, `node`, `bash`, `uv run`, … in `lexicon::shell::SCRIPT_RUNNERS`); otherwise it is a file the skill produces or asks for (ADR-046).
 
 ### AI-STR-004 — Name / description constraint violated
 - **Sev** Medium · **Kinds** Skill, Agent, Prompt
@@ -149,11 +149,11 @@
 ### AI-STR-005 — Unknown tool in allow-list
 - **Sev** Medium · **Kinds** Agent, Prompt, Settings
 - **Detect** `tools`/`allowed-tools`/permission entries naming a tool that is neither a known built-in (list in `lexicon::KNOWN_TOOLS`, per platform) nor `mcp__<server>__<tool>` with `<server>` defined in a discovered McpConfig. Levenshtein suggestion in the message.
-- **Scope** Project rule. Claude Code (settings, `.claude/agents`, `.claude/commands`): closed built-in list (`lexicon::platform::CLAUDE_TOOLS`); Copilot (`.github/…`): only one-edit typos of `COPILOT_TOOLS`. **FP guards** `mcp__` entries are not checked when the project has no McpConfig, nor for implicit servers (`ide`, `claude_ai_*`, `plugin_*`) or wildcards (ADR-026).
+- **Scope** Project rule. Claude Code (settings, `.claude/agents`, `.claude/commands`): closed built-in list (`lexicon::platform::CLAUDE_TOOLS`); Copilot (`.github/…`, and `*.agent.md`/`*.prompt.md` anywhere): only one-edit typos of `COPILOT_TOOLS`, compared case-insensitively, with the Copilot aliases (`COPILOT_TOOL_ALIASES`: `Read`, `shell`, `Bash`, `Task`, …) accepted (ADR-046). **FP guards** `mcp__` entries are not checked when the project has no McpConfig, nor for implicit servers (`ide`, `claude_ai_*`, `plugin_*`) or wildcards (ADR-026).
 
 ### AI-STR-006 — Invalid hook definition
 - **Sev** High · **Kinds** Settings, Hooks
-- **Detect** Unknown event name (vs `lexicon::platform::{CLAUDE,CURSOR}_HOOK_EVENTS`, Cursor for `.cursor/hooks.json`), missing `command`/`prompt` on a command/prompt hook, `type` not in the platform's list (Claude: `command`, `prompt`, `http`, `mcp_tool`, `agent`; Cursor: `command`, `prompt`), matcher that is not a valid regex (`*`, `""` and plain `A|B` lists are not regexes; JS look-around/backreferences are skipped), `timeout` ≤ 0 or > 600 s (Medium), a referenced script path (`./…`, `$CLAUDE_PROJECT_DIR/…`, `${CLAUDE_PLUGIN_ROOT}/…`, or relative with a script extension) that does not exist (Medium, ADR-026).
+- **Detect** Unknown event name (vs `lexicon::platform::{CLAUDE,CURSOR,COPILOT}_HOOK_EVENTS`, Cursor for `.cursor/hooks.json`, Copilot for `.github/hooks/` or hooks using the Copilot keys `bash`/`powershell`/`timeoutSec`; ADR-046), missing `command`/`prompt` on a command/prompt hook, `type` not in the platform's list (Claude: `command`, `prompt`, `http`, `mcp_tool`, `agent`; Cursor: `command`, `prompt`; Copilot: `command`, whose command is `bash`, else `powershell`), matcher that is not a valid regex (`*`, `""` and plain `A|B` lists are not regexes; JS look-around/backreferences are skipped), `timeout` (Copilot `timeoutSec`) ≤ 0 or > 600 s (Medium), a referenced script path (`./…`, `$CLAUDE_PROJECT_DIR/…`, `${CLAUDE_PLUGIN_ROOT}/…`, or relative with a script extension) that does not exist (Medium, ADR-026).
 
 ### AI-STR-007 — Duplicate asset name
 - **Sev** High · **Kinds** Skill, Agent, Prompt · **Scope** project
@@ -181,7 +181,7 @@ Every EFF finding sets `token_waste`, which feeds context debt (`04-scoring-gate
 
 ### AI-EFF-003 — Duplicated content
 - **Sev** Medium · **Kinds** md · **Scope** project
-- **Detect** Paragraph-level near-duplicates within and across assets: 5-word shingles (xxh3 over normalized words) → 32-bin one-permutation MinHash per paragraph (≥ 25 words); LSH over 8 single-bin bands finds candidates, and ≥ 16 agreeing bins (estimated Jaccard ≥ 0.5) means a duplicate (ADR-029). Exact duplicate lines (≥ 8 words, outside code and reported paragraphs) across always-on assets are also reported. Reported on the later occurrence in path order.
+- **Detect** Paragraph-level near-duplicates within and across assets: 5-word shingles (xxh3 over normalized words) → 32-bin one-permutation MinHash per paragraph (≥ 25 words); LSH over 8 single-bin bands finds candidates, and ≥ 16 agreeing bins (estimated Jaccard ≥ 0.5) means a duplicate (ADR-029). Exact duplicate lines (≥ 8 words, outside code and reported paragraphs) across always-on assets are also reported, at **Low** (P8.7). Reported on the later occurrence in path order.
 - **FP guards** Two assets are compared only when one's context root (folder above a platform dir or `skills/`, else the asset's folder) contains the other's.
 - **token_waste** Tokens of the duplicate occurrence(s).
 
@@ -220,7 +220,7 @@ Every EFF finding sets `token_waste`, which feeds context debt (`04-scoring-gate
 
 ### AI-COG-002 — Vague directive
 - **Sev** Low · **Kinds** md
-- **Detect** Directive sentences containing `lexicon::VAGUE` terms ("appropriate(ly)", "as needed", "properly", "best practices", "clean code", "etc.", "and so on", "some", "reasonable", "if necessary", "good", "nice") without a concrete anchor (number, code span, path or example) in the same sentence. Aggregated per asset like AI-EFF-007.
+- **Detect** Directive sentences containing `lexicon::VAGUE` terms ("appropriate(ly)", "as needed", "properly", "best practices", "clean code", "etc.", "and so on", "some", "reasonable", "if necessary", "good", "nice") without a concrete anchor (number, code span, path or example) in the same sentence, nor a list or table right after a sentence ending in `:` (P8.7). Aggregated per asset like AI-EFF-007.
 - **Directive** (AI-COG-002, AI-COG-004) A sentence with an AI-COG-001 marker anywhere, or a verb from `lexicon::IMPERATIVES` / `lexicon::style::DIRECTIVE_VERBS` opening a clause (`Write …`, `IMPORTANT: run …`) (ADR-031).
 
 ### AI-COG-003 — Negative-only constraint
@@ -231,7 +231,7 @@ Every EFF finding sets `token_waste`, which feeds context debt (`04-scoring-gate
 
 ### AI-COG-004 — Emphasis inflation
 - **Sev** Low · **Kinds** md
-- **Detect** Per asset: the share of directive sentences containing emphasis markers (`IMPORTANT`, `CRITICAL`, `MUST`, `NEVER` in caps, ≥ 2 `!`, a fully bold sentence, ALL-CAPS words ≥ 4 letters excluding acronyms in `lexicon::ACRONYMS`). Report when the share is > 25% and there are ≥ 4 emphasized directives. When everything is emphasized, nothing is.
+- **Detect** Per asset: the share of directive sentences containing emphasis markers (`IMPORTANT`, `CRITICAL`, `MUST`, `NEVER` in caps, ≥ 2 `!`, a fully bold sentence, ALL-CAPS words ≥ 4 letters excluding acronyms in `lexicon::ACRONYMS`). Report when the share is > 25% and there are ≥ 4 emphasized directives. When everything is emphasized, nothing is. Bold used as structure is not emphasis (P8.7): table cells, a bold label ending in `:` (`**Output (…):**`), and ALL-CAPS words in a `**Term**:` lead-in (the `EMPHASIS` words still count).
 
 ### AI-COG-005 — Cross-file contradiction
 - **Sev** Medium · **Scope** project

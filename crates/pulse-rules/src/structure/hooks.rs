@@ -1,4 +1,5 @@
-//! AI-STR-006: invalid hook definition (Claude settings / plugin hooks, Cursor hooks).
+//! AI-STR-006: invalid hook definition (Claude settings / plugin hooks, Cursor and Copilot
+//! hooks).
 
 use std::path::Path;
 
@@ -6,7 +7,8 @@ use pulse_core::parse::{HookCmd, HookEntry};
 use pulse_core::{Asset, Category, Finding, KindSet, Rule, RuleCtx, RuleMeta, Severity, Span};
 
 use crate::lexicon::platform::{
-    CLAUDE_HOOK_EVENTS, CLAUDE_HOOK_TYPES, CURSOR_HOOK_EVENTS, CURSOR_HOOK_TYPES,
+    CLAUDE_HOOK_EVENTS, CLAUDE_HOOK_TYPES, COPILOT_HOOK_EVENTS, COPILOT_HOOK_TYPES,
+    CURSOR_HOOK_EVENTS, CURSOR_HOOK_TYPES,
 };
 use crate::security::shell::scan;
 use crate::util::{suggest, truncate};
@@ -45,7 +47,9 @@ struct Dialect<'a> {
     plugin: Option<&'a str>,
 }
 
-fn dialect(rel: &str) -> Dialect<'_> {
+/// The dialect of the hooks at `rel`; `copilot` when they use the Copilot keys (`bash`,
+/// `timeoutSec`).
+fn dialect(rel: &str, copilot: bool) -> Dialect<'_> {
     let prefix = |dir: &str| {
         let at = if rel.starts_with(dir) {
             Some(0)
@@ -59,6 +63,17 @@ fn dialect(rel: &str) -> Dialect<'_> {
             events: CURSOR_HOOK_EVENTS,
             types: CURSOR_HOOK_TYPES,
             project: Some(project),
+            plugin: None,
+        };
+    }
+    // Copilot: scripts resolve from the repository root once installed in `.github/hooks/`;
+    // a library copy elsewhere (`hooks/<name>/hooks.json`) is not checked for them.
+    let installed = prefix(".github/hooks/");
+    if copilot || installed.is_some() {
+        return Dialect {
+            events: COPILOT_HOOK_EVENTS,
+            types: COPILOT_HOOK_TYPES,
+            project: installed,
             plugin: None,
         };
     }
@@ -84,7 +99,7 @@ impl Rule for InvalidHook {
     }
 
     fn check(&self, asset: &Asset, ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
-        let d = dialect(&asset.rel_path);
+        let d = dialect(&asset.rel_path, asset.settings().copilot_hooks);
         let mut push = |span: Span, severity: Severity, message: String| {
             let mut f = Finding::new(&META, asset, span, message);
             f.severity = severity;
@@ -266,18 +281,22 @@ mod tests {
 
     #[test]
     fn dialect_by_path() {
-        let d = dialect("app/.cursor/hooks.json");
+        let d = dialect("app/.cursor/hooks.json", false);
         assert_eq!(d.events, CURSOR_HOOK_EVENTS);
         assert_eq!(d.project, Some("app/"));
-        let d = dialect(".claude/settings.json");
+        let d = dialect(".claude/settings.json", false);
         assert_eq!((d.project, d.plugin), (Some(""), None));
-        let d = dialect("plugins/fmt/hooks/hooks.json");
+        let d = dialect("plugins/fmt/hooks/hooks.json", false);
         assert_eq!((d.project, d.plugin), (None, Some("plugins/fmt/")));
+        let d = dialect(".github/hooks/audit.json", false);
+        assert_eq!((d.events, d.project), (COPILOT_HOOK_EVENTS, Some("")));
+        let d = dialect("hooks/audit/hooks.json", true);
+        assert_eq!((d.events, d.project), (COPILOT_HOOK_EVENTS, None));
     }
 
     #[test]
     fn resolve_only_checkable_paths() {
-        let d = dialect("app/.claude/settings.json");
+        let d = dialect("app/.claude/settings.json", false);
         let r = |w| resolve(w, &d);
         assert_eq!(
             r("$CLAUDE_PROJECT_DIR/.claude/hooks/fmt").as_deref(),

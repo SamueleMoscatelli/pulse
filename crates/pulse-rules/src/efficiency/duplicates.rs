@@ -290,6 +290,8 @@ fn line_finding(
         )
     };
     let mut f = Finding::new(&META, asset, group[0].2, msg);
+    // Repeated lines cost less than repeated paragraphs (P8.7).
+    f.severity = Severity::Low;
     f.token_waste = waste;
     f
 }

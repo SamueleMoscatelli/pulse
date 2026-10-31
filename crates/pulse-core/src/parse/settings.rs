@@ -1,5 +1,6 @@
 //! Settings / hooks view: Claude `settings.json` (`permissions`, `hooks`, `env`, flags) and
-//! standalone hook files (Claude plugin `hooks/hooks.json`, Cursor `.cursor/hooks.json`).
+//! standalone hook files (Claude plugin `hooks/hooks.json`, Cursor `.cursor/hooks.json`,
+//! Copilot `.github/hooks/*.json`).
 
 use crate::model::Span;
 use crate::parse::json::{JsonDoc, JsonNode, Shape, ViewError};
@@ -15,6 +16,8 @@ pub struct SettingsView {
     /// `enableAllProjectMcpServers`.
     pub enable_all_project_mcp: Option<(bool, Span)>,
     pub hooks: Vec<HookEntry>,
+    /// Whether a hook uses the Copilot keys (`bash`, `powershell`, `timeoutSec`).
+    pub copilot_hooks: bool,
     /// `(key, value, value span)`.
     pub env: Vec<(String, String, Span)>,
     pub errors: Vec<ViewError>,
@@ -38,14 +41,15 @@ pub struct HookCmd {
     pub kind: String,
     /// The `type` value, when present.
     pub kind_span: Option<Span>,
-    /// The `command`, or the `prompt` text of a prompt hook; empty for other types and when
+    /// The `command` (Copilot: `bash`, else `powershell`), or the `prompt` text of a prompt
+    /// hook; empty for other types and when
     /// missing (AI-STR-006 reports a missing one).
     pub command: String,
     /// The command text, or the whole hook object when there is none.
     pub command_span: Span,
-    /// Seconds.
+    /// Seconds (`timeout`, Copilot `timeoutSec`).
     pub timeout: Option<f64>,
-    /// The `timeout` value, when it is a number.
+    /// The timeout value, when it is a number.
     pub timeout_span: Option<Span>,
 }
 
@@ -76,7 +80,7 @@ impl SettingsView {
                         .map(|b| (b, n.span));
                 }
                 "env" => v.env = sh.string_map(n, "env"),
-                "hooks" => hooks(&mut sh, n, &mut v.hooks),
+                "hooks" => v.copilot_hooks = hooks(&mut sh, n, &mut v.hooks),
                 _ => {}
             }
         }
@@ -85,7 +89,9 @@ impl SettingsView {
     }
 }
 
-fn hooks(sh: &mut Shape, node: &JsonNode, out: &mut Vec<HookEntry>) {
+/// Reads the `hooks` object into `out`; whether a hook uses the Copilot keys.
+fn hooks(sh: &mut Shape, node: &JsonNode, out: &mut Vec<HookEntry>) -> bool {
+    let mut copilot = false;
     for ev in sh.object(node, "hooks") {
         for group in sh.array(&ev.value, &ev.key) {
             if group.as_object().is_none() {
@@ -100,13 +106,14 @@ fn hooks(sh: &mut Shape, node: &JsonNode, out: &mut Vec<HookEntry>) {
                     for h in sh.array(list, "hooks") {
                         if h.as_object().is_none() {
                             sh.object(h, "hooks[]");
-                        } else if let Some(c) = cmd(sh, h) {
+                        } else if let Some(c) = cmd(sh, h, &mut copilot) {
                             cmds.push(c);
                         }
                     }
                 }
-                // Cursor: `{ command }` directly under the event.
-                None => cmds.extend(cmd(sh, group)),
+                // Cursor `{ command }`, Copilot `{ type, bash, powershell, timeoutSec }`
+                // directly under the event.
+                None => cmds.extend(cmd(sh, group, &mut copilot)),
             }
             out.push(HookEntry {
                 event: ev.key.clone(),
@@ -117,13 +124,17 @@ fn hooks(sh: &mut Shape, node: &JsonNode, out: &mut Vec<HookEntry>) {
             });
         }
     }
+    copilot
 }
 
-fn cmd(sh: &mut Shape, node: &JsonNode) -> Option<HookCmd> {
+fn cmd(sh: &mut Shape, node: &JsonNode, copilot: &mut bool) -> Option<HookCmd> {
     let kind = node.get("type").and_then(|n| sh.string(n, "type"));
     let kind_span = kind.as_ref().map(|k| k.1);
     let kind = kind.map_or_else(|| "command".to_owned(), |t| t.0);
-    let text = node.get("command").or_else(|| node.get("prompt"));
+    let shell = node.get("bash").or_else(|| node.get("powershell"));
+    let timeout_sec = node.get("timeoutSec");
+    *copilot |= shell.is_some() || timeout_sec.is_some();
+    let text = node.get("command").or(shell).or_else(|| node.get("prompt"));
     let (command, command_span) = match text {
         Some(t) => sh.string(t, "command")?,
         // No command text: other hook types (`http`, `agent`, …) carry none; a missing one
@@ -132,6 +143,7 @@ fn cmd(sh: &mut Shape, node: &JsonNode) -> Option<HookCmd> {
     };
     let timeout = node
         .get("timeout")
+        .or(timeout_sec)
         .and_then(|n| sh.number(n, "timeout").map(|t| (t, n.span)));
     Some(HookCmd {
         kind,
@@ -141,4 +153,24 @@ fn cmd(sh: &mut Shape, node: &JsonNode) -> Option<HookCmd> {
         timeout: timeout.map(|t| t.0),
         timeout_span: timeout.map(|t| t.1),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn copilot_hooks_use_bash_and_timeout_sec() {
+        let doc = JsonDoc::parse(
+            r#"{"version": 1, "hooks": {"sessionStart": [
+                {"type": "command", "bash": "./a.sh", "powershell": "./a.ps1", "timeoutSec": 5}
+            ]}}"#,
+        );
+        let v = SettingsView::build(&doc);
+        assert!(v.copilot_hooks);
+        let h = &v.hooks[0].hooks[0];
+        assert_eq!((h.command.as_str(), h.timeout), ("./a.sh", Some(5.0)));
+        let doc = JsonDoc::parse(r#"{"hooks": {"stop": [{"command": "x", "timeout": 5}]}}"#);
+        assert!(!SettingsView::build(&doc).copilot_hooks);
+    }
 }

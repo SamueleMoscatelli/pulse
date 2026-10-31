@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "bash": ".github/hooks/audit/session-start.sh",
+        "powershell": ".github/hooks/audit/session-start.ps1",
+        "cwd": ".",
+        "timeoutSec": 5
+      }
+    ],
+    "userPromptSubmitted": [
+      { "type": "command", "bash": ".github/hooks/audit/prompt.sh", "timeoutSec": 10 }
+    ],
+    "preToolUse": [{ "type": "command", "bash": "./guard.sh" }]
+  }
+}
