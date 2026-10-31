@@ -29,7 +29,6 @@ fn render(name: &str, quiet: bool, verbose: bool) -> String {
         quiet,
         verbose,
         min_severity: Severity::Info,
-        window: config.context.window,
     };
     let mut out = Vec::new();
     render_terminal(&mut out, &report, &opts).unwrap();
@@ -76,4 +75,14 @@ fn terminal_fix_hint_absent_with_verbose_quiet_or_nothing_hidden() {
         assert!(!out.contains(FIX_HINT), "{out}");
         assert!(!out.contains(FIX_FOOTER), "{out}");
     }
+}
+
+#[test]
+fn terminal_nothing_always_on() {
+    insta::assert_snapshot!(render("ondemand", false, false));
+}
+
+#[test]
+fn terminal_one_assistant() {
+    insta::assert_snapshot!(render("single", false, false));
 }

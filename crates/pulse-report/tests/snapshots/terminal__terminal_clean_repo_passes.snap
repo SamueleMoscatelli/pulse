@@ -8,11 +8,15 @@ expression: "render(\"clean\", false, false)"
    ✔ severity ≥ high        0 issues   (allowed 0)
    ✔ context debt           0%         (max 10%)
 
+ CONTEXT LOAD   69 tokens on every request · 0% of a 200k window
+   █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0%   (budget 8k)
+   Always loaded   CLAUDE.md 69 (Copilot, Claude Code)
+   On demand       38 tokens in skills, agents, prompts and scoped rules, loaded only when used
+
    Security      A   0 vulnerabilities
    Reliability   A   0 bugs
    Clarity       A   0 smells
-   Efficiency    A   context debt 0%
-   Context load      69 always-on tokens · 0% of 200k window
+   Efficiency    A   context debt 0% · share of tokens that is avoidable waste (duplicates, filler, over-budget excess)
 
    CRITICAL 0   HIGH 0   MEDIUM 0   LOW 0   INFO 0
 

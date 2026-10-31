@@ -38,6 +38,18 @@ expression: "render(\"clean\", Severity::Info)"
     "total_tokens": 107,
     "always_on_tokens": 69,
     "context_load": 0.000345,
+    "context_load_by_assistant": [
+      {
+        "assistant": "copilot",
+        "always_on_tokens": 69,
+        "context_load": 0.000345
+      },
+      {
+        "assistant": "claude_code",
+        "always_on_tokens": 69,
+        "context_load": 0.000345
+      }
+    ],
     "context_debt": 0.0,
     "issues": {
       "critical": 0,

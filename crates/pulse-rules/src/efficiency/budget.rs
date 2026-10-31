@@ -107,10 +107,23 @@ impl ProjectRule for AlwaysOnBudget {
             .filter(|&(t, ..)| t > 0)
             .collect();
         imported(assets, ctx, &mut top);
-        let total: u64 = top.iter().map(|c| u64::from(c.0)).sum();
+        // ADR-045: each assistant loads its own files; judge the one that loads the most.
+        let sets: Vec<_> = top
+            .iter()
+            .map(|c| pulse_core::loaded_by(&c.2.rel_path, c.2.kind))
+            .collect();
+        let (by_assistant, total) =
+            pulse_core::per_assistant(sets.iter().zip(&top).map(|(s, c)| (*s, u64::from(c.0))));
         if total <= budget {
             return;
         }
+        let largest = by_assistant.first().map(|&(a, _)| a);
+        let mut top: Vec<Contributor<'_>> = top
+            .into_iter()
+            .zip(sets)
+            .filter(|(_, s)| largest.is_none_or(|l| s.is_none_or(|s| s.contains(l))))
+            .map(|(c, _)| c)
+            .collect();
         // Largest first; ties by path, so the result is deterministic.
         top.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(b.1)));
         let Some(&(_, _, anchor, span)) = top.first() else {
@@ -123,11 +136,16 @@ impl ProjectRule for AlwaysOnBudget {
             .collect::<Vec<_>>()
             .join(", ");
         let more = if top.len() > TOP { ", …" } else { "" };
+        let whose = match largest {
+            // Named only when assistants differ; on a tie the first is arbitrary.
+            Some(a) if by_assistant.windows(2).any(|w| w[0].1 != w[1].1) => format!(" for {a}"),
+            _ => String::new(),
+        };
         let mut f = Finding::new(
             &META_ALWAYS,
             anchor,
             span,
-            format!("Always-on context {total} tokens > {budget}; top: {list}{more}"),
+            format!("Always-on context{whose} {total} tokens > {budget}; top: {list}{more}"),
         );
         f.token_waste = u32::try_from(total - budget).unwrap_or(u32::MAX);
         out.push(f);

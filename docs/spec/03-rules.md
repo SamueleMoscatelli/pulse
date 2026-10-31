@@ -176,7 +176,7 @@ Every EFF finding sets `token_waste`, which feeds context debt (`04-scoring-gate
 
 ### AI-EFF-002 — Always-on context over budget
 - **Sev** High · **Scope** project
-- **Detect** Σ Always tokens (root instructions + resolved `@imports` + alwaysApply rules + skill/agent descriptions + tool schemas) > `budgets.always_on` (default 8000). The finding points at the largest contributor and lists the top 5 contributors with their tokens.
+- **Detect** Σ Always tokens (root instructions + resolved `@imports` + alwaysApply rules + skill/agent descriptions + tool schemas) of the assistant that loads the most (ADR-045; an import counts for the assistants of the file that imports it) > `budgets.always_on` (default 8000). The finding points at that assistant's largest contributor and lists its top 5 contributors with their tokens; the message names the assistant (`Always-on context for Copilot …`) when their totals differ.
 - **token_waste** `total - budget`.
 
 ### AI-EFF-003 — Duplicated content

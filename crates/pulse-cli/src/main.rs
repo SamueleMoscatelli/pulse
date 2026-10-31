@@ -250,7 +250,6 @@ fn run_scan(global: &Global, args: &ScanArgs, ci: bool) -> anyhow::Result<ExitCo
         quiet: global.quiet,
         verbose: global.verbose,
         min_severity: args.min_severity,
-        window: config.context.window,
     };
     let write = |w: &mut dyn Write| -> io::Result<()> {
         match format {

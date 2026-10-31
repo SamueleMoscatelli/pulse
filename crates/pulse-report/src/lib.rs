@@ -1,5 +1,6 @@
 //! Pulse report renderers: terminal, JSON, SARIF, Markdown, GitHub.
 
+mod context;
 mod github;
 mod json;
 mod markdown;

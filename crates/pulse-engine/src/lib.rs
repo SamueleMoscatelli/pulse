@@ -16,7 +16,7 @@ use pulse_core::{AssetKind, ConfigError, DiscoverError, Finding, LoadMode};
 pub use baseline::{BASELINE_FILE, Baseline, BaselineError};
 pub use gate::{Condition, Gate, GateStatus, GateValue};
 pub use pipeline::{RuleStatus, rule_statuses, scan};
-pub use score::{Metrics, Ratings, category_of};
+pub use score::{ContextLoad, Contributor, Metrics, Ratings, Source, category_of};
 
 /// Error that aborts a scan (bad assets never do: they become findings).
 #[derive(Debug, thiserror::Error)]
@@ -88,6 +88,8 @@ pub struct Report {
     /// Metrics over new findings only, when new-code mode is on (`--new-only` or
     /// `gate.new_code_only`); ratings and gate are then computed from these.
     pub new_metrics: Option<Metrics>,
+    /// Always-on tokens per assistant, what they are, and what loads on demand.
+    pub context: ContextLoad,
     pub ratings: Ratings,
     pub gate: Gate,
     /// The baseline the findings were compared with.

@@ -604,9 +604,9 @@ fn eff002_sums_always_tokens_and_points_at_largest() {
     // 4000 + (601..=606) = 7621: the skill bodies and the prompt are not Always.
     assert!(run("AI-EFF-002", &assets).is_empty());
     assets.push(always(
-        ".cursor/rules/r.mdc",
+        ".claude/rules/r.md",
         AssetKind::ScopedInstructions,
-        format!("---\nalwaysApply: true\n---\n{}", tokens_text(400)),
+        tokens_text(400),
     ));
     let f = run("AI-EFF-002", &assets);
     assert_eq!(f.len(), 1, "{f:?}");
@@ -622,6 +622,38 @@ fn eff002_sums_always_tokens_and_points_at_largest() {
         f[0].message
     );
     assert!(f[0].message.ends_with(", …"), "{}", f[0].message);
+}
+
+#[test]
+fn eff002_judges_each_assistant_on_its_own_files() {
+    let claude = || {
+        always(
+            "CLAUDE.local.md",
+            AssetKind::Instructions,
+            tokens_text(5100),
+        )
+    };
+    let cursor = || always(".cursorrules", AssetKind::Instructions, tokens_text(5000));
+    // 10100 in all, but no assistant loads both files.
+    assert!(run("AI-EFF-002", &[claude(), cursor()]).is_empty());
+    // A tools file counts for every assistant.
+    let tools = always(
+        "agent.tools.json",
+        AssetKind::Tools,
+        format!(
+            r#"{{"tools":[{{"name":"t","description":"{}"}}]}}"#,
+            tokens_text(3500)
+        ),
+    );
+    let f = run("AI-EFF-002", &[claude(), cursor(), tools]);
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert!(
+        f[0].message
+            .starts_with("Always-on context for Claude Code "),
+        "{}",
+        f[0].message
+    );
+    assert!(!f[0].message.contains(".cursorrules"), "{}", f[0].message);
 }
 
 #[test]

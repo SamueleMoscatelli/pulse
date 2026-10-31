@@ -1,6 +1,7 @@
 //! Pulse core: model types, configuration, discovery, parsing and text utilities.
 
 pub mod asset;
+pub mod assistant;
 pub mod config;
 pub mod discover;
 pub mod model;
@@ -11,6 +12,7 @@ pub mod rule;
 pub mod text;
 
 pub use asset::Asset;
+pub use assistant::{Assistant, AssistantSet, loaded_by, per_assistant};
 pub use config::{Config, ConfigError, DEFAULT_TOML};
 pub use discover::{Classifier, DiscoverError, DiscoveredFile, Discovery, discover};
 pub use model::{
