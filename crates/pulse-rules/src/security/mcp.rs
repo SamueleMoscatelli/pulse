@@ -59,7 +59,11 @@ impl Rule for LiteralMcpCredential {
 
     fn check(&self, asset: &Asset, _ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
         for server in &asset.mcp().servers {
-            let maps = [("env", &server.env), ("header", &server.headers)];
+            let maps = [
+                ("env", &server.env),
+                ("header", &server.headers),
+                ("oauth", &server.oauth),
+            ];
             for (what, map) in maps {
                 for (key, value, span) in map {
                     if credential_key(key) && literal(value) {

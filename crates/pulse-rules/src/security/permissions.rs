@@ -2,7 +2,6 @@
 //! command `tools` frontmatter, permission-bypass flags, MCP auto-approve lists.
 
 use memchr::memmem;
-use pulse_core::parse::JsonNode;
 use pulse_core::{
     Asset, AssetKind, Category, Finding, KindSet, Rule, RuleCtx, RuleMeta, Severity, Span,
 };
@@ -154,41 +153,27 @@ fn frontmatter_span(asset: &Asset, key_line: Option<u32>, body: Span, bash: &str
     line_span
 }
 
-/// MCP `alwaysAllow` (Cline, Roo) / `autoApprove` lists with write/exec tools or `*`.
+/// MCP `alwaysAllow` (Cline, Roo) / `autoApprove` (Kiro, Cline) lists with write/exec tools
+/// or `*`. Disabled servers count too: the list applies as soon as the server is enabled.
 fn auto_approve(asset: &Asset, out: &mut Vec<Finding>) {
-    let Some(root) = &asset.json().root else {
-        return;
-    };
-    let servers = root.get("mcpServers").or_else(|| root.get("servers"));
-    let Some(servers) = servers.and_then(JsonNode::as_object) else {
-        return;
-    };
-    for server in servers {
-        for key in ["alwaysAllow", "autoApprove"] {
-            let Some(list) = server.value.get(key).and_then(JsonNode::as_array) else {
+    for server in &asset.mcp().servers {
+        for (key, name, span) in &server.auto_approve {
+            let message = if name == "*" {
+                format!(
+                    "Every MCP tool auto-approved (`{key}`, server \"{}\")",
+                    truncate(&server.name, 24)
+                )
+            } else if write_or_exec(name) {
+                format!(
+                    "Write/exec MCP tool \"{}\" auto-approved (server \"{}\")",
+                    truncate(name, QUOTED),
+                    truncate(&server.name, 24)
+                )
+            } else {
                 continue;
             };
-            for tool in list {
-                let Some(name) = tool.as_str() else {
-                    continue;
-                };
-                let message = if name == "*" {
-                    format!(
-                        "Every MCP tool auto-approved (`{key}`, server \"{}\")",
-                        truncate(&server.key, 24)
-                    )
-                } else if write_or_exec(name) {
-                    format!(
-                        "Write/exec MCP tool \"{}\" auto-approved (server \"{}\")",
-                        truncate(name, QUOTED),
-                        truncate(&server.key, 24)
-                    )
-                } else {
-                    continue;
-                };
-                let span = value_span(asset, tool.span, name, 0, name.len());
-                out.push(finding(asset, span, Severity::High, message));
-            }
+            let span = value_span(asset, *span, name, 0, name.len());
+            out.push(finding(asset, span, Severity::High, message));
         }
     }
 }

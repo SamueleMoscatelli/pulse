@@ -170,6 +170,7 @@ pub fn loaded_by(rel_path: &str, kind: AssetKind) -> Option<AssistantSet> {
             _ if in_dir(rel_path, ".vscode/") => &[Copilot],
             _ if in_dir(rel_path, ".cursor/") => &[Cursor],
             _ if in_dir(rel_path, ".gemini/") => &[GeminiCli],
+            _ if in_dir(rel_path, ".kiro/") => &[Kiro],
             _ if name == ".mcp.json" => &[ClaudeCode],
             // `claude_desktop_config.json` belongs to no coding assistant.
             _ => return None,
@@ -334,6 +335,7 @@ mod tests {
             (".mcp.json", McpConfig, Some(vec![ClaudeCode])),
             (".cursor/mcp.json", McpConfig, Some(vec![Cursor])),
             (".gemini/settings.json", McpConfig, Some(vec![GeminiCli])),
+            (".kiro/settings/mcp.json", McpConfig, Some(vec![Kiro])),
             ("claude_desktop_config.json", McpConfig, None),
             (".claude/settings.json", Settings, Some(vec![ClaudeCode])),
             (".cursor/hooks.json", Hooks, Some(vec![Cursor])),

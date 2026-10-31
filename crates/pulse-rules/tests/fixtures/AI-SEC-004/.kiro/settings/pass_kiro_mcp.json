@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "brave": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search@0.6.2"],
+      "env": { "BRAVE_API_KEY": "${BRAVE_API_KEY}" },
+      "disabled": true
+    },
+    "remote": {
+      "url": "https://mcp.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${API_TOKEN}" },
+      "oauth": { "clientId": "pulse-cli", "redirectUri": "http://127.0.0.1:7777/callback" }
+    }
+  }
+}

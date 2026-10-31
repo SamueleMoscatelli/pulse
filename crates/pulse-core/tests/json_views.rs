@@ -226,3 +226,45 @@ fn mcp_disabled_and_enabled_flags() {
     let off: Vec<_> = a.mcp().servers.iter().map(|s| s.disabled).collect();
     assert_eq!(off, [true, true, false, false]);
 }
+
+#[test]
+fn mcp_kiro_keys() {
+    let src = r#"{"mcpServers": {
+        "remote": {
+            "url": "https://mcp.example.com/mcp",
+            "headers": {"Authorization": "Bearer ${API_TOKEN}"},
+            "oauth": {"clientId": "pulse", "clientSecret": "s", "oauthScopes": ["read"]},
+            "autoApprove": ["*"],
+            "disabledTools": ["delete_repo"]
+        },
+        "cline": {"command": "x", "alwaysAllow": ["read_file"], "autoApprove": 3}
+    }}"#;
+    let a = Asset::new(
+        PathBuf::from(".kiro/settings/mcp.json"),
+        ".kiro/settings/mcp.json",
+        AssetKind::McpConfig,
+        LoadMode::Always,
+        src.to_owned(),
+    );
+    let mcp = a.mcp();
+    let remote = &mcp.servers[0];
+    assert!(matches!(remote.transport, Transport::Http { .. }));
+    assert_eq!(remote.headers.len(), 1);
+    let oauth: Vec<_> = remote
+        .oauth
+        .iter()
+        .map(|(k, v, _)| (k.as_str(), v.as_str()))
+        .collect();
+    assert_eq!(oauth, [("clientId", "pulse"), ("clientSecret", "s")]);
+    let approve: Vec<_> = remote
+        .auto_approve
+        .iter()
+        .map(|(k, t, _)| (*k, t.as_str()))
+        .collect();
+    assert_eq!(approve, [("autoApprove", "*")]);
+    assert_eq!(remote.disabled_tools[0].0, "delete_repo");
+    let cline = &mcp.servers[1];
+    assert_eq!(cline.auto_approve[0].1, "read_file");
+    // `autoApprove: 3` is a shape error, not a panic.
+    assert_eq!(mcp.errors.len(), 1, "{:?}", mcp.errors);
+}

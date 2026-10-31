@@ -74,7 +74,7 @@
 
 ### AI-SEC-004 — MCP credential not externalized
 - **Sev** High · **Kinds** McpConfig
-- **Detect** A value in `env`, `headers` or `args` (after a `--token`/`--api-key`/`--password`-like flag) whose key matches `(?i)(key|token|secret|password|auth|bearer)` and whose value is a literal, i.e. not `${env:X}`, `${input:X}`, `${X}`, `$X` or empty.
+- **Detect** A value in `env`, `headers`, Kiro `oauth` (`clientSecret`, ADR-051) or `args` (after a `--token`/`--api-key`/`--password`-like flag) whose key matches `(?i)(key|token|secret|password|auth|bearer)` and whose value is a literal, i.e. not `${env:X}`, `${input:X}`, `${X}`, `$X` or empty.
 - **Fix** Reference an environment variable or VS Code `inputs` (`promptString`, `password: true`).
 - **Note** When AI-SEC-003 also fires on the same span, keep only AI-SEC-003 (the engine dedups by span with severity precedence).
 - **FP guards** A value containing a reference anywhere (`Bearer ${input:X}`), an obvious placeholder (AI-SEC-003 list), a switch/number (`true`, `off`, `4096`), a path or a URL without userinfo is not literal; keys ending in `file`/`path`/`dir`/`url`/`uri`/`type`/`enabled`/`mode` are skipped; Docker `-e KEY=value` args count as env; the span is the value without quotes (ADR-021).
@@ -96,7 +96,7 @@
   - Settings: `permissions.allow` contains `Bash`, `Bash(*)`, `Bash(:*)`, or `*`; `WebFetch` without a domain; `defaultMode: "bypassPermissions"`; `enableAllProjectMcpServers: true` (Medium).
   - Agent/Prompt frontmatter: `allowed-tools`/`tools` containing unrestricted `Bash`. This is Medium, because subagents legitimately use it, and High when combined with `WebFetch`/network tools (exfiltration chain).
   - Any asset: text containing `--dangerously-skip-permissions` or `--yolo`.
-  - McpConfig: `alwaysAllow` / `autoApprove` lists containing write/exec tools or `*`.
+  - McpConfig: `alwaysAllow` (Cline, Roo) / `autoApprove` (Kiro, Cline) lists containing write/exec tools or `*`, on disabled servers too (ADR-051). "Every tool of the server" listed one by one is not detected: the server's tool list is not in the config.
 
 ### AI-SEC-008 — Remote code execution in hook
 - **Sev** Critical · **Kinds** Settings, Hooks, Skill, Prompt · **Inline-suppressible** no

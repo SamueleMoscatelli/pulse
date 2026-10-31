@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "aws-docs": {
+      "command": "uvx",
+      "args": ["awslabs.aws-documentation-mcp-server==1.1.2"],
+      "disabled": false,
+      "autoApprove": ["search_documentation", "read_documentation"],
+      "disabledTools": ["write_file", "execute_command"]
+    }
+  }
+}

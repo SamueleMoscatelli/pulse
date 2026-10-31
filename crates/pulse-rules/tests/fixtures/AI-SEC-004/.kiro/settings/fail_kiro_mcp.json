@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "jira": {
+      "command": "uvx",
+      "args": ["mcp-atlassian==0.11.9"],
+      "env": { "JIRA_API_TOKEN": "jira-local-dev-1" },
+      "disabled": true
+    },
+    "remote": {
+      "url": "https://mcp.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${API_TOKEN}" },
+      "oauth": {
+        "clientId": "pulse-cli",
+        "clientSecret": "oauth-local-dev-1",
+        "redirectUri": "http://127.0.0.1:7777/callback",
+        "oauthScopes": ["read"]
+      }
+    }
+  }
+}

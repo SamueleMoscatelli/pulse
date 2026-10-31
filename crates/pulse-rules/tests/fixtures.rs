@@ -1645,6 +1645,34 @@ fn eff005_disabled_servers_are_not_counted() {
     assert!(run("AI-EFF-005", &[a]).is_empty());
 }
 
+#[test]
+fn eff005_kiro_disabled_servers_are_not_counted() {
+    // 8 enabled servers plus 2 Kiro `disabled: true` ones stay within the budget.
+    let mut servers: Vec<String> = (0..8)
+        .map(|i| format!(r#""s{i}": {{"command": "uvx", "args": ["s{i}"], "disabled": false}}"#))
+        .collect();
+    servers.push(r#""off": {"url": "https://mcp.example.com/mcp", "disabled": true}"#.to_owned());
+    servers.push(
+        r#""off2": {"command": "uvx", "args": ["off2"], "disabled": true, "autoApprove": ["*"]}"#
+            .to_owned(),
+    );
+    let src = format!(r#"{{"mcpServers": {{{}}}}}"#, servers.join(","));
+    let a = asset(
+        ".kiro/settings/mcp.json",
+        AssetKind::McpConfig,
+        src.clone().into_bytes(),
+    );
+    assert!(run("AI-EFF-005", &[a]).is_empty());
+    // Enabling one of them crosses it.
+    let on = src.replacen(r#""disabled": true"#, r#""disabled": false"#, 1);
+    let a = asset(
+        ".kiro/settings/mcp.json",
+        AssetKind::McpConfig,
+        on.into_bytes(),
+    );
+    assert_eq!(run("AI-EFF-005", &[a]).len(), 1);
+}
+
 fn tools_file(n: usize) -> Asset {
     let tools: Vec<String> = (0..n)
         .map(|i| format!(r#"{{"name": "tool_{i}", "description": "Does thing {i}.", "input_schema": {{"type": "object"}}}}"#))

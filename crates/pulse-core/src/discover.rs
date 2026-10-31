@@ -125,6 +125,7 @@ const TABLE: &[(&[&str], AssetKind, Refine)] = &[
             "**/.cursor/mcp.json",
             "**/claude_desktop_config.json",
             "**/.gemini/settings.json",
+            "**/.kiro/settings/mcp.json",
         ],
         AssetKind::McpConfig,
         Refine::None,
@@ -760,6 +761,9 @@ mod tests {
             ),
             ("plugin/hooks/hooks.json", Some((Hooks, Always))),
             (".vscode/mcp.json", Some((McpConfig, Always))),
+            (".kiro/settings/mcp.json", Some((McpConfig, Always))),
+            // Examples are not loaded by Kiro.
+            (".kiro/settings/mcp.json.example", None),
             ("agent.md", None),
         ] {
             assert_eq!(classify(rel), want, "{rel}");
