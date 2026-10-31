@@ -22,6 +22,7 @@ expression: "render(&root, &report(&root), Severity::Info)"
 | 🟢 Cline | 32 | 0% | 0.4% |
 | 🟢 Gemini CLI | 32 | 0% | 0.4% |
 | 🟢 Codex | 32 | 0% | 0.4% |
+| 🟢 Kiro | 32 | 0% | 0.4% |
 
 - Always loaded: `agent.tools.json` 15 · `tools/fetch.json` 14 · 3 agent descriptions 7 · `CLAUDE.md` 6 · … (Copilot)
 - On demand: 90 tokens in skills, agents, prompts and scoped rules, loaded only when used

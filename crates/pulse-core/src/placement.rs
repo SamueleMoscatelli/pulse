@@ -30,14 +30,31 @@ const FOLDERS: &[(&str, &str)] = &[
     (".claude/agent/", ".claude/agents/"),
     (".claude/command/", ".claude/commands/"),
     (".claude/skill/", ".claude/skills/"),
+    (".kiro/steerings/", ".kiro/steering/"),
+    (".kiro/skill/", ".kiro/skills/"),
+    (".kiro/hook/", ".kiro/hooks/"),
+    (".kiro/agent/", ".kiro/agents/"),
 ];
 
-/// The near miss `rel_path` is, by name and folder only. Files that are not `.md`/`.mdc`
-/// return after a suffix test, so this is cheap enough to run on every walked file.
+/// Kiro folders that also hold non-Markdown assets (`*.kiro.hook`, JSON agents and hooks).
+const KIRO_DATA_FOLDERS: &[(&str, &str)] = &[
+    (".kiro/hook/", ".kiro/hooks/"),
+    (".kiro/agent/", ".kiro/agents/"),
+];
+
+/// The near miss `rel_path` is, by name and folder only. Files that are not `.md`/`.mdc`/
+/// `.json`/`.hook` return after a suffix test, so this is cheap enough to run on every
+/// walked file.
 pub fn near_miss(rel_path: &str) -> Option<NearMiss> {
     let (dir, name) = rel_path.rsplit_once('/').unwrap_or(("", rel_path));
     if name.ends_with(".mdc") {
         return (!in_dir(rel_path, ".cursor/rules/")).then_some(NearMiss::Move(".cursor/rules/"));
+    }
+    if name.ends_with(".json") || name.ends_with(".hook") {
+        return KIRO_DATA_FOLDERS
+            .iter()
+            .find(|(wrong, _)| in_dir(rel_path, wrong))
+            .map(|&(_, right)| NearMiss::Move(right));
     }
     if !name.ends_with(".md") {
         return None;
@@ -86,6 +103,12 @@ mod tests {
             (".github/agent/a.md", Some(Move(".github/agents/"))),
             ("pkg/.claude/command/x.md", Some(Move(".claude/commands/"))),
             (".claude/skill/x/README.md", Some(Move(".claude/skills/"))),
+            (".kiro/steerings/style.md", Some(Move(".kiro/steering/"))),
+            (".kiro/skill/x/README.md", Some(Move(".kiro/skills/"))),
+            (".kiro/hook/fmt.kiro.hook", Some(Move(".kiro/hooks/"))),
+            (".kiro/hook/fmt.json", Some(Move(".kiro/hooks/"))),
+            (".kiro/agent/a.json", Some(Move(".kiro/agents/"))),
+            ("pkg/.kiro/agent/a.md", Some(Move(".kiro/agents/"))),
             // Correct names and places, and unrelated files.
             ("SKILL.md", None),
             ("CLAUDE.md", None),
@@ -93,6 +116,11 @@ mod tests {
             ("pkg/.github/copilot-instructions.md", None),
             (".cursor/rules/a/style.mdc", None),
             (".claude/agents/a.md", None),
+            (".kiro/steering/style.md", None),
+            (".kiro/hooks/fmt.kiro.hook", None),
+            (".kiro/agents/a.json", None),
+            (".kiro/steerings/data.json", None),
+            ("package.json", None),
             ("x.claude/agent/a.md", None),
             (".github/agent/a.txt", None),
             ("src/main.rs", None),

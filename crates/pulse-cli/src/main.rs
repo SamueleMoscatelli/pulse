@@ -180,7 +180,7 @@ struct ScanArgs {
     #[arg(long, value_name = "GIT-REF")]
     changed_since: Option<String>,
     /// Only scan files this assistant loads (repeatable or comma-separated): copilot,
-    /// claude-code, cursor, windsurf, cline, gemini-cli, codex [default: every assistant]
+    /// claude-code, cursor, windsurf, cline, gemini-cli, codex, kiro [default: every assistant]
     #[arg(long = "assistant", value_name = "NAME", value_delimiter = ',', value_parser = parse_assistant)]
     assistants: Vec<Assistant>,
 }

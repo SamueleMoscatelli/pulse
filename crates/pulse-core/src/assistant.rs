@@ -18,6 +18,7 @@ pub enum Assistant {
     Cline,
     GeminiCli,
     Codex,
+    Kiro,
 }
 
 impl Assistant {
@@ -30,6 +31,7 @@ impl Assistant {
         Assistant::Cline,
         Assistant::GeminiCli,
         Assistant::Codex,
+        Assistant::Kiro,
     ];
 
     /// The display name (`Claude Code`).
@@ -42,6 +44,7 @@ impl Assistant {
             Assistant::Cline => "Cline",
             Assistant::GeminiCli => "Gemini CLI",
             Assistant::Codex => "Codex",
+            Assistant::Kiro => "Kiro",
         }
     }
 
@@ -55,6 +58,7 @@ impl Assistant {
             Assistant::Cline => "cline",
             Assistant::GeminiCli => "gemini-cli",
             Assistant::Codex => "codex",
+            Assistant::Kiro => "kiro",
         }
     }
 
@@ -126,7 +130,7 @@ pub fn loaded_by(rel_path: &str, kind: AssetKind) -> Option<AssistantSet> {
         AssetKind::Instructions => match name {
             "CLAUDE.md" => &[Copilot, ClaudeCode],
             "CLAUDE.local.md" => &[ClaudeCode],
-            "AGENTS.md" => &[Copilot, Cursor, Windsurf, Codex],
+            "AGENTS.md" => &[Copilot, Cursor, Windsurf, Codex, Kiro],
             "GEMINI.md" => &[GeminiCli],
             "copilot-instructions.md" => &[Copilot],
             ".cursorrules" => &[Cursor],
@@ -140,12 +144,14 @@ pub fn loaded_by(rel_path: &str, kind: AssetKind) -> Option<AssistantSet> {
             _ if in_dir(rel_path, ".github/instructions/") => &[Copilot],
             _ if in_dir(rel_path, ".windsurf/rules/") => &[Windsurf],
             _ if in_dir(rel_path, ".clinerules/") => &[Cline],
+            _ if in_dir(rel_path, ".kiro/steering/") => &[Kiro],
             _ => return None,
         },
         AssetKind::Skill => match () {
             _ if in_dir(rel_path, ".github/skills/") => &[Copilot],
             _ if in_dir(rel_path, ".claude/skills/") => &[Copilot, ClaudeCode],
             _ if in_dir(rel_path, ".agents/skills/") => &[Copilot, Codex],
+            _ if in_dir(rel_path, ".kiro/skills/") => &[Kiro],
             _ => &[Copilot, ClaudeCode],
         },
         AssetKind::Agent => match () {
@@ -274,8 +280,19 @@ mod tests {
             (
                 "AGENTS.md",
                 Instructions,
-                Some(vec![Copilot, Cursor, Windsurf, Codex]),
+                Some(vec![Copilot, Cursor, Windsurf, Codex, Kiro]),
             ),
+            (
+                "pkg/AGENTS.md",
+                Instructions,
+                Some(vec![Copilot, Cursor, Windsurf, Codex, Kiro]),
+            ),
+            (
+                ".kiro/steering/style.md",
+                ScopedInstructions,
+                Some(vec![Kiro]),
+            ),
+            (".kiro/skills/x/SKILL.md", Skill, Some(vec![Kiro])),
             (
                 ".github/copilot-instructions.md",
                 Instructions,
@@ -377,7 +394,8 @@ mod tests {
                 (Copilot, 35),
                 (Cursor, 35),
                 (Windsurf, 35),
-                (Codex, 35)
+                (Codex, 35),
+                (Kiro, 35)
             ]
         );
         assert_eq!(largest, 105);

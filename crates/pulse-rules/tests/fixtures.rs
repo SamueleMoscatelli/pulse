@@ -1934,6 +1934,8 @@ fn str008_skill_not_in_name_folder() {
             (".claude/skills/SKILL.md", Skill),
             (".github/skills/a/b/SKILL.md", Skill),
             (".claude/skill/review/SKILL.md", Skill),
+            (".kiro/skill/review/SKILL.md", Skill),
+            (".kiro/skills/review/SKILL.md", Skill),
         ],
         &[],
         &[],
@@ -1947,6 +1949,8 @@ fn str008_skill_not_in_name_folder() {
              `.claude/skills/<name>/SKILL.md`",
             ".github/skills/a/b/SKILL.md: Skill not loaded from `.github/skills/a/b/`: \
              expected `.github/skills/<name>/SKILL.md`",
+            ".kiro/skill/review/SKILL.md: Skill not loaded from `.kiro/skill/review/`: \
+             expected `.kiro/skills/<name>/SKILL.md`",
         ]
     );
     // `scan.library` assets are declared distribution copies.
@@ -1982,6 +1986,10 @@ fn str008_near_miss_names_name_the_expected_location() {
         ".claude/agent/a.md",
         ".claude/command/a.md",
         ".claude/skill/x/README.md",
+        ".kiro/steerings/style.md",
+        ".kiro/skill/x/README.md",
+        ".kiro/hook/fmt.kiro.hook",
+        ".kiro/agent/a.json",
         "a/skill.md",
         "b/Skill.md",
         ".github/copilot-instruction.md",
@@ -2005,6 +2013,10 @@ fn str008_near_miss_names_name_the_expected_location() {
              assistant: rename it to `copilot-instructions.md`",
             ".github/instruction/a.md: Not loaded from `.github/instruction/`: move `a.md` to `.github/instructions/`",
             ".github/prompt/a.md: Not loaded from `.github/prompt/`: move `a.md` to `.github/prompts/`",
+            ".kiro/agent/a.json: Not loaded from `.kiro/agent/`: move `a.json` to `.kiro/agents/`",
+            ".kiro/hook/fmt.kiro.hook: Not loaded from `.kiro/hook/`: move `fmt.kiro.hook` to `.kiro/hooks/`",
+            ".kiro/skill/x/README.md: Not loaded from `.kiro/skill/x/`: move `README.md` to `.kiro/skills/`",
+            ".kiro/steerings/style.md: Not loaded from `.kiro/steerings/`: move `style.md` to `.kiro/steering/`",
             "a/skill.md: `skill.md` is not loaded by any assistant: rename it to `SKILL.md`",
             "b/Skill.md: `Skill.md` is not loaded by any assistant: rename it to `SKILL.md`",
             "claude.md: `claude.md` loads only on case-insensitive file systems: rename it \

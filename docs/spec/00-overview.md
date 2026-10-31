@@ -14,7 +14,7 @@ Package managers (e.g. Microsoft `apm`) resolve and install AI assets. Pulse jud
 
 | Family | Examples |
 |---|---|
-| Instructions / rules | `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.github/copilot-instructions.md`, `.cursorrules`, `.cursor/rules/*.mdc`, `.claude/rules/*.md`, `.github/instructions/*.instructions.md`, `.windsurfrules`, `.clinerules` |
+| Instructions / rules | `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.github/copilot-instructions.md`, `.cursorrules`, `.cursor/rules/*.mdc`, `.claude/rules/*.md`, `.github/instructions/*.instructions.md`, `.windsurfrules`, `.clinerules`, `.kiro/steering/*.md` |
 | Agents | `.claude/agents/*.md`, `.github/agents/*.agent.md`, `.github/chatmodes/*.chatmode.md` |
 | Prompts / commands | `.claude/commands/*.md`, `.github/prompts/*.prompt.md`, `*.prompty` |
 | Skills | `**/SKILL.md` (+ files it references) |

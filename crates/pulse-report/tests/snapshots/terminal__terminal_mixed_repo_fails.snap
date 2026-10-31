@@ -17,6 +17,7 @@ expression: "render(\"mixed\", false, false)"
    Cline           █░░░░░░░░░░░░░░░░░░░       32              0%          0.4%
    Gemini CLI      █░░░░░░░░░░░░░░░░░░░       32              0%          0.4%
    Codex           █░░░░░░░░░░░░░░░░░░░       32              0%          0.4%
+   Kiro            █░░░░░░░░░░░░░░░░░░░       32              0%          0.4%
    Always loaded   agent.tools.json 15 · tools/fetch.json 14 · 3 agent descriptions 7 · CLAUDE.md 6 · … (Copilot)
    On demand       90 tokens in skills, agents, prompts and scoped rules, loaded only when used
    Budget          8k always-on tokens per assistant (`budgets.always_on` in pulse.toml). Bars show the share of the 200k context window; they turn yellow above 75% of the budget and red above it.

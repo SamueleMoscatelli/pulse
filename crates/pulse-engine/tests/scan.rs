@@ -552,3 +552,74 @@ fn assistant_selection_scans_only_what_it_loads() {
         all.assets_meta.len()
     );
 }
+
+#[test]
+fn kiro_loads_always_steering_agents_md_and_descriptions() {
+    use pulse_core::{Assistant, AssistantSet, LoadMode};
+    let root = mixed().with_file_name("kiro");
+    let config = Config::load(&root, None).unwrap();
+    let report = scan(&root, &config, &ScanOptions::default()).unwrap();
+    let meta = |rel: &str| {
+        report
+            .assets_meta
+            .iter()
+            .find(|a| a.rel_path == rel)
+            .unwrap()
+    };
+    let load = |rel: &str| meta(rel).load;
+    assert_eq!(load(".kiro/steering/style.md"), LoadMode::Always);
+    assert_eq!(load(".kiro/steering/product.md"), LoadMode::Always);
+    assert_eq!(load(".kiro/steering/typescript.md"), LoadMode::Conditional);
+    assert_eq!(load(".kiro/steering/release.md"), LoadMode::OnDemand);
+    assert_eq!(load(".kiro/steering/api.md"), LoadMode::OnDemand);
+    assert_eq!(load("pkg/AGENTS.md"), LoadMode::Conditional);
+
+    // Kiro: `always` and unmarked steering, root AGENTS.md, the `auto` steering's and the
+    // skill's descriptions; not CLAUDE.md, nested AGENTS.md, fileMatch or manual steering.
+    let kiro: u64 = [
+        ".kiro/steering/style.md",
+        ".kiro/steering/product.md",
+        "AGENTS.md",
+        ".kiro/steering/api.md",
+        ".kiro/skills/review/SKILL.md",
+    ]
+    .iter()
+    .map(|rel| u64::from(meta(rel).always_tokens))
+    .sum();
+    assert!(meta(".kiro/steering/api.md").always_tokens < meta(".kiro/steering/api.md").tokens);
+    assert_eq!(report.context.by_assistant[0], (Assistant::Kiro, kiro));
+
+    let mut misplaced: Vec<String> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id == "AI-STR-008")
+        .map(|f| {
+            let rel = f.location.path.strip_prefix(&root).unwrap();
+            rel.to_string_lossy().replace('\\', "/")
+        })
+        .collect();
+    misplaced.sort();
+    assert_eq!(
+        misplaced,
+        [
+            ".kiro/agent/reviewer.json",
+            ".kiro/hook/format.kiro.hook",
+            ".kiro/skill/notes/README.md",
+            ".kiro/steerings/legacy.md",
+        ]
+    );
+
+    let only: AssistantSet = [Assistant::Kiro].into_iter().collect();
+    let opts = ScanOptions {
+        assistants: Some(only),
+        ..ScanOptions::default()
+    };
+    let report = scan(&root, &config, &opts).unwrap();
+    let skipped: Vec<&str> = report
+        .not_loaded
+        .iter()
+        .map(|n| n.rel_path.as_str())
+        .collect();
+    assert_eq!(skipped, ["CLAUDE.md"]);
+    assert_eq!(report.context.by_assistant, [(Assistant::Kiro, kiro)]);
+}

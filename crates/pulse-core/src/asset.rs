@@ -176,22 +176,42 @@ impl Asset {
 
     /// Tokens this asset adds to every session (spec 00-overview → Always-on context): the
     /// whole file for always-loaded instructions, prompts and tools; only the frontmatter
-    /// `description` for skills and agents; nothing for MCP configs, settings and hooks.
+    /// `description` for skills, agents and Kiro `inclusion: auto` steering; nothing for MCP
+    /// configs, settings and hooks.
     pub fn always_tokens(&self) -> u32 {
-        if self.effective_load() != LoadMode::Always {
-            return 0;
-        }
-        match self.kind {
-            AssetKind::Skill | AssetKind::Agent => self
-                .markdown()
+        let description = || {
+            self.markdown()
                 .frontmatter
                 .as_ref()
                 .and_then(|f| f.get("description"))
                 .and_then(Value::as_str)
-                .map_or(0, |d| tokens::estimate(d, self.calibration)),
+                .map_or(0, |d| tokens::estimate(d, self.calibration))
+        };
+        if self.kiro_inclusion() == Some("auto") {
+            return description();
+        }
+        if self.effective_load() != LoadMode::Always {
+            return 0;
+        }
+        match self.kind {
+            AssetKind::Skill | AssetKind::Agent => description(),
             AssetKind::McpConfig | AssetKind::Settings | AssetKind::Hooks => 0,
             _ => self.tokens(),
         }
+    }
+
+    /// The frontmatter `inclusion` of a discovered (Conditional) Kiro steering file; `None`
+    /// for other assets and invalid YAML.
+    fn kiro_inclusion(&self) -> Option<&str> {
+        if self.kind != AssetKind::ScopedInstructions
+            || self.load != LoadMode::Conditional
+            || !in_dir(&self.rel_path, ".kiro/steering/")
+        {
+            return None;
+        }
+        let fm = self.markdown().frontmatter.as_ref()?;
+        fm.value.as_ref().ok()?;
+        fm.get("inclusion").and_then(Value::as_str).map(str::trim)
     }
 
     /// Estimated tokens after the frontmatter block (the whole file when there is none);
@@ -213,6 +233,8 @@ impl Asset {
     /// Load mode after frontmatter promotion (spec 02-assets → Discovery table, footnote *):
     /// a Conditional ScopedInstructions becomes Always with `.mdc` `alwaysApply: true`, or for
     /// `.claude/rules` / `.github/instructions` without `paths`/`applyTo` or with `applyTo: "**"`.
+    /// Kiro steering follows `inclusion` (ADR-049): `always` or absent → Always, `fileMatch`
+    /// (or another value) → Conditional, `manual` and `auto` → OnDemand.
     /// Invalid YAML keeps the discovered mode.
     pub fn effective_load(&self) -> LoadMode {
         if self.kind != AssetKind::ScopedInstructions || self.load != LoadMode::Conditional {
@@ -223,6 +245,13 @@ impl Asset {
             return self.load;
         }
         let get = |key: &str| fm.and_then(|f| f.get(key));
+        if in_dir(&self.rel_path, ".kiro/steering/") {
+            return match get("inclusion").and_then(Value::as_str).map(str::trim) {
+                None | Some("always") => LoadMode::Always,
+                Some("manual" | "auto") => LoadMode::OnDemand,
+                Some(_) => self.load,
+            };
+        }
         let promoted = if self.rel_path.ends_with(".mdc") {
             get("alwaysApply").and_then(Value::as_bool) == Some(true)
         } else if in_dir(&self.rel_path, ".claude/rules/")
@@ -328,6 +357,52 @@ mod tests {
             "---\nalwaysApply: true\n---\n",
         );
         assert_eq!(other.effective_load(), Conditional);
+    }
+
+    #[test]
+    fn kiro_steering_load_follows_inclusion() {
+        use LoadMode::{Always, Conditional, OnDemand};
+        let steering = |src: &str| {
+            asset(
+                ".kiro/steering/a.md",
+                AssetKind::ScopedInstructions,
+                Conditional,
+                src,
+            )
+        };
+        let desc = "---\ninclusion: auto\nname: api\ndescription: REST API design rules.\n---\n";
+        let body = format!("{desc}{}", "Use plural nouns for collections.\n".repeat(20));
+        for (src, load, always) in [
+            ("no frontmatter\n", Always, None),
+            ("---\ninclusion: always\n---\nx\n", Always, None),
+            (
+                "---\ninclusion: fileMatch\nfileMatchPattern: '*.ts'\n---\nx\n",
+                Conditional,
+                Some(0),
+            ),
+            ("---\ninclusion: manual\n---\nx\n", OnDemand, Some(0)),
+            ("---\ninclusion: [\n---\nx\n", Conditional, Some(0)),
+        ] {
+            let a = steering(src);
+            assert_eq!(a.effective_load(), load, "{src}");
+            assert_eq!(a.always_tokens(), always.unwrap_or(a.tokens()), "{src}");
+        }
+        // `auto`: OnDemand, but its description is always in context, like a skill's.
+        let auto = steering(&body);
+        assert_eq!(auto.effective_load(), OnDemand);
+        assert_eq!(
+            auto.always_tokens(),
+            tokens::estimate("REST API design rules.", 1.0)
+        );
+        assert!(auto.always_tokens() > 0 && auto.always_tokens() < auto.tokens());
+        // A library copy keeps its OnDemand load and adds nothing.
+        let lib = asset(
+            ".kiro/steering/a.md",
+            AssetKind::ScopedInstructions,
+            OnDemand,
+            &body,
+        );
+        assert_eq!((lib.effective_load(), lib.always_tokens()), (OnDemand, 0));
     }
 
     #[test]
