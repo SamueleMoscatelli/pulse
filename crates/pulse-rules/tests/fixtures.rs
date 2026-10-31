@@ -533,6 +533,48 @@ fn sec002_guards_downgrade_to_low() {
     assert_eq!(json[0].severity, Severity::Critical);
 }
 
+fn sec002_fixture(name: &str) -> Vec<Finding> {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/AI-SEC-002");
+    sec002(&fs::read_to_string(dir.join(name)).unwrap())
+}
+
+#[test]
+fn sec002_quoted_mention_is_high_with_baseline_hint() {
+    let f = sec002_fixture("fail_quoted_mention_high.md");
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(f[0].severity, Severity::High);
+    assert_eq!(
+        f[0].message,
+        "Prompt-injection phrase \"ignore previou…\" looks quoted: check it, then accept it \
+         with pulse baseline"
+    );
+    assert!(f[0].message.chars().count() <= 100);
+    // Known gap: a quoted phrase used as an instruction is still only High.
+    let gap = sec002_fixture("fail_quoted_instruction_gap.md");
+    assert_eq!(gap[0].severity, Severity::High);
+}
+
+#[test]
+fn sec002_unquoted_phrase_in_safety_section_stays_critical() {
+    let f = sec002_fixture("fail_unquoted_safety_section.md");
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(f[0].severity, Severity::Critical);
+}
+
+#[test]
+fn sec002_quotes_as_syntax_are_not_mentions() {
+    let sev = |f: Vec<Finding>| f.iter().map(|f| f.severity).collect::<Vec<_>>();
+    // A guard still wins over a quote; code and frontmatter quotes are syntax.
+    let md = sec002(
+        "---\ndescription: \"system override\"\n---\n# R\n\n```bash\necho \"system override\"\n```\n\
+         \n## Security\nSay `system override`.\n",
+    );
+    assert_eq!(
+        sev(md),
+        [Severity::Critical, Severity::Critical, Severity::Low]
+    );
+}
+
 #[test]
 fn sec002_allow_list_drops_matching_phrase_only() {
     let table: toml::Table = toml::from_str("allow = ['Forget  Everything']").unwrap();

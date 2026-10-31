@@ -64,7 +64,7 @@
 - **Sev** Critical · **Kinds** all except Settings · **Inline-suppressible** no
 - **Detect** Aho-Corasick over `normalized()` text with the `lexicon::INJECTION` list (≥ 40 phrases), e.g. "ignore (all) previous instructions", "disregard the above", "system override", "you are now in developer mode", "new instructions:", "forget everything", "do not tell the user", "act as dan", "</system>", "<|im_start|>", "[[system]]". Phrases are stored pre-normalized; small variants (all/any/prior/previous/above) are expanded at build time.
 - **Report** `Prompt-injection phrase "ignore previous instructions"`.
-- **FP guards** Skip matches inside fenced code blocks whose info string is `text`/`example`, and inside a section whose heading contains "injection" / "security" / "example attack" (this downgrades severity to Low, it does not drop the finding). Users can add allow-listed phrases in config.
+- **FP guards** Skip matches inside fenced code blocks whose info string is `text`/`example`, and inside a section whose heading contains "injection" / "security" / "example attack" (this downgrades severity to Low, it does not drop the finding). Otherwise a quoted mention (the phrase inside a `"…"`, `'…'`, `“…”` or `` `…` `` pair on its line, in Markdown prose: not frontmatter, fenced code or JSON/TOML strings) is reported at High with `Prompt-injection phrase "…" looks quoted: check it, then accept it with pulse baseline` (phrase truncated to 15 chars, ≤ 100 total); it stays non-suppressible inline and is accepted per occurrence through the baseline (ADR-055). Users can add allow-listed phrases in config.
 
 ### AI-SEC-003 — Hardcoded secret
 - **Sev** Critical · **Kinds** all · **Inline-suppressible** no
