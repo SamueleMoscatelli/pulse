@@ -29,6 +29,12 @@ Kiro support, measured on `affaan-m/ECC` and `mehtadman87/kiro-config`
 - Kiro powers (`POWER.md`, or `plugin.json` with `keywords`): their steering, hooks, MCP
   config and skills are scanned as library assets, with no "not loaded" finding.
 
+### Changed
+
+- AI-SEC-002: a prompt-injection phrase in quotes in Markdown prose (a safety rule naming the
+  attack) is reported at High instead of Critical, with a hint to review it and accept it with
+  `pulse baseline`. Unquoted phrases stay Critical.
+
 ## 1.1.0 - 2026-10-31
 
 Fewer false positives, clearer advice and full coverage of library repos, measured on
