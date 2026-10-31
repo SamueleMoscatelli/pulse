@@ -5,11 +5,13 @@ use std::borrow::Cow;
 use std::sync::LazyLock;
 
 use pulse_core::refs::{is_file_import, resolve};
+use pulse_core::text::prose::covers;
 use pulse_core::{
     Asset, AssetKind, Category, Finding, KindSet, ProjectRule, RuleCtx, RuleMeta, Severity, Span,
 };
 use regex::Regex;
 
+use crate::lexicon::shell::{RUN_HOSTS, RUN_SUBCOMMANDS, SCRIPT_RUNNERS};
 use crate::util::truncate;
 
 pub static META: RuleMeta = RuleMeta {
@@ -193,7 +195,18 @@ fn skill_paths(asset: &Asset, ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
             continue;
         };
         // AI-STR-003 FP guard: project skills also name root-level scripts (`scripts/check.sh`).
-        if !exists(ctx, &target) && !exists(ctx, m.as_str()) {
+        if exists(ctx, &target) || exists(ctx, m.as_str()) {
+            continue;
+        }
+        // AI-STR-003 FP guard (ADR-046): a path only shown as code is reported when it is
+        // run, or when its first directory exists (a likely typo); otherwise it is a path
+        // the skill produces or asks for (`assets/preview.png`).
+        let at = body_start + m.start();
+        let before = asset.source.get(..at).unwrap_or_default();
+        let prefix = before.rfind('\n').map_or(before, |i| &before[i + 1..]);
+        let code = covers(&md.code_blocks, at, |b| b.span)
+            || prefix.bytes().filter(|&b| b == b'`').count() % 2 == 1;
+        if !code || run_by_command(prefix) || first_dir_exists(asset, ctx, m.as_str()) {
             out.push(Finding::new(
                 &META,
                 asset,
@@ -205,6 +218,33 @@ fn skill_paths(asset: &Asset, ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
             ));
         }
     }
+}
+
+/// Whether the text before a path ends with a command that runs it (`python3 -u`, `uv run`).
+fn run_by_command(prefix: &str) -> bool {
+    let mut words = prefix
+        .rsplit(|c: char| c.is_whitespace() || c == '`')
+        .filter(|w| !w.is_empty())
+        .skip_while(|w| w.starts_with('-'));
+    let Some(w) = words.next() else {
+        return false;
+    };
+    if RUN_SUBCOMMANDS.contains(&w) {
+        let host = words.next().unwrap_or_default().to_ascii_lowercase();
+        return RUN_HOSTS.contains(&host.as_str()) || SCRIPT_RUNNERS.contains(&host.as_str());
+    }
+    let w = w.to_ascii_lowercase();
+    SCRIPT_RUNNERS.contains(&w.as_str())
+}
+
+/// Whether the first directory of a skill path exists in the skill or at the root.
+fn first_dir_exists(asset: &Asset, ctx: &RuleCtx<'_>, path: &str) -> bool {
+    let dir = path
+        .trim_start_matches("./")
+        .split('/')
+        .next()
+        .unwrap_or_default();
+    resolve(&asset.rel_path, dir).is_some_and(|t| exists(ctx, &t)) || exists(ctx, dir)
 }
 
 /// AI-STR-003 FP guard: placeholder paths (`<name>.md`, `your-script.py`, `example/x`).
@@ -255,6 +295,32 @@ mod tests {
             ["scripts/fill.py", "references/forms.md"]
         );
         assert!(paths("lib/scripts/x.py https://h/assets/a.png scripts/*.py").is_empty());
+    }
+
+    #[test]
+    fn runner_commands_are_recognized() {
+        for p in [
+            "Run `python ",
+            "python3 -u ",
+            "uv run ",
+            "  bash ",
+            "`node ",
+            "pwsh -File ",
+            "sudo sh ",
+        ] {
+            assert!(run_by_command(p), "{p:?}");
+        }
+        for p in [
+            "Save it as `",
+            "cp x ",
+            "",
+            "Copy `",
+            "a `.venv` ",
+            "uv sync ",
+            "run ",
+        ] {
+            assert!(!run_by_command(p), "{p:?}");
+        }
     }
 
     #[test]

@@ -7,7 +7,7 @@ The same guidance in two places costs tokens twice, every session it is loaded i
 
 ## What triggers it
 - **Paragraphs (≥ 25 words)** repeated or lightly reworded, within one file or across files: at least half of their 5-word shingles in common (estimated with MinHash). Reported on the later occurrence in path order, naming the earlier one; "Duplicate" when the wording matches, "Near-duplicate" otherwise.
-- **Lines (≥ 8 words)** repeated word for word in another always-on asset (always-loaded instructions and prompts). One finding per pair of files, at the first repeated line, listing the lines on both sides and the tokens paid twice: "Lines 5, 6, 7, … also in `.github/copilot-instructions.md:6, 7, 8, …`; both load on every request, so they are paid twice (~68 tokens)". Lines in fenced code, the frontmatter, or a paragraph already reported are skipped.
+- **Lines (≥ 8 words)** repeated word for word in another always-on asset (always-loaded instructions and prompts), at **Low**: a line costs less than a paragraph. One finding per pair of files, at the first repeated line, listing the lines on both sides and the tokens paid twice: "Lines 5, 6, 7, … also in `.github/copilot-instructions.md:6, 7, 8, …`; both load on every request, so they are paid twice (~68 tokens)". Lines in fenced code, the frontmatter, or a paragraph already reported are skipped.
 
 Words are compared after normalization (case, Unicode lookalikes, Markdown emphasis and punctuation ignored).
 

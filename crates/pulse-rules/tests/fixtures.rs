@@ -1188,7 +1188,9 @@ fn str003_skill_paths_resolve_from_skill_dir_or_root() {
     let skill = asset(
         ".claude/skills/ship/SKILL.md",
         AssetKind::Skill,
-        b"Run `scripts/check.sh`, then `scripts/deploy.sh` and see references/ops.md.\n".to_vec(),
+        b"Run `scripts/check.sh`, then `scripts/deploy.sh` and see references/ops.md.\n\
+          Save the image as `assets/logo.png`.\n"
+            .to_vec(),
     );
     let files: HashSet<String> = [
         ".claude/skills/ship/SKILL.md",
@@ -1206,6 +1208,8 @@ fn str003_skill_paths_resolve_from_skill_dir_or_root() {
         Path::new("/nonexistent"),
         &files,
     );
+    // ADR-046: a code-span path is reported when its first directory exists (`scripts/`
+    // at the root), not when the whole directory is missing (`assets/`).
     let messages: Vec<_> = f.iter().map(|f| f.message.as_str()).collect();
     assert_eq!(
         messages,
@@ -1349,6 +1353,7 @@ fn eff003_same_paragraph_in_claude_and_agents() {
     assert_eq!(f.len(), 1, "{f:?}");
     assert_eq!(f[0].location.path.as_ref(), Path::new("CLAUDE.md"));
     assert_eq!((f[0].location.line, f[0].location.col), (3, 1));
+    assert_eq!(f[0].severity, Severity::Medium);
     assert!(
         f[0].message
             .starts_with("Duplicate paragraph of AGENTS.md:5: \"Before"),
@@ -1412,6 +1417,8 @@ fn eff003_duplicate_lines_across_always_on_assets() {
     ]);
     assert_eq!(f.len(), 1, "{f:?}");
     assert_eq!((f[0].location.line, f[0].location.col), (4, 1));
+    // P8.7: a repeated line is Low, a repeated paragraph Medium.
+    assert_eq!(f[0].severity, Severity::Low);
     assert!(
         f[0].message
             .starts_with("Line also in `AGENTS.md:3`; both load"),

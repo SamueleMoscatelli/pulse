@@ -1,4 +1,5 @@
-//! AI-SEC-008/009 word lists: downloaders, interpreters and tool-input sources.
+//! AI-SEC-008/009 word lists: downloaders, interpreters and tool-input sources; AI-STR-003
+//! script runners.
 
 use std::sync::LazyLock;
 
@@ -32,6 +33,33 @@ pub const SHELLS: &[&str] = &[
     "pwsh",
     "powershell",
 ];
+
+/// Programs (lowercase) that run a script path given as an argument (AI-STR-003).
+pub const SCRIPT_RUNNERS: &[&str] = &[
+    "sh",
+    "bash",
+    "zsh",
+    "python",
+    "python3",
+    "node",
+    "deno",
+    "bun",
+    "tsx",
+    "ts-node",
+    "npx",
+    "perl",
+    "ruby",
+    "pwsh",
+    "powershell",
+    "source",
+    ".",
+];
+
+/// Subcommands between a runner and its script (`uv run`, `deno run`).
+pub const RUN_SUBCOMMANDS: &[&str] = &["run", "exec"];
+
+/// Programs (lowercase) that run a script only through a [`RUN_SUBCOMMANDS`] entry.
+pub const RUN_HOSTS: &[&str] = &["bun", "deno", "pipenv", "poetry", "uv"];
 
 /// Builtins that execute their argument as code.
 pub const EVALUATORS: &[&str] = &["eval", "source", ".", "iex", "invoke-expression"];

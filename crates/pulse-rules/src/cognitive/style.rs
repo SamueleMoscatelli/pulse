@@ -3,6 +3,7 @@
 
 use std::sync::LazyLock;
 
+use pulse_core::text::prose::{covers, list_marker};
 use pulse_core::{Asset, Category, Finding, KindSet, Rule, RuleCtx, RuleMeta, Severity, Span};
 
 use super::directives::{Word, is, is_directive, lemma, same};
@@ -45,7 +46,7 @@ impl Rule for VagueDirective {
             let Some((i, term)) = vague(&ws) else {
                 continue;
             };
-            if !is_directive(&ws) || anchored(text, &ws) {
+            if !is_directive(&ws) || anchored(text, &ws) || introduces_list(src, r.end) {
                 continue;
             }
             let start = r.start + offset(text, ws[i].text);
@@ -109,6 +110,22 @@ fn anchored(text: &str, w: &[Word<'_>]) -> bool {
         .any(|b| b.is_ascii_digit() || b == b'`' || b == b'/')
         || w.iter().any(|x| x.text.contains('.'))
         || find_phrase(w, &ANCHOR_PHRASES).is_some()
+}
+
+/// AI-COG-002 anchor: a sentence ending in `:` (at byte `end` of `src`) right before a list
+/// or table, which spells out what the vague term means (`… depends on the resource:`).
+fn introduces_list(src: &str, end: usize) -> bool {
+    if !src.get(..end).is_some_and(|b| b.ends_with(':')) {
+        return false;
+    }
+    let mut lines = src.get(end..).unwrap_or_default().lines();
+    if !lines.next().is_some_and(|rest| rest.trim().is_empty()) {
+        return false;
+    }
+    lines
+        .map(str::trim_start)
+        .find(|l| !l.trim_end().is_empty())
+        .is_some_and(|l| l.starts_with('|') || list_marker(l).is_some())
 }
 
 pub static META_NEGATIVE: RuleMeta = RuleMeta {
@@ -339,7 +356,8 @@ impl Rule for EmphasisInflation {
                 continue;
             }
             directives += 1;
-            if emphasis(text, &ws) {
+            let in_table = covers(&asset.markdown().tables, s.range.start, |t| t.span);
+            if emphasis(text, &ws, in_table) {
                 emphasized += 1;
                 let at = span(s.range.start, s.range.end);
                 first.get_or_insert(at);
@@ -373,28 +391,45 @@ impl Rule for EmphasisInflation {
     }
 }
 
-/// Whether a directive sentence carries an AI-COG-004 emphasis marker.
-fn emphasis(text: &str, w: &[Word<'_>]) -> bool {
+/// Whether a directive sentence carries an AI-COG-004 emphasis marker. Bold used as
+/// structure is not emphasis: a table cell, a `**Label:**` or a `**Term**: …` lead-in.
+fn emphasis(text: &str, w: &[Word<'_>], in_table: bool) -> bool {
+    let label = lead_in(text);
     text.bytes().filter(|&b| b == b'!').count() >= 2
-        || fully_bold(text)
+        || !in_table && fully_bold(text)
         || w.iter().any(|x| {
             let t = x.text;
+            let off = offset(text, t);
             let caps = t.len() >= 4 && t.bytes().all(|b| b.is_ascii_uppercase());
-            (EMPHASIS.contains(&t) || caps && !ACRONYMS.contains(&t))
-                && !in_code(text, offset(text, t))
+            (EMPHASIS.contains(&t) || caps && !ACRONYMS.contains(&t) && off >= label)
+                && !in_code(text, off)
         })
 }
 
-/// `**Whole sentence.**` (or `__…__`), not `**a** and **b**`.
+/// `**Whole sentence.**` (or `__…__`), not `**a** and **b**` nor a `**Label:**`.
 fn fully_bold(text: &str) -> bool {
-    let t = text.trim_end_matches(['.', '!', '?', ':']);
+    let t = text.trim_end_matches(['.', '!', '?']);
     ["**", "__"].iter().any(|d| {
         t.len() > 2 * d.len()
             && t.starts_with(d)
             && t.ends_with(d)
             && t.get(d.len()..t.len() - d.len())
-                .is_some_and(|inner| !inner.contains(d))
+                .is_some_and(|inner| !inner.contains(d) && !inner.ends_with(':'))
     })
+}
+
+/// Byte length of a leading bold label (`**Term**:`, `**Term:**`), else 0.
+fn lead_in(text: &str) -> usize {
+    ["**", "__"]
+        .iter()
+        .find_map(|d| {
+            let inner = text.strip_prefix(d)?;
+            let close = inner.find(d)?;
+            let after = &inner[close + d.len()..];
+            (inner[..close].ends_with(':') || after.starts_with(':'))
+                .then(|| d.len() + close + d.len() + usize::from(after.starts_with(':')))
+        })
+        .unwrap_or(0)
 }
 
 /// Whether byte `off` of `text` is inside an inline code span.
@@ -462,6 +497,42 @@ mod tests {
         ] {
             assert!(!prohibits(s), "{s}");
         }
+    }
+
+    fn emphasized(s: &str, in_table: bool) -> bool {
+        let mut w = Vec::new();
+        words(s, &mut w);
+        emphasis(s, &w, in_table)
+    }
+
+    #[test]
+    fn structural_bold_is_not_emphasis() {
+        assert!(emphasized("**Never push to main.**", false));
+        assert!(emphasized("**Generate the manifest first**", false));
+        assert!(!emphasized("**Generate the manifest first**", true));
+        assert!(!emphasized("**Output (`INTEGRITY.json`):**", false));
+        assert!(!emphasized("**Output on tampered plugin**:", false));
+        assert!(!emphasized("**WARNING**: run the tests first.", false));
+        assert!(!emphasized("**Step 1:** Run the tests.", false));
+        assert!(emphasized("**Rule**: you MUST run the tests.", false));
+        assert!(emphasized("**Rule**: ALWAYS run the tests.", false));
+        assert!(emphasized("**IMPORTANT**: run the tests.", false));
+    }
+
+    #[test]
+    fn lists_after_a_colon_anchor() {
+        let s = "Use the appropriate evidence:\n\n- tests\n";
+        assert!(introduces_list(s, 29));
+        assert!(introduces_list("Pick a good name:\n| a | b |\n", 17));
+        assert!(!introduces_list(
+            "Use the appropriate evidence:\nTests help.\n",
+            29
+        ));
+        assert!(!introduces_list(
+            "Use the appropriate evidence.\n- tests\n",
+            29
+        ));
+        assert!(!introduces_list("Use good names: - x\n", 15));
     }
 
     #[test]

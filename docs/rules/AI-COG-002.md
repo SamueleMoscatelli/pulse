@@ -7,7 +7,7 @@
 
 ## What triggers it
 - A directive (a sentence with `always`, `must`, `should`, `never`, `avoid`, … or opening with a verb such as "Write", "Use", "Handle") that contains a vague term: "appropriate(ly)", "as needed", "properly", "best practices", "clean code", "etc.", "and so on", "some", "reasonable", "if necessary", "good", "nice".
-- Not reported when the same sentence has a concrete anchor: a number, a code span, a path or file name, or an example ("e.g.", "for example", "such as").
+- Not reported when the same sentence has a concrete anchor: a number, a code span, a path or file name, or an example ("e.g.", "for example", "such as"), or a list or table right after it when it ends in `:` ("Use the appropriate evidence for each resource:" followed by the list).
 - Descriptive sentences ("Some modules predate this guide") are not directives and are not checked.
 - With 3 or more hits in a file, one Low finding at the first hit lists the most frequent terms. With fewer, each hit is reported at Info.
 

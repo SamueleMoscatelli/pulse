@@ -63,11 +63,26 @@ pub const CURSOR_HOOK_EVENTS: &[&str] = &[
     "workspaceOpen",
 ];
 
+/// GitHub Copilot hook events (`.github/hooks/*.json`, `version: 1`).
+pub const COPILOT_HOOK_EVENTS: &[&str] = &[
+    "agentStop",
+    "errorOccurred",
+    "postToolUse",
+    "preToolUse",
+    "sessionEnd",
+    "sessionStart",
+    "subagentStop",
+    "userPromptSubmitted",
+];
+
 /// Claude Code hook handler `type`s.
 pub const CLAUDE_HOOK_TYPES: &[&str] = &["agent", "command", "http", "mcp_tool", "prompt"];
 
 /// Cursor hook `type`s.
 pub const CURSOR_HOOK_TYPES: &[&str] = &["command", "prompt"];
+
+/// GitHub Copilot hook `type`s.
+pub const COPILOT_HOOK_TYPES: &[&str] = &["command"];
 
 /// Claude Code built-in tools (permission rules, agent `tools`, command `allowed-tools`),
 /// including names still accepted from older releases (`Task`, `MultiEdit`, `LS`, …).
@@ -150,8 +165,30 @@ pub const COPILOT_TOOLS: &[&str] = &[
     "todo",
     "todos",
     "usages",
+    "vscode",
     "vscodeAPI",
     "web",
+];
+
+/// Copilot tool aliases (Claude Code and other agents' names for `execute`, `read`, `edit`,
+/// `search`, `agent`, `web`, `todo`); Copilot matches tool names case-insensitively (P8.7).
+pub const COPILOT_TOOL_ALIASES: &[&str] = &[
+    "bash",
+    "custom-agent",
+    "edit",
+    "glob",
+    "grep",
+    "multiedit",
+    "notebookedit",
+    "notebookread",
+    "powershell",
+    "read",
+    "shell",
+    "task",
+    "todowrite",
+    "webfetch",
+    "websearch",
+    "write",
 ];
 
 #[cfg(test)]
@@ -165,8 +202,10 @@ mod tests {
             CURSOR_HOOK_EVENTS,
             CLAUDE_HOOK_TYPES,
             CURSOR_HOOK_TYPES,
+            COPILOT_HOOK_EVENTS,
             CLAUDE_TOOLS,
             COPILOT_TOOLS,
+            COPILOT_TOOL_ALIASES,
         ] {
             assert!(list.windows(2).all(|w| w[0] < w[1]), "{list:?}");
         }
