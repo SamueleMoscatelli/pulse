@@ -217,7 +217,7 @@ pub fn skip_for(
 ) -> Option<Skip> {
     match origin {
         Origin::Custom => None,
-        Origin::Library | Origin::LibraryRow => Some(Skip::Library),
+        Origin::Library | Origin::LibraryRow | Origin::Power => Some(Skip::Library),
         Origin::Platform => loaded_by(rel_path, kind)
             .filter(|set| !set.intersects(only))
             .map(Skip::OtherAssistants),

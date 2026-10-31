@@ -229,6 +229,13 @@ impl Asset {
                 .and_then(Value::as_str)
                 .map_or(0, |d| tokens::estimate(d, self.calibration))
         };
+        // Library copies (ADR-041) and powers (ADR-054) add nothing to every session.
+        if matches!(
+            self.origin,
+            Origin::Library | Origin::LibraryRow | Origin::Power
+        ) {
+            return 0;
+        }
         if self.kiro_inclusion() == Some("auto") {
             return description();
         }
@@ -242,11 +249,12 @@ impl Asset {
         }
     }
 
-    /// Whether this is a discovered (Conditional) Kiro steering file.
+    /// Whether this is a discovered Kiro steering file: Conditional under `.kiro/steering/`,
+    /// or in a power's `steering/` (ADR-054).
     pub fn is_kiro_steering(&self) -> bool {
         self.kind == AssetKind::ScopedInstructions
-            && self.load == LoadMode::Conditional
-            && in_dir(&self.rel_path, ".kiro/steering/")
+            && (self.origin == Origin::Power
+                || self.load == LoadMode::Conditional && in_dir(&self.rel_path, ".kiro/steering/"))
     }
 
     /// The frontmatter `inclusion` of a Kiro steering file; `None` for other assets and

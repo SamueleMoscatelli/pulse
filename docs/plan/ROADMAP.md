@@ -74,7 +74,7 @@ Status source of truth for `/next-task`. Mark tasks only with `scripts/task.sh d
 - [x] P9.4 Kiro MCP config
 - [x] P9.5 Kiro hooks, legacy and current
 - [x] P9.6 Kiro custom agents, JSON and Markdown
-- [ ] P9.7 Kiro powers as libraries
+- [x] P9.7 Kiro powers as libraries
 - [ ] P9.8 Evaluation report and release
 
 ## Post-release follow-ups

@@ -1,0 +1,6 @@
+{
+  "enabled": true,
+  "name": "Scan on save",
+  "when": { "type": "fileEdited", "patterns": ["**/*.tf"] },
+  "then": { "type": "askAgent", "prompt": "Check the changed Terraform against the security pillar." }
+}

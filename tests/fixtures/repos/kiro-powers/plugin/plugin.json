@@ -1,0 +1,5 @@
+{
+  "name": "lint-power",
+  "description": "Lints the workspace before commits.",
+  "keywords": ["lint", "format"]
+}
