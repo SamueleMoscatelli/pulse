@@ -137,8 +137,8 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
         .iter()
         .filter(|a| opts.in_scope(&a.rel_path))
         .collect();
-    let window = config.context.window;
-    let metrics = score::metrics(&findings, &scoped, window);
+    let context = score::context_load(&scoped, config.context.window, config.budgets.always_on);
+    let metrics = score::metrics(&findings, &scoped, &context);
     let baseline = opts.baseline.clone();
     let is_new = |f: &Finding| baseline.as_ref().is_none_or(|b| b.is_new(f));
     let new_code = opts.new_only || config.gate.new_code_only;
@@ -147,7 +147,7 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
     } else {
         Vec::new()
     };
-    let new_metrics = new_code.then(|| score::metrics(&new, &scoped, window));
+    let new_metrics = new_code.then(|| score::metrics(&new, &scoped, &context));
     let (judged, judged_metrics) = match &new_metrics {
         Some(m) => (&new, m),
         None => (&findings, &metrics),
@@ -162,6 +162,7 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
         walk_errors: discovery.skipped,
         metrics,
         new_metrics,
+        context,
         ratings,
         gate,
         baseline,

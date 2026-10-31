@@ -6,6 +6,7 @@ use std::path::Path;
 use pulse_core::{Category, Finding, Severity};
 use pulse_engine::{GateStatus, Report};
 
+use crate::context::{self, Level};
 use crate::rel_path;
 use crate::terminal::{describe, pct, plural, tokens, upper};
 
@@ -37,10 +38,9 @@ pub fn render<W: Write + ?Sized>(
     let assets: usize = m.assets_by_kind.values().sum();
     writeln!(
         w,
-        "{} · {} tokens · {} always-on",
+        "{} · {} tokens",
         plural(assets, "asset", "assets"),
-        tokens(m.total_tokens),
-        tokens(m.always_on_tokens)
+        tokens(m.total_tokens)
     )?;
 
     if !report.gate.conditions.is_empty() {
@@ -59,6 +59,8 @@ pub fn render<W: Write + ?Sized>(
             )?;
         }
     }
+
+    context_block(w, report)?;
 
     writeln!(w)?;
     // In new-code mode, ratings (and the counts beside them) cover new findings only.
@@ -92,6 +94,8 @@ pub fn render<W: Write + ?Sized>(
         r.efficiency,
         pct(rm.context_debt)
     )?;
+    writeln!(w)?;
+    writeln!(w, "Context debt: {}.", context::DEBT_MEANING)?;
 
     writeln!(w)?;
     let levels = Severity::ALL.iter().rev();
@@ -115,6 +119,43 @@ pub fn render<W: Write + ?Sized>(
         .filter(|f| f.severity >= opts.min_severity)
         .collect();
     findings(w, &shown, report.findings.len() - shown.len(), opts)
+}
+
+/// The context-load block: headline with a status dot against the budget, a per-assistant
+/// table when several assistants are present, what always loads and what loads on demand.
+fn context_block<W: Write + ?Sized>(w: &mut W, report: &Report) -> io::Result<()> {
+    let c = &report.context;
+    let dot = match context::level(c) {
+        Level::Ok => "🟢",
+        Level::Near => "🟡",
+        Level::Over => "🔴",
+    };
+    writeln!(w)?;
+    writeln!(
+        w,
+        "**Context load** {dot} {} (budget {})",
+        context::headline(c),
+        tokens(c.budget)
+    )?;
+    if context::per_assistant_lines(c) {
+        writeln!(w)?;
+        writeln!(w, "| Assistant | Tokens on every request | Window |")?;
+        writeln!(w, "|---|--:|--:|")?;
+        for &(a, t) in &c.by_assistant {
+            let share = t as f64 / c.window.max(1) as f64;
+            writeln!(w, "| {a} | {} | {} |", tokens(t), pct(share))?;
+        }
+    }
+    writeln!(w)?;
+    writeln!(
+        w,
+        "- Always loaded: {}",
+        cell(&context::always_loaded(c, |p| format!("`{p}`")))
+    )?;
+    if c.on_demand_tokens > 0 {
+        writeln!(w, "- On demand: {}", context::on_demand(c))?;
+    }
+    Ok(())
 }
 
 /// Findings grouped by file, one collapsible `<details>` each (they arrive sorted by path).

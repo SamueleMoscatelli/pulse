@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use pulse_core::{AssetKind, Category, Finding, Rating, Severity};
+use pulse_core::{AssetKind, Assistant, Category, Finding, Rating, Severity};
 
 use crate::AssetMeta;
 
@@ -10,6 +10,7 @@ use crate::AssetMeta;
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Metrics {
     pub total_tokens: u64,
+    /// Always-on tokens of the assistant that loads the most (see [`ContextLoad`]).
     pub always_on_tokens: u64,
     /// Deduplicated EFF token waste over `total_tokens`, capped at 1.0.
     pub context_debt: f64,
@@ -19,6 +20,105 @@ pub struct Metrics {
     /// Findings of custom (`X-`) rules have no category and are not counted here.
     pub issues_by_category: BTreeMap<Category, usize>,
     pub assets_by_kind: BTreeMap<AssetKind, usize>,
+}
+
+/// What the assistants load on every request (spec 04-scoring-gate → Metrics, ADR-045).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ContextLoad {
+    /// Always-on tokens per assistant whose always-on assets are present, largest first.
+    pub by_assistant: Vec<(Assistant, u64)>,
+    /// The largest per-assistant total; the sum of all always-on tokens when no file names
+    /// an assistant.
+    pub always_on_tokens: u64,
+    /// What the largest assistant (or every one) loads, largest first.
+    pub contributors: Vec<Contributor>,
+    /// Tokens outside the always-on part: skill and agent bodies, prompts, scoped rules.
+    pub on_demand_tokens: u64,
+    /// `context.window`.
+    pub window: u64,
+    /// `budgets.always_on`.
+    pub budget: u64,
+}
+
+impl ContextLoad {
+    /// `always_on_tokens / window`, as a fraction (not capped).
+    pub fn ratio(&self) -> f64 {
+        self.always_on_tokens as f64 / self.window.max(1) as f64
+    }
+}
+
+/// One entry of the always-loaded list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Contributor {
+    pub source: Source,
+    pub tokens: u64,
+}
+
+/// A file, or the descriptions of every skill or agent, which are listed as one entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Source {
+    File(String),
+    SkillDescriptions(usize),
+    AgentDescriptions(usize),
+}
+
+/// Computes the [`ContextLoad`] of the in-scope assets.
+pub fn context_load(assets: &[&AssetMeta], window: u64, budget: u64) -> ContextLoad {
+    let always: Vec<(&AssetMeta, Option<pulse_core::AssistantSet>)> = assets
+        .iter()
+        .filter(|a| a.always_tokens > 0)
+        .map(|&a| (a, pulse_core::loaded_by(&a.rel_path, a.kind)))
+        .collect();
+    let (by_assistant, always_on_tokens) =
+        pulse_core::per_assistant(always.iter().map(|(a, s)| (*s, u64::from(a.always_tokens))));
+    let largest = by_assistant.first().map(|&(a, _)| a);
+    let (mut skills, mut agents) = ((0, 0), (0, 0));
+    let mut contributors = Vec::new();
+    for (a, set) in &always {
+        if largest.is_some_and(|l| set.is_some_and(|s| !s.contains(l))) {
+            continue;
+        }
+        let tokens = u64::from(a.always_tokens);
+        match a.kind {
+            AssetKind::Skill => skills = (skills.0 + 1, skills.1 + tokens),
+            AssetKind::Agent => agents = (agents.0 + 1, agents.1 + tokens),
+            _ => contributors.push(Contributor {
+                source: Source::File(a.rel_path.clone()),
+                tokens,
+            }),
+        }
+    }
+    for ((n, tokens), source) in [
+        (skills, Source::SkillDescriptions as fn(usize) -> Source),
+        (agents, Source::AgentDescriptions),
+    ] {
+        if n > 0 {
+            contributors.push(Contributor {
+                source: source(n),
+                tokens,
+            });
+        }
+    }
+    // Largest first; ties keep files (sorted by path) before the description groups.
+    contributors.sort_by_key(|c| std::cmp::Reverse(c.tokens));
+    let on_demand_tokens = assets
+        .iter()
+        .filter(|a| {
+            !matches!(
+                a.kind,
+                AssetKind::McpConfig | AssetKind::Settings | AssetKind::Hooks
+            )
+        })
+        .map(|a| u64::from(a.tokens.saturating_sub(a.always_tokens)))
+        .sum();
+    ContextLoad {
+        by_assistant,
+        always_on_tokens,
+        contributors,
+        on_demand_tokens,
+        window,
+        budget,
+    }
 }
 
 /// Sonar-style ratings per dimension.
@@ -42,14 +142,13 @@ impl Default for Ratings {
 }
 
 /// Computes [`Metrics`] from open findings and the scanned assets.
-pub fn metrics(findings: &[Finding], assets: &[&AssetMeta], window: u64) -> Metrics {
+pub fn metrics(findings: &[Finding], assets: &[&AssetMeta], load: &ContextLoad) -> Metrics {
     let total_tokens: u64 = assets.iter().map(|a| u64::from(a.tokens)).sum();
-    let always_on_tokens: u64 = assets.iter().map(|a| u64::from(a.always_tokens)).sum();
     let mut m = Metrics {
         total_tokens,
-        always_on_tokens,
+        always_on_tokens: load.always_on_tokens,
         context_debt: context_debt(findings, total_tokens),
-        context_load: always_on_tokens as f64 / window.max(1) as f64,
+        context_load: load.ratio(),
         ..Metrics::default()
     };
     for f in findings {
@@ -331,7 +430,8 @@ mod tests {
             finding("AI-SEC-001", Severity::High, "a", [1, 1, 1, 2]),
             finding("X-ACME-001", Severity::High, "a", [1, 1, 1, 2]),
         ];
-        let m = metrics(&findings, &assets.iter().collect::<Vec<_>>(), 200_000);
+        let scoped: Vec<&AssetMeta> = assets.iter().collect();
+        let m = metrics(&findings, &scoped, &context_load(&scoped, 200_000, 8000));
         assert_eq!(m.total_tokens, 5000);
         assert_eq!(m.always_on_tokens, 1050);
         assert!((m.context_debt - 0.05).abs() < 1e-12);
@@ -348,5 +448,67 @@ mod tests {
             m.assets_by_kind,
             BTreeMap::from([(AssetKind::Instructions, 1), (AssetKind::Skill, 2)])
         );
+    }
+
+    fn at(rel: &str, kind: AssetKind, tokens: u32, always_tokens: u32) -> AssetMeta {
+        AssetMeta {
+            rel_path: rel.to_owned(),
+            ..asset(kind, tokens, always_tokens)
+        }
+    }
+
+    #[test]
+    fn context_load_uses_the_largest_assistant() {
+        let assets = [
+            at("AGENTS.md", AssetKind::Instructions, 300, 300),
+            at("CLAUDE.md", AssetKind::Instructions, 100, 100),
+            at(".claude/skills/a/SKILL.md", AssetKind::Skill, 500, 20),
+            at(".claude/skills/b/SKILL.md", AssetKind::Skill, 500, 30),
+            at(".github/prompts/p.prompt.md", AssetKind::Prompt, 70, 0),
+            at("agent.tools.json", AssetKind::Tools, 5, 5),
+            at(".mcp.json", AssetKind::McpConfig, 40, 0),
+        ];
+        let scoped: Vec<&AssetMeta> = assets.iter().collect();
+        let load = context_load(&scoped, 1000, 8000);
+        use pulse_core::Assistant::*;
+        assert_eq!(
+            load.by_assistant,
+            vec![
+                (Copilot, 455),
+                (Cursor, 305),
+                (Windsurf, 305),
+                (Codex, 305),
+                (ClaudeCode, 155)
+            ]
+        );
+        assert_eq!(load.always_on_tokens, 455);
+        assert!((load.ratio() - 0.455).abs() < 1e-12);
+        assert_eq!(load.on_demand_tokens, 950 + 70);
+        let list: Vec<(Source, u64)> = load
+            .contributors
+            .into_iter()
+            .map(|c| (c.source, c.tokens))
+            .collect();
+        assert_eq!(
+            list,
+            vec![
+                (Source::File("AGENTS.md".into()), 300),
+                (Source::File("CLAUDE.md".into()), 100),
+                (Source::SkillDescriptions(2), 50),
+                (Source::File("agent.tools.json".into()), 5),
+            ]
+        );
+    }
+
+    #[test]
+    fn context_load_without_named_assistants_sums_everything() {
+        let assets = [
+            at("agent.tools.json", AssetKind::Tools, 5, 5),
+            at(".claude/commands/c.md", AssetKind::Prompt, 70, 0),
+        ];
+        let scoped: Vec<&AssetMeta> = assets.iter().collect();
+        let load = context_load(&scoped, 1000, 8000);
+        assert!(load.by_assistant.is_empty());
+        assert_eq!((load.always_on_tokens, load.on_demand_tokens), (5, 70));
     }
 }

@@ -1,0 +1,23 @@
+---
+source: crates/pulse-report/tests/terminal.rs
+expression: "render(\"ondemand\", false, false)"
+---
+ Pulse 1.0.0 · 2 assets · 71 tokens · 8 ms
+
+ QUALITY GATE   PASSED
+   ✔ severity ≥ high        0 issues   (allowed 0)
+   ✔ context debt           0%         (max 10%)
+
+ CONTEXT LOAD   0 tokens on every request · 0% of a 200k window
+   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0%   (budget 8k)
+   Always loaded   nothing: no always-on instructions, skills or agents
+   On demand       71 tokens in skills, agents, prompts and scoped rules, loaded only when used
+
+   Security      A   0 vulnerabilities
+   Reliability   A   0 bugs
+   Clarity       A   0 smells
+   Efficiency    A   context debt 0% · share of tokens that is avoidable waste (duplicates, filler, over-budget excess)
+
+   CRITICAL 0   HIGH 0   MEDIUM 0   LOW 0   INFO 0
+
+ No issues found.

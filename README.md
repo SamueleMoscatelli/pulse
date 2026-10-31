@@ -62,11 +62,22 @@ $ pulse scan
    ✖ severity ≥ high        1 issue    (allowed 0)
    ✔ context debt           0%         (max 10%)
 
+ CONTEXT LOAD   54 tokens on every request · 0% of a 200k window
+   █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0%   (budget 8k)
+   Copilot         54      0%
+   Claude Code     48      0%
+   Cursor          35      0%
+   Windsurf        35      0%
+   Cline           32      0%
+   Gemini CLI      32      0%
+   Codex           32      0%
+   Always loaded   agent.tools.json 15 · tools/fetch.json 14 · 3 agent descriptions 7 · CLAUDE.md 6 · … (Copilot)
+   On demand       90 tokens in skills, agents, prompts and scoped rules, loaded only when used
+
    Security      A   0 vulnerabilities
    Reliability   D   1 bug
    Clarity       C   4 smells
-   Efficiency    A   context debt 0%
-   Context load      70 always-on tokens · 0% of 200k window
+   Efficiency    A   context debt 0% · share of tokens that is avoidable waste (duplicates, filler, over-budget excess)
 
    CRITICAL 0   HIGH 1   MEDIUM 4   LOW 0   INFO 0
 
@@ -89,6 +100,30 @@ can be suppressed inline, with a reason:
 ```markdown
 <!-- pulse-ignore AI-COG-004 -- the emphasis is intentional here -->
 ```
+
+## Metrics
+
+**Context load** is what the assistant receives on every request, before your prompt: root
+instructions (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`, …), rules applied to
+every file, tool definitions, and the name and description of every skill and agent (their
+bodies load only when used). It matters because it is paid on every turn: it costs money, adds
+latency, leaves less of the window for the task itself, and dilutes the instructions that count
+among the ones that don't. Each assistant loads its own files, so Pulse adds them up per
+assistant (one line each when they differ) and judges the largest; the bar is colored against
+`budgets.always_on` (8k tokens by default), which AI-EFF-002 enforces. "On demand" is the
+rest: skill and agent bodies, prompts and scoped rules, loaded only when a request needs them.
+
+**Context debt** is the share of tokens that is avoidable waste: the token waste of open
+efficiency findings (duplicated content, filler phrasing, the excess over a budget) divided by
+the total tokens of all scanned assets. Overlapping waste counts once.
+
+**Ratings** go from A (best) to E. Security, Reliability (structure) and Clarity (cognitive)
+take the worst open severity in their category (none or info A, low B, medium C, high D,
+critical E); Efficiency follows context debt (≤ 5% A, ≤ 10% B, ≤ 20% C, ≤ 50% D, else E).
+
+**The Quality Gate** passes when every condition holds; by default no open finding of severity
+high or above, and context debt at most 10%. `[gate]` in `pulse.toml` can add minimum ratings
+and a cap on always-on tokens. `pulse ci` exits with 1 when the gate fails.
 
 ## Install
 

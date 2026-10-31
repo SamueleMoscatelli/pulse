@@ -10,4 +10,8 @@ expression: "render(\"mixed\")"
 Pulse Quality Gate: FAILED
   ✖ severity ≥ high: 1 issue (allowed 0)
   ✔ context debt: 0% (max 10%)
+  Context load: 54 tokens on every request · 0% of a 200k window (budget 8k)
+    By assistant: Copilot 54 · Claude Code 48 · Cursor 35 · Windsurf 35 · Cline 32 · Gemini CLI 32 · Codex 32
+    Always loaded: agent.tools.json 15 · tools/fetch.json 14 · 3 agent descriptions 7 · CLAUDE.md 6 · … (Copilot)
+    On demand: 90 tokens in skills, agents, prompts and scoped rules, loaded only when used
   CRITICAL 0   HIGH 1   MEDIUM 4   LOW 0   INFO 0

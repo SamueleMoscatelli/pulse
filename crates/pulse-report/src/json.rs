@@ -4,7 +4,7 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use pulse_core::{Category, Finding, Rating, Severity};
+use pulse_core::{Assistant, Category, Finding, Rating, Severity};
 use pulse_engine::{GateStatus, GateValue, Report, category_of};
 use serde::Serialize;
 
@@ -92,11 +92,20 @@ struct Metrics {
     total_tokens: u64,
     always_on_tokens: u64,
     context_load: f64,
+    /// Always-on tokens of each assistant whose files are present, largest first (ADR-045).
+    context_load_by_assistant: Vec<AssistantLoad>,
     context_debt: f64,
     issues: Issues,
     /// Issues of new findings, in new-code mode only (ratings and gate use these).
     #[serde(skip_serializing_if = "Option::is_none")]
     new_issues: Option<Issues>,
+}
+
+#[derive(Serialize)]
+struct AssistantLoad {
+    assistant: Assistant,
+    always_on_tokens: u64,
+    context_load: f64,
 }
 
 #[derive(Serialize)]
@@ -180,6 +189,16 @@ pub fn render<W: Write + ?Sized>(
             total_tokens: m.total_tokens,
             always_on_tokens: m.always_on_tokens,
             context_load: m.context_load,
+            context_load_by_assistant: report
+                .context
+                .by_assistant
+                .iter()
+                .map(|&(assistant, t)| AssistantLoad {
+                    assistant,
+                    always_on_tokens: t,
+                    context_load: t as f64 / report.context.window.max(1) as f64,
+                })
+                .collect(),
             context_debt: m.context_debt,
             issues: issues(m),
             new_issues: report.new_metrics.as_ref().map(issues),

@@ -55,3 +55,15 @@ fn markdown_caps_findings_at_fifty() {
     assert_eq!(rows, 50);
     assert!(out.contains("\n+10 more\n"), "{out}");
 }
+
+#[test]
+fn markdown_nothing_always_on() {
+    let root = repo("ondemand");
+    insta::assert_snapshot!(render(&root, &report(&root), Severity::Info));
+}
+
+#[test]
+fn markdown_one_assistant() {
+    let root = repo("single");
+    insta::assert_snapshot!(render(&root, &report(&root), Severity::Info));
+}

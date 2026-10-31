@@ -6,7 +6,9 @@ use std::path::Path;
 use pulse_core::Severity;
 use pulse_engine::{GateStatus, Report};
 
+use crate::context;
 use crate::rel_path;
+use crate::terminal::tokens;
 use crate::terminal::{describe, upper};
 
 /// How to render a [`Report`] as GitHub Actions annotations.
@@ -55,6 +57,29 @@ pub fn render<W: Write + ?Sized>(
         let (label, actual, limit) = describe(cond, report);
         let mark = if cond.passed { "✔" } else { "✖" };
         writeln!(w, "  {mark} {label}: {actual} ({limit})")?;
+    }
+    let c = &report.context;
+    writeln!(
+        w,
+        "  Context load: {} (budget {})",
+        context::headline(c),
+        tokens(c.budget)
+    )?;
+    if context::per_assistant_lines(c) {
+        let each: Vec<String> = c
+            .by_assistant
+            .iter()
+            .map(|&(a, t)| format!("{a} {}", tokens(t)))
+            .collect();
+        writeln!(w, "    By assistant: {}", each.join(" · "))?;
+    }
+    writeln!(
+        w,
+        "    Always loaded: {}",
+        context::always_loaded(c, str::to_owned)
+    )?;
+    if c.on_demand_tokens > 0 {
+        writeln!(w, "    On demand: {}", context::on_demand(c))?;
     }
     let m = &report.metrics;
     let counts: Vec<String> = Severity::ALL

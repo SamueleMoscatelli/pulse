@@ -4,16 +4,23 @@ expression: "render(&root, &report(&root), Severity::Info)"
 ---
 ## Pulse Quality Gate: ✅ PASSED
 
-2 assets · 107 tokens · 69 always-on
+2 assets · 107 tokens
 
 | | Condition | Actual | Limit |
 |:-:|---|---|---|
 | ✅ | severity ≥ high | 0 issues | allowed 0 |
 | ✅ | context debt | 0% | max 10% |
 
+**Context load** 🟢 69 tokens on every request · 0% of a 200k window (budget 8k)
+
+- Always loaded: `CLAUDE.md` 69 (Copilot, Claude Code)
+- On demand: 38 tokens in skills, agents, prompts and scoped rules, loaded only when used
+
 | Security | Reliability | Clarity | Efficiency |
 |:-:|:-:|:-:|:-:|
 | **A** 0 vulnerabilities | **A** 0 bugs | **A** 0 smells | **A** context debt 0% |
+
+Context debt: share of tokens that is avoidable waste (duplicates, filler, over-budget excess).
 
 | CRITICAL | HIGH | MEDIUM | LOW | INFO |
 |:-:|:-:|:-:|:-:|:-:|

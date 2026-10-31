@@ -8,6 +8,7 @@ use anstyle::{Ansi256Color, AnsiColor, Color, Style};
 use pulse_core::{Finding, Rating, Severity};
 use pulse_engine::{Condition, GateStatus, GateValue, Report};
 
+use crate::context::{self, Level};
 use crate::rel_path;
 
 /// How to render a [`Report`] for the terminal.
@@ -23,14 +24,13 @@ pub struct TerminalOptions<'a> {
     pub verbose: bool,
     /// Hide findings below this severity (display only).
     pub min_severity: Severity,
-    /// `context.window`, for the context-load line.
-    pub window: u64,
 }
 
 const BOLD: Style = Style::new().bold();
 const DIM: Style = Style::new().dimmed();
 const GREEN: Style = fg(Color::Ansi(AnsiColor::Green));
 const RED: Style = fg(Color::Ansi(AnsiColor::Red));
+const YELLOW: Style = fg(Color::Ansi(AnsiColor::Yellow));
 
 const fn fg(c: Color) -> Style {
     Style::new().fg_color(Some(c))
@@ -120,6 +120,7 @@ pub fn render<W: Write + ?Sized>(
         };
         writeln!(w, "   {mark} {label:<23}{actual:<11}({limit})")?;
     }
+    context_block(w, report, p)?;
 
     writeln!(w)?;
     // In new-code mode, ratings (and the counts beside them) cover new findings only.
@@ -155,7 +156,11 @@ pub fn render<W: Write + ?Sized>(
         (
             "Efficiency",
             r.efficiency,
-            format!("context debt {}", pct(rm.context_debt)),
+            format!(
+                "context debt {} · {}",
+                pct(rm.context_debt),
+                context::DEBT_MEANING
+            ),
         ),
     ];
     for (name, rating, detail) in dims {
@@ -165,14 +170,6 @@ pub fn render<W: Write + ?Sized>(
             p.paint(rating_style(rating), rating)
         )?;
     }
-    writeln!(
-        w,
-        "   {:<18}{} always-on tokens · {} of {} window",
-        "Context load",
-        tokens(m.always_on_tokens),
-        pct(m.context_load),
-        tokens(opts.window)
-    )?;
 
     writeln!(w)?;
     let counts: Vec<String> = Severity::ALL
@@ -208,6 +205,49 @@ pub fn render<W: Write + ?Sized>(
             p.paint(DIM, "↳"),
             plural(shown.len(), "finding", "findings")
         )?;
+    }
+    Ok(())
+}
+
+/// The CONTEXT LOAD block: headline, bar against the budget, per-assistant totals when
+/// several assistants are present, what always loads and what loads on demand.
+fn context_block<W: Write + ?Sized>(w: &mut W, report: &Report, p: Painter) -> io::Result<()> {
+    let c = &report.context;
+    writeln!(w)?;
+    writeln!(
+        w,
+        " {}   {}",
+        p.paint(BOLD, "CONTEXT LOAD"),
+        context::headline(c)
+    )?;
+    let style = match context::level(c) {
+        Level::Ok => GREEN,
+        Level::Near => YELLOW,
+        Level::Over => RED,
+    };
+    let filled = context::filled(c);
+    writeln!(
+        w,
+        "   {}{} {}   (budget {})",
+        p.paint(style, "█".repeat(filled)),
+        p.paint(DIM, "░".repeat(context::BAR - filled)),
+        pct(c.ratio()),
+        tokens(c.budget)
+    )?;
+    if context::per_assistant_lines(c) {
+        for &(a, t) in &c.by_assistant {
+            let share = t as f64 / c.window.max(1) as f64;
+            writeln!(w, "   {:<16}{:<8}{}", a.name(), tokens(t), pct(share))?;
+        }
+    }
+    writeln!(
+        w,
+        "   {:<16}{}",
+        "Always loaded",
+        context::always_loaded(c, str::to_owned)
+    )?;
+    if c.on_demand_tokens > 0 {
+        writeln!(w, "   {:<16}{}", "On demand", context::on_demand(c))?;
     }
     Ok(())
 }

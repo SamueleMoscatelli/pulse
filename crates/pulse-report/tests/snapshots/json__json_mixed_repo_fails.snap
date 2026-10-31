@@ -36,8 +36,45 @@ expression: "render(\"mixed\", Severity::Info)"
   "metrics": {
     "assets": 33,
     "total_tokens": 204,
-    "always_on_tokens": 70,
-    "context_load": 0.00035,
+    "always_on_tokens": 54,
+    "context_load": 0.00027,
+    "context_load_by_assistant": [
+      {
+        "assistant": "copilot",
+        "always_on_tokens": 54,
+        "context_load": 0.00027
+      },
+      {
+        "assistant": "claude_code",
+        "always_on_tokens": 48,
+        "context_load": 0.00024
+      },
+      {
+        "assistant": "cursor",
+        "always_on_tokens": 35,
+        "context_load": 0.000175
+      },
+      {
+        "assistant": "windsurf",
+        "always_on_tokens": 35,
+        "context_load": 0.000175
+      },
+      {
+        "assistant": "cline",
+        "always_on_tokens": 32,
+        "context_load": 0.00016
+      },
+      {
+        "assistant": "gemini_cli",
+        "always_on_tokens": 32,
+        "context_load": 0.00016
+      },
+      {
+        "assistant": "codex",
+        "always_on_tokens": 32,
+        "context_load": 0.00016
+      }
+    ],
     "context_debt": 0.0,
     "issues": {
       "critical": 0,

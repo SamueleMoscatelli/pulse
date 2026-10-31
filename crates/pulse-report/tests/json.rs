@@ -59,3 +59,28 @@ fn json_min_severity_filters_findings_not_metrics() {
             .all(|s| s == "high" || s == "critical")
     );
 }
+
+#[test]
+fn json_context_load_by_assistant() {
+    let by = |name: &str| {
+        let v: serde_json::Value = serde_json::from_str(&render(name, Severity::Info)).unwrap();
+        v["metrics"]["context_load_by_assistant"].clone()
+    };
+    // One assistant: still listed. Nothing always-on: empty.
+    let clean = by("clean");
+    assert_eq!(clean.as_array().unwrap().len(), 2, "{clean}");
+    assert_eq!(by("ondemand"), serde_json::json!([]));
+    let mixed: serde_json::Value = serde_json::from_str(&render("mixed", Severity::Info)).unwrap();
+    let m = &mixed["metrics"];
+    let list = m["context_load_by_assistant"].as_array().unwrap();
+    assert_eq!(list.len(), 7, "{list:?}");
+    // Largest first; the top-level numbers are the largest assistant's.
+    assert_eq!(list[0]["assistant"], "copilot");
+    assert_eq!(list[0]["always_on_tokens"], m["always_on_tokens"]);
+    assert_eq!(list[0]["context_load"], m["context_load"]);
+    let tokens: Vec<u64> = list
+        .iter()
+        .map(|e| e["always_on_tokens"].as_u64().unwrap())
+        .collect();
+    assert!(tokens.windows(2).all(|w| w[0] >= w[1]), "{tokens:?}");
+}
