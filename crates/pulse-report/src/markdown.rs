@@ -125,26 +125,30 @@ pub fn render<W: Write + ?Sized>(
 /// table when several assistants are present, what always loads and what loads on demand.
 fn context_block<W: Write + ?Sized>(w: &mut W, report: &Report) -> io::Result<()> {
     let c = &report.context;
-    let dot = match context::level(c) {
-        Level::Ok => "🟢",
-        Level::Near => "🟡",
-        Level::Over => "🔴",
-    };
     writeln!(w)?;
     writeln!(
         w,
-        "**Context load** {dot} {} (budget {})",
-        context::headline(c),
-        tokens(c.budget)
+        "**Context load** (always-on context): {}",
+        context::MEANING
     )?;
-    if context::per_assistant_lines(c) {
-        writeln!(w)?;
-        writeln!(w, "| Assistant | Tokens on every request | Window |")?;
-        writeln!(w, "|---|--:|--:|")?;
-        for &(a, t) in &c.by_assistant {
-            let share = t as f64 / c.window.max(1) as f64;
-            writeln!(w, "| {a} | {} | {} |", tokens(t), pct(share))?;
-        }
+    writeln!(w)?;
+    let (window_h, budget_h) = context::share_headers(c);
+    writeln!(w, "| Assistant | Tokens | {window_h} | {budget_h} |")?;
+    writeln!(w, "|---|--:|--:|--:|")?;
+    for (name, t) in context::rows(c) {
+        let dot = match context::level(t, c.budget) {
+            Level::Ok => "🟢",
+            Level::Near => "🟡",
+            Level::Over => "🔴",
+        };
+        let (of_window, of_budget) = context::shares(c, t);
+        writeln!(
+            w,
+            "| {dot} {name} | {} | {} | {} |",
+            tokens(t),
+            pct(of_window),
+            pct(of_budget)
+        )?;
     }
     writeln!(w)?;
     writeln!(
@@ -154,6 +158,14 @@ fn context_block<W: Write + ?Sized>(w: &mut W, report: &Report) -> io::Result<()
     )?;
     if c.on_demand_tokens > 0 {
         writeln!(w, "- On demand: {}", context::on_demand(c))?;
+    }
+    writeln!(
+        w,
+        "- Budget: {}; 🟡 above 75% of it, 🔴 above it.",
+        context::budget(c)
+    )?;
+    if let (Some(scope), Some(left_out)) = (context::scope(report), context::not_loaded(report)) {
+        writeln!(w, "- Scope: {scope}. {left_out}.")?;
     }
     Ok(())
 }

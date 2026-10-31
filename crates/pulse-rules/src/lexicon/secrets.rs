@@ -129,9 +129,12 @@ pub fn plausible(shape: Shape, secret: &str) -> bool {
     }
 }
 
-/// Calls, indexing and dotted paths (`config.get_key()`, `settings.SECRET_KEY`).
+/// Calls, indexing, dotted paths (`config.get_key()`, `settings.SECRET_KEY`), URLs and
+/// word paths (`Desktop/Title/H1`; base64 segments like `K7MDENG` don't qualify).
 fn code_like(s: &str) -> bool {
     s.contains(['(', ')', '[', ']'])
+        || s.contains("://")
+        || (s.contains('/') && s.split('/').all(word_segment))
         || (s.contains('.')
             && s.split('.').all(|part| {
                 part.chars()
@@ -139,6 +142,15 @@ fn code_like(s: &str) -> bool {
                     .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
                     && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
             }))
+}
+
+/// A word with an optional capital and trailing digits: `Desktop`, `H1`, `v2`.
+fn word_segment(seg: &str) -> bool {
+    let rest = seg
+        .strip_prefix(|c: char| c.is_ascii_uppercase())
+        .unwrap_or(seg);
+    let digits = rest.trim_start_matches(|c: char| c.is_ascii_lowercase());
+    digits.len() < seg.len() && digits.bytes().all(|b| b.is_ascii_digit())
 }
 
 /// The most frequent byte makes up at least half of `s` (e.g. `sk-aaaaaaaaaaaaaaaaaaaa`).
@@ -194,10 +206,17 @@ mod tests {
             "settings.SECRET_KEY2",
             "os.environ[KEY]",
             "rotatedmonthly",
+            "https://login.example.org/oauth2/v2.0/token",
+            "Desktop/Title/H1",
         ] {
             assert!(!plausible(Shape::Assignment, code), "{code}");
         }
         assert!(plausible(Shape::Assignment, "q7Zp2LmX9vRk4TnB"));
         assert!(plausible(Shape::Assignment, "3f9a1c07be524d8e"));
+        // Base64 with slashes is not a word path.
+        assert!(plausible(
+            Shape::Assignment,
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCY9z"
+        ));
     }
 }

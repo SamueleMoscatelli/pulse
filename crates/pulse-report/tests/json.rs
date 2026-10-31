@@ -84,3 +84,42 @@ fn json_context_load_by_assistant() {
         .collect();
     assert!(tokens.windows(2).all(|w| w[0] >= w[1]), "{tokens:?}");
 }
+
+#[test]
+fn json_scope_only_with_an_assistant_selection() {
+    let all: serde_json::Value = serde_json::from_str(&render("mixed", Severity::Info)).unwrap();
+    assert!(all.get("scope").is_none());
+
+    let root = repo("mixed");
+    let config = Config::load(&root, None).unwrap();
+    let opts = ScanOptions {
+        assistants: Some([pulse_core::Assistant::Copilot].into_iter().collect()),
+        ..ScanOptions::default()
+    };
+    let report = scan(&root, &config, &opts).unwrap();
+    let opts = JsonOptions {
+        root: &root,
+        min_severity: Severity::Info,
+        generated_at: UNIX_EPOCH,
+    };
+    let mut out = Vec::new();
+    render_json(&mut out, &report, &opts).unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
+    let scope = &v["scope"];
+    assert_eq!(scope["assistants"], serde_json::json!(["copilot"]));
+    let style = scope["not_loaded"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["path"] == ".cursor/rules/style.mdc")
+        .unwrap();
+    assert_eq!(
+        style,
+        &serde_json::json!({
+            "path": ".cursor/rules/style.mdc",
+            "kind": "scoped_instructions",
+            "reason": "other_assistants",
+            "loaded_by": ["cursor"]
+        })
+    );
+}

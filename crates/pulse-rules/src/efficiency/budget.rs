@@ -112,8 +112,10 @@ impl ProjectRule for AlwaysOnBudget {
             .iter()
             .map(|c| pulse_core::loaded_by(&c.2.rel_path, c.2.kind))
             .collect();
-        let (by_assistant, total) =
-            pulse_core::per_assistant(sets.iter().zip(&top).map(|(s, c)| (*s, u64::from(c.0))));
+        let (by_assistant, total) = pulse_core::per_assistant(
+            sets.iter().zip(&top).map(|(s, c)| (*s, u64::from(c.0))),
+            None,
+        );
         if total <= budget {
             return;
         }

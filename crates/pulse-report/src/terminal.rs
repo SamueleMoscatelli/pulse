@@ -24,6 +24,9 @@ pub struct TerminalOptions<'a> {
     pub verbose: bool,
     /// Hide findings below this severity (display only).
     pub min_severity: Severity,
+    /// Terminal width: long messages and fixes wrap under their own column. `None` keeps
+    /// one line per finding (pipes, files).
+    pub width: Option<usize>,
 }
 
 const BOLD: Style = Style::new().bold();
@@ -88,6 +91,7 @@ pub fn render<W: Write + ?Sized>(
         report.timings.total.as_millis()
     )?;
 
+    scope_block(w, report, p, opts)?;
     writeln!(w)?;
     let (status, style) = match report.gate.status {
         GateStatus::Passed => (
@@ -120,7 +124,7 @@ pub fn render<W: Write + ?Sized>(
         };
         writeln!(w, "   {mark} {label:<23}{actual:<11}({limit})")?;
     }
-    context_block(w, report, p)?;
+    context_block(w, report, p, opts.width)?;
 
     writeln!(w)?;
     // In new-code mode, ratings (and the counts beside them) cover new findings only.
@@ -166,8 +170,9 @@ pub fn render<W: Write + ?Sized>(
     for (name, rating, detail) in dims {
         writeln!(
             w,
-            "   {name:<14}{}   {detail}",
-            p.paint(rating_style(rating), rating)
+            "   {name:<14}{}   {}",
+            p.paint(rating_style(rating), rating),
+            wrap(&detail, 21, opts.width)
         )?;
     }
 
@@ -198,56 +203,144 @@ pub fn render<W: Write + ?Sized>(
     findings(w, &shown, report.findings.len() - shown.len(), opts)?;
     if fixes_hidden {
         writeln!(w)?;
-        writeln!(
-            w,
-            " {} Fixes shown for medium and higher findings. Run with -v to see fixes for all {}, \
+        let note = format!(
+            "Fixes shown for medium and higher findings. Run with -v to see fixes for all {}, \
              or `pulse explain <RULE-ID>` for a rule's full guidance.",
-            p.paint(DIM, "↳"),
             plural(shown.len(), "finding", "findings")
-        )?;
+        );
+        writeln!(w, " {} {}", p.paint(DIM, "↳"), wrap(&note, 3, opts.width))?;
     }
     Ok(())
 }
 
-/// The CONTEXT LOAD block: headline, bar against the budget, per-assistant totals when
-/// several assistants are present, what always loads and what loads on demand.
-fn context_block<W: Write + ?Sized>(w: &mut W, report: &Report, p: Painter) -> io::Result<()> {
+/// The CONTEXT LOAD block: what it measures, one bar per assistant (share of the window,
+/// colored against the budget) with its tokens and shares, what always loads, what loads on
+/// demand, and what the budget is.
+fn context_block<W: Write + ?Sized>(
+    w: &mut W,
+    report: &Report,
+    p: Painter,
+    width: Option<usize>,
+) -> io::Result<()> {
     let c = &report.context;
     writeln!(w)?;
     writeln!(
         w,
         " {}   {}",
         p.paint(BOLD, "CONTEXT LOAD"),
-        context::headline(c)
+        wrap(
+            &format!("Always-on context: {}", context::MEANING),
+            16,
+            width
+        )
     )?;
-    let style = match context::level(c) {
-        Level::Ok => GREEN,
-        Level::Near => YELLOW,
-        Level::Over => RED,
-    };
-    let filled = context::filled(c);
-    writeln!(
-        w,
-        "   {}{} {}   (budget {})",
-        p.paint(style, "█".repeat(filled)),
-        p.paint(DIM, "░".repeat(context::BAR - filled)),
-        pct(c.ratio()),
-        tokens(c.budget)
-    )?;
-    if context::per_assistant_lines(c) {
-        for &(a, t) in &c.by_assistant {
-            let share = t as f64 / c.window.max(1) as f64;
-            writeln!(w, "   {:<16}{:<8}{}", a.name(), tokens(t), pct(share))?;
-        }
+    let (window_h, budget_h) = context::share_headers(c);
+    // On narrow terminals the bar gives way first.
+    let bar = width.map_or(context::BAR, |w| {
+        w.saturating_sub(ROW_WITHOUT_BAR)
+            .clamp(context::BAR / 2, context::BAR)
+    });
+    let header = format!(
+        "{:<16}{:<bar$}   {:>6}{:>16}{:>14}",
+        "", "", "tokens", window_h, budget_h
+    );
+    writeln!(w, "   {}", p.paint(DIM, header.trim_end()))?;
+    for (name, t) in context::rows(c) {
+        let style = match context::level(t, c.budget) {
+            Level::Ok => GREEN,
+            Level::Near => YELLOW,
+            Level::Over => RED,
+        };
+        let filled = context::filled(t, c.window, bar);
+        let (of_window, of_budget) = context::shares(c, t);
+        writeln!(
+            w,
+            "   {name:<16}{}{}   {:>6}{:>16}{:>14}",
+            p.paint(style, "█".repeat(filled)),
+            p.paint(DIM, "░".repeat(bar - filled)),
+            tokens(t),
+            pct(of_window),
+            pct(of_budget)
+        )?;
     }
     writeln!(
         w,
         "   {:<16}{}",
         "Always loaded",
-        context::always_loaded(c, str::to_owned)
+        wrap(&context::always_loaded(c, str::to_owned), 19, width)
     )?;
     if c.on_demand_tokens > 0 {
-        writeln!(w, "   {:<16}{}", "On demand", context::on_demand(c))?;
+        writeln!(
+            w,
+            "   {:<16}{}",
+            "On demand",
+            wrap(&context::on_demand(c), 19, width)
+        )?;
+    }
+    writeln!(
+        w,
+        "   {:<16}{}",
+        "Budget",
+        wrap(
+            &format!(
+                "{}. Bars show the share of the {} context window; they turn yellow above 75% \
+                 of the budget and red above it.",
+                context::budget(c),
+                tokens(c.window)
+            ),
+            19,
+            width
+        )
+    )?;
+    Ok(())
+}
+
+/// Width of a CONTEXT LOAD row without its bar: indent 3, name 16, gap 3, then the
+/// tokens (6), window (16) and budget (14) columns of the `{:>6}{:>16}{:>14}` formats.
+const ROW_WITHOUT_BAR: usize = 3 + 16 + 3 + 6 + 16 + 14;
+
+/// The SCOPE block, with `--assistant` only: who the scan is for and what it left out
+/// (listed with `-v`).
+fn scope_block<W: Write + ?Sized>(
+    w: &mut W,
+    report: &Report,
+    p: Painter,
+    opts: &TerminalOptions<'_>,
+) -> io::Result<()> {
+    let (Some(scope), Some(left_out)) = (context::scope(report), context::not_loaded(report))
+    else {
+        return Ok(());
+    };
+    writeln!(w)?;
+    writeln!(w, " {}          {scope}", p.paint(BOLD, "SCOPE"))?;
+    let hint = if report.not_loaded.is_empty() || opts.verbose {
+        String::new()
+    } else {
+        " · run with -v to list them".to_owned()
+    };
+    writeln!(
+        w,
+        "   {:<16}{}",
+        "Not scanned",
+        wrap(&format!("{left_out}{hint}"), 19, opts.width)
+    )?;
+    if opts.verbose {
+        let path_w = report
+            .not_loaded
+            .iter()
+            .map(|n| n.rel_path.chars().count())
+            .max()
+            .unwrap_or(0)
+            + 2;
+        for n in &report.not_loaded {
+            writeln!(
+                w,
+                "{:19}{:<path_w$}{}",
+                "",
+                n.rel_path,
+                p.paint(DIM, context::not_loaded_reason(n))
+            )?;
+        }
     }
     Ok(())
 }
@@ -304,10 +397,15 @@ fn findings<W: Write + ?Sized>(
                 format!("{:<10}", upper(f.severity))
             ),
             p.paint(DIM, format!("{:<rule_w$}", f.rule_id)),
-            f.message
+            wrap(&f.message, indent.len() + rule_w, opts.width)
         )?;
         if let Some(fix) = f.remediation.as_deref().filter(|_| shows_fix(f, opts)) {
-            writeln!(w, "{indent}{} {fix}", p.paint(DIM, "↳"))?;
+            writeln!(
+                w,
+                "{indent}{} {}",
+                p.paint(DIM, "↳"),
+                wrap(fix, indent.len() + 2, opts.width)
+            )?;
         }
     }
     if hidden > 0 {
@@ -320,6 +418,41 @@ fn findings<W: Write + ?Sized>(
         )?;
     }
     Ok(())
+}
+
+/// Narrower than this, wrapping would leave a ragged column of single words.
+const MIN_WRAP: usize = 30;
+
+/// `text` starting at column `col`, wrapped at spaces to fit `width`; continuation lines
+/// are indented to `col`. Words longer than the room stay whole, and a `·` separator stays
+/// at the end of its line.
+fn wrap(text: &str, col: usize, width: Option<usize>) -> std::borrow::Cow<'_, str> {
+    let room = match width {
+        Some(w) if w.saturating_sub(col) >= MIN_WRAP => w - col,
+        _ => return text.into(),
+    };
+    if text.chars().count() <= room {
+        return text.into();
+    }
+    let mut out = String::with_capacity(text.len() + 16);
+    let mut used = 0;
+    let mut words = text.split(' ').peekable();
+    while let Some(word) = words.next() {
+        let len = word.chars().count();
+        // Room for a trailing ` ·` too, so the separator never starts a line.
+        let tail = if words.peek() == Some(&"·") { 2 } else { 0 };
+        if used > 0 && word != "·" && used + 1 + len + tail > room {
+            out.push('\n');
+            out.extend(std::iter::repeat_n(' ', col));
+            used = 0;
+        } else if used > 0 {
+            out.push(' ');
+            used += 1;
+        }
+        out.push_str(word);
+        used += len;
+    }
+    out.into()
 }
 
 /// `-q`: `path:line:col: SEVERITY RULE message`.
@@ -442,6 +575,38 @@ fn rating_style(r: Rating) -> Style {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wrap_indents_continuation_lines() {
+        let text = "Start the description with when to use it and name the inputs it handles.";
+        assert_eq!(
+            wrap(text, 4, Some(40)),
+            "Start the description with when to\n    use it and name the inputs it\n    handles."
+        );
+    }
+
+    #[test]
+    fn wrap_keeps_short_text_long_words_and_narrow_terminals() {
+        assert_eq!(wrap("fits", 4, Some(40)), "fits");
+        assert_eq!(wrap("a b", 4, None), "a b");
+        let long = "x".repeat(50);
+        assert_eq!(
+            wrap(&format!("a {long}"), 4, Some(40)),
+            format!("a\n    {long}")
+        );
+        // Less than MIN_WRAP columns of room: one line.
+        let text = "one two three four five six seven eight nine ten";
+        assert_eq!(wrap(text, 20, Some(40)), text);
+    }
+
+    #[test]
+    fn wrap_keeps_separators_at_line_ends() {
+        let text = "agent.tools.json 15 · tools/fetch.json 14 · CLAUDE.md 6 · …";
+        assert_eq!(
+            wrap(text, 2, Some(45)),
+            "agent.tools.json 15 · tools/fetch.json 14 ·\n  CLAUDE.md 6 · …"
+        );
+    }
 
     #[test]
     fn formats_token_counts() {

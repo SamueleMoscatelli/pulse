@@ -4,7 +4,7 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use pulse_core::{Assistant, Category, Finding, Rating, Severity};
+use pulse_core::{AssetKind, Assistant, Category, Finding, Rating, Severity, Skip};
 use pulse_engine::{GateStatus, GateValue, Report, category_of};
 use serde::Serialize;
 
@@ -31,7 +31,27 @@ struct JsonReport<'a> {
     gate: Gate,
     ratings: Ratings,
     metrics: Metrics,
+    /// Only with `--assistant`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scope: Option<Scope<'a>>,
     findings: Vec<JsonFinding<'a>>,
+}
+
+#[derive(Serialize)]
+struct Scope<'a> {
+    assistants: Vec<Assistant>,
+    not_loaded: Vec<JsonNotLoaded<'a>>,
+}
+
+#[derive(Serialize)]
+struct JsonNotLoaded<'a> {
+    path: &'a str,
+    kind: AssetKind,
+    /// `library` or `other_assistants`.
+    reason: &'static str,
+    /// The assistants that load it, for `other_assistants`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    loaded_by: Vec<Assistant>,
 }
 
 #[derive(Serialize)]
@@ -203,6 +223,25 @@ pub fn render<W: Write + ?Sized>(
             issues: issues(m),
             new_issues: report.new_metrics.as_ref().map(issues),
         },
+        scope: report.assistants.map(|only| Scope {
+            assistants: only.iter().collect(),
+            not_loaded: report
+                .not_loaded
+                .iter()
+                .map(|n| {
+                    let (reason, loaded_by) = match n.reason {
+                        Skip::Library => ("library", Vec::new()),
+                        Skip::OtherAssistants(set) => ("other_assistants", set.iter().collect()),
+                    };
+                    JsonNotLoaded {
+                        path: &n.rel_path,
+                        kind: n.kind,
+                        reason,
+                        loaded_by,
+                    }
+                })
+                .collect(),
+        }),
         findings: report
             .findings
             .iter()

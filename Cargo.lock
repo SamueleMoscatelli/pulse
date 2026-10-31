@@ -771,6 +771,7 @@ dependencies = [
  "pulse-rules",
  "serde_json",
  "tempfile",
+ "terminal_size",
 ]
 
 [[package]]

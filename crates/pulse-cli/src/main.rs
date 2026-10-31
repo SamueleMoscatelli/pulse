@@ -12,7 +12,7 @@ use std::time::{Duration, SystemTime};
 use anyhow::{Context as _, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use pulse_core::config::{CONFIG_FILE, did_you_mean};
-use pulse_core::{Category, Config, DEFAULT_TOML, Severity};
+use pulse_core::{Assistant, Category, Config, DEFAULT_TOML, Severity};
 use pulse_engine::{
     BASELINE_FILE, Baseline, GateStatus, Report, RuleStatus, ScanOptions, category_of,
 };
@@ -179,6 +179,17 @@ struct ScanArgs {
     /// Only analyze assets changed since this git ref (plus untracked files)
     #[arg(long, value_name = "GIT-REF")]
     changed_since: Option<String>,
+    /// Only scan files this assistant loads (repeatable or comma-separated): copilot,
+    /// claude-code, cursor, windsurf, cline, gemini-cli, codex [default: every assistant]
+    #[arg(long = "assistant", value_name = "NAME", value_delimiter = ',', value_parser = parse_assistant)]
+    assistants: Vec<Assistant>,
+}
+
+fn parse_assistant(s: &str) -> Result<Assistant, String> {
+    Assistant::from_id(s).ok_or_else(|| {
+        let ids: Vec<&str> = Assistant::ALL.iter().map(|a| a.id()).collect();
+        format!("expected one of {}", ids.join(", "))
+    })
 }
 
 fn main() -> ExitCode {
@@ -232,6 +243,8 @@ fn run_scan(global: &Global, args: &ScanArgs, ci: bool) -> anyhow::Result<ExitCo
         changed,
         baseline,
         new_only: args.new_only,
+        assistants: (!args.assistants.is_empty())
+            .then(|| args.assistants.iter().copied().collect()),
     };
     let report = pulse_engine::scan(root, &config, &opts)?;
     for (path, reason) in &report.walk_errors {
@@ -250,6 +263,10 @@ fn run_scan(global: &Global, args: &ScanArgs, ci: bool) -> anyhow::Result<ExitCo
         quiet: global.quiet,
         verbose: global.verbose,
         min_severity: args.min_severity,
+        width: tty
+            .then(terminal_size::terminal_size)
+            .flatten()
+            .map(|(w, _)| usize::from(w.0)),
     };
     let write = |w: &mut dyn Write| -> io::Result<()> {
         match format {

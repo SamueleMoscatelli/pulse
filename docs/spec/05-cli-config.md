@@ -22,6 +22,9 @@ pulse scan [PATHS...] [OPTIONS]             analyze and report; exit 0 unless --
     --new-only                              only findings not in the baseline
     --changed-since <GIT-REF>               only assets changed vs ref: `git diff --name-only --relative <ref>...HEAD`
                                               plus untracked files (`git ls-files --others --exclude-standard`), run in the root
+    --assistant <NAME>...                   only assets this assistant loads (repeatable or comma-separated: copilot,
+                                              claude-code, cursor, windsurf, cline, gemini-cli, codex; default every
+                                              assistant). What it leaves out is reported with the reason (ADR-048)
 pulse ci [same options as scan]             = scan --fail-on-gate; format defaults to `github` when GITHUB_ACTIONS=true,
                                               else terminal with color off
 pulse baseline [--output FILE]              write current fingerprints to .pulse/baseline.json

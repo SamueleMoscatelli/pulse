@@ -505,3 +505,50 @@ fn str008_near_miss_fingerprint_ignores_checkout_path() {
     assert_eq!(paths, ["agents/a.agent.md", "pkg/claude.md"]);
     assert_eq!(a, b);
 }
+
+#[test]
+fn assistant_selection_scans_only_what_it_loads() {
+    use pulse_core::{Assistant, AssistantSet, Skip};
+
+    let root = mixed();
+    let config = Config::load(&root, None).unwrap();
+    let all = scan(&root, &config, &ScanOptions::default()).unwrap();
+    assert!(all.assistants.is_none() && all.not_loaded.is_empty());
+
+    let only: AssistantSet = [Assistant::ClaudeCode].into_iter().collect();
+    let opts = ScanOptions {
+        assistants: Some(only),
+        ..ScanOptions::default()
+    };
+    let report = scan(&root, &config, &opts).unwrap();
+    let scanned = |p: &str| report.assets_meta.iter().any(|a| a.rel_path == p);
+    assert!(scanned("CLAUDE.md") && scanned("agent.tools.json"));
+    assert!(!scanned(".cursor/rules/style.mdc") && !scanned("GEMINI.md"));
+    let cursor = report
+        .not_loaded
+        .iter()
+        .find(|n| n.rel_path == ".cursor/rules/style.mdc")
+        .unwrap();
+    assert_eq!(
+        cursor.reason,
+        Skip::OtherAssistants([Assistant::Cursor].into_iter().collect())
+    );
+    assert!(report.findings.iter().all(|f| {
+        let rel = f.location.path.strip_prefix(&root).unwrap();
+        report
+            .not_loaded
+            .iter()
+            .all(|n| Path::new(&n.rel_path) != rel)
+    }));
+    let listed: Vec<Assistant> = report
+        .context
+        .by_assistant
+        .iter()
+        .map(|&(a, _)| a)
+        .collect();
+    assert_eq!(listed, [Assistant::ClaudeCode]);
+    assert_eq!(
+        report.assets_meta.len() + report.not_loaded.len(),
+        all.assets_meta.len()
+    );
+}

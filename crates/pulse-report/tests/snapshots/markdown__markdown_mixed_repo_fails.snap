@@ -11,20 +11,21 @@ expression: "render(&root, &report(&root), Severity::Info)"
 | ❌ | severity ≥ high | 1 issue | allowed 0 |
 | ✅ | context debt | 0% | max 10% |
 
-**Context load** 🟢 54 tokens on every request · 0% of a 200k window (budget 8k)
+**Context load** (always-on context): the tokens each assistant reads on every request
 
-| Assistant | Tokens on every request | Window |
-|---|--:|--:|
-| Copilot | 54 | 0% |
-| Claude Code | 48 | 0% |
-| Cursor | 35 | 0% |
-| Windsurf | 35 | 0% |
-| Cline | 32 | 0% |
-| Gemini CLI | 32 | 0% |
-| Codex | 32 | 0% |
+| Assistant | Tokens | of 200k window | of 8k budget |
+|---|--:|--:|--:|
+| 🟢 Copilot | 54 | 0% | 0.7% |
+| 🟢 Claude Code | 48 | 0% | 0.6% |
+| 🟢 Cursor | 35 | 0% | 0.4% |
+| 🟢 Windsurf | 35 | 0% | 0.4% |
+| 🟢 Cline | 32 | 0% | 0.4% |
+| 🟢 Gemini CLI | 32 | 0% | 0.4% |
+| 🟢 Codex | 32 | 0% | 0.4% |
 
 - Always loaded: `agent.tools.json` 15 · `tools/fetch.json` 14 · 3 agent descriptions 7 · `CLAUDE.md` 6 · … (Copilot)
 - On demand: 90 tokens in skills, agents, prompts and scoped rules, loaded only when used
+- Budget: 8k always-on tokens per assistant (`budgets.always_on` in pulse.toml); 🟡 above 75% of it, 🔴 above it.
 
 | Security | Reliability | Clarity | Efficiency |
 |:-:|:-:|:-:|:-:|

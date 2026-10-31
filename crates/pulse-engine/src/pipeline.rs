@@ -17,7 +17,7 @@ use rayon::prelude::*;
 
 use crate::post::{dedup, fingerprint, sort};
 use crate::suppress::{self, Ignores};
-use crate::{AssetMeta, EngineError, Report, ScanOptions, Timings};
+use crate::{AssetMeta, EngineError, NotLoaded, Report, ScanOptions, Timings};
 use crate::{gate, score};
 
 /// Scans `root` with `config`: discover, read, run rules, override severities, dedup,
@@ -47,7 +47,22 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
 
     // The rule lexicons build on the rayon pool while the walk runs on its own threads.
     pulse_rules::warm_up();
-    let discovery = discover(root, config)?;
+    let mut discovery = discover(root, config)?;
+    let mut not_loaded = Vec::new();
+    if let Some(only) = opts.assistants {
+        discovery.assets.retain(|f| {
+            let reason = pulse_core::skip_for(&f.rel_path, f.kind, f.origin, only);
+            // Listed only when in scope, like findings (`PATHS`, `--changed-since`).
+            if let Some(reason) = reason.filter(|_| opts.in_scope(&f.rel_path)) {
+                not_loaded.push(NotLoaded {
+                    rel_path: f.rel_path.clone(),
+                    kind: f.kind,
+                    reason,
+                });
+            }
+            reason.is_none()
+        });
+    }
     let discovered_at = Instant::now();
 
     let max_bytes = config.scan.max_file_bytes;
@@ -137,7 +152,12 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
         .iter()
         .filter(|a| opts.in_scope(&a.rel_path))
         .collect();
-    let context = score::context_load(&scoped, config.context.window, config.budgets.always_on);
+    let context = score::context_load(
+        &scoped,
+        config.context.window,
+        config.budgets.always_on,
+        opts.assistants,
+    );
     let metrics = score::metrics(&findings, &scoped, &context);
     let baseline = opts.baseline.clone();
     let is_new = |f: &Finding| baseline.as_ref().is_none_or(|b| b.is_new(f));
@@ -166,6 +186,8 @@ pub fn scan(root: &Path, config: &Config, opts: &ScanOptions) -> Result<Report, 
         ratings,
         gate,
         baseline,
+        assistants: opts.assistants,
+        not_loaded,
         timings: Timings {
             discover: discovered_at - start,
             read: read_at - discovered_at,

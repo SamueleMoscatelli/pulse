@@ -131,7 +131,7 @@ pub trait ProjectRule: Sync {
 | Matching | `regex`, `aho-corasick`, `memchr` |
 | Unicode | `unicode-normalization` |
 | Hashing | `xxhash-rust` (xxh3) |
-| Terminal | `anstream`, `anstyle` |
+| Terminal | `anstream`, `anstyle`, `terminal_size` |
 | Tests | `insta`, `assert_cmd`, `predicates`, `tempfile` |
 | Bench | `divan` |
 
