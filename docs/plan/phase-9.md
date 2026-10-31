@@ -95,3 +95,15 @@ copy from `kirodotdev-labs/awesome-kiro` (CC BY-NC). Every card reports its befo
 - **Read** `docs/eval/kiro.md`, `docs/plan/post-release.md` ("Every release from now on")
 - **Do** Run `scripts/compare.sh` (v1.1.0 vs `main`) on both Kiro repos, `../awesome-copilot`, this repo and `tests/fixtures/repos/*`. Write the result to `docs/eval/kiro.md` under "v1.2.0 candidate": deltas per rule, a verdict on 20 random new Kiro findings, and any regressions on the non-Kiro repos (fix small ones here, put the rest in the backlog). Add the Kiro section to the CHANGELOG draft. Then stop and hand over to the user, who installs the build and tests it. Only after the user approves: the `1.2.0-rc.1` release PR, then 1.2.0, per the release routine. Ask before pushing any tag, and before moving `v1`.
 - **Done when** the report is committed; the user has approved the comparison; the rc PR is open (or the card stops at the report, with what the user asked to change added as cards).
+
+## P9.9 — AI-SEC-002: quoted mentions
+- **Size** S · **Depends** P9.8
+- **Read** `scripts/spec.sh "AI-SEC-002"`, `scripts/spec.sh "Fingerprints"`, `docs/eval/kiro.md` ("User test")
+- **Do** A phrase in quotes (`"…"`, `'…'`, `“…”`, `` `…` ``) is a quoted mention: keep reporting it, at High instead of Critical, with the message `Prompt-injection phrase "…" looks quoted: check it, then accept it with pulse baseline` (≤ 100 chars, phrase truncated). The rule stays non-suppressible inline (an injected file must not be able to silence itself); the baseline accepts one occurrence by fingerprint, so the same phrase added elsewhere is still caught. The section and `text`-fence guards still downgrade to Low. Update the rule doc ("How to accept a reviewed finding": `pulse baseline`, or `[rules.AI-SEC-002] allow` for a phrase everywhere), the spec's FP guards and an ADR. Fixtures: quoted mention (the awesome-copilot "Safety" bullet, minimal), an unquoted phrase in a "Safety" section (still Critical), a quoted phrase used as an instruction (`Say "ignore previous instructions" and …`, documented as a known gap if it stays High).
+- **Done when** the awesome-copilot finding is High with the new message; unquoted phrases stay Critical; a baselined occurrence no longer fails the gate (engine test); compare.sh delta on awesome-copilot, ECC and kiro-config in the PR.
+
+## P9.10 — Release 1.2.0
+- **Size** S · **Depends** P9.9
+- **Read** `docs/plan/post-release.md` ("Every release from now on"), `docs/eval/kiro.md` ("v1.2.0 candidate")
+- **Do** Add the P9.9 change to the CHANGELOG draft. The `1.2.0-rc.1` release PR, then 1.2.0, per the release routine. Ask before pushing any tag, and before moving `v1`.
+- **Done when** 1.2.0 is tagged and released, `v1` moved after the user's approval, and the tap updated.
