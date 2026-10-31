@@ -1,0 +1,5 @@
+{
+  "name": "Spell check",
+  "when": { "type": "fileChanged", "patterns": ["README.md"] },
+  "then": { "type": "askAgent", "prompt": "Spell-check the README." }
+}

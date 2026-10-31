@@ -49,6 +49,9 @@ pub struct HookRemoteExec;
 /// AI-SEC-009.
 pub struct HookUnsafeInterpolation;
 
+/// A shell snippet's place in its asset and the note appended to its findings.
+type Snippet<'a> = (&'a str, Origin, &'static str);
+
 /// Where a shell snippet sits in its asset.
 #[derive(Clone, Copy)]
 enum Origin {
@@ -68,19 +71,24 @@ fn span_of(asset: &Asset, text: &str, origin: Origin, start: usize, end: usize) 
     }
 }
 
-/// Command hooks of a Settings or Hooks asset.
-fn hook_commands(asset: &Asset, mut f: impl FnMut(&str, Origin)) {
+/// Shell commands of a Settings or Hooks asset's hooks (Kiro `runCommand` and untyped
+/// actions with a `command` too), noting disabled ones.
+fn hook_commands(asset: &Asset, mut f: impl FnMut(Snippet<'_>)) {
     for entry in asset.hooks() {
         for h in &entry.hooks {
-            if h.kind == "command" && !h.command.is_empty() {
-                f(&h.command, Origin::Json(h.command_span));
+            if h.shell && !h.command.is_empty() {
+                f((
+                    &h.command,
+                    Origin::Json(h.command_span),
+                    entry.disabled_note(),
+                ));
             }
         }
     }
 }
 
 /// Shell fences and `` !`cmd` `` lines of a Markdown asset.
-fn markdown_snippets(asset: &Asset, mut f: impl FnMut(&str, Origin)) {
+fn markdown_snippets(asset: &Asset, mut f: impl FnMut(Snippet<'_>)) {
     let src = asset.source.as_str();
     let md = asset.markdown();
     for cb in &md.code_blocks {
@@ -100,7 +108,7 @@ fn markdown_snippets(asset: &Asset, mut f: impl FnMut(&str, Origin)) {
         let from = first.end as usize + 1;
         let to = if closed { last.start } else { cb.span.end } as usize;
         if let Some(text) = src.get(from..to.max(from)) {
-            f(text, Origin::Source(from));
+            f((text, Origin::Source(from), ""));
         }
     }
     // Claude command `` !`cmd` `` execution.
@@ -123,7 +131,7 @@ fn markdown_snippets(asset: &Asset, mut f: impl FnMut(&str, Origin)) {
             continue;
         };
         if rest.as_bytes()[len] == b'`' && len > 0 {
-            f(&rest[..len], Origin::Source(body.start as usize + from));
+            f((&rest[..len], Origin::Source(body.start as usize + from), ""));
         }
     }
 }
@@ -134,7 +142,7 @@ impl Rule for HookRemoteExec {
     }
 
     fn check(&self, asset: &Asset, _ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
-        let mut each = |text: &str, origin: Origin| {
+        let mut each = |(text, origin, note): Snippet<'_>| {
             if !RCE_HINTS.is_match(text) {
                 return;
             }
@@ -142,7 +150,7 @@ impl Rule for HookRemoteExec {
             remote_exec(text, 0, text.len(), 0, &mut hits);
             for (start, end, message) in hits {
                 let span = span_of(asset, text, origin, start, end);
-                out.push(Finding::new(&RCE_META, asset, span, message));
+                out.push(Finding::new(&RCE_META, asset, span, message + note));
             }
         };
         if KindSet::MARKDOWN.contains(asset.kind) {
@@ -341,7 +349,7 @@ impl Rule for HookUnsafeInterpolation {
     }
 
     fn check(&self, asset: &Asset, _ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
-        hook_commands(asset, |text, origin| {
+        hook_commands(asset, |(text, origin, note)| {
             if !TAINT_HINTS.is_match(text) {
                 return;
             }
@@ -350,7 +358,7 @@ impl Rule for HookUnsafeInterpolation {
             interpolation(text, 0, text.len(), 0, &mut tainted, &mut hits);
             for (start, end, message) in hits {
                 let span = span_of(asset, text, origin, start, end);
-                out.push(Finding::new(&INTERP_META, asset, span, message));
+                out.push(Finding::new(&INTERP_META, asset, span, message + note));
             }
         });
     }

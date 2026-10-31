@@ -1,0 +1,5 @@
+{
+  "name": "Coverage",
+  "when": { "type": "manual", "button_text": "Check coverage" },
+  "then": { "type": "runCommand", "command": "npm test -- --coverage", "timeout": 120 }
+}

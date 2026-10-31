@@ -55,8 +55,10 @@ struct Group {
     expected: &'static str,
 }
 
-fn group(kind: AssetKind) -> Option<Group> {
+/// The group of a library-row asset; `kiro` for a `*.kiro.hook` file.
+fn group(kind: AssetKind, kiro: bool) -> Option<Group> {
     let (one, many, expected) = match kind {
+        AssetKind::Hooks if kiro => ("Kiro hook", "Kiro hooks", ".kiro/hooks/"),
         AssetKind::Agent => ("agent", "agents", ".github/agents/"),
         AssetKind::Prompt => ("prompt", "prompts", ".github/prompts/"),
         AssetKind::ScopedInstructions => {
@@ -82,22 +84,23 @@ impl ProjectRule for UnloadedLocation {
 
     fn check_project(&self, assets: &[Asset], ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
         // Library-row assets, one finding per folder and kind, at the first file.
-        let mut folders: BTreeMap<(&str, AssetKind), (usize, &Asset)> = BTreeMap::new();
+        let mut folders: BTreeMap<(&str, AssetKind, bool), (usize, &Asset)> = BTreeMap::new();
         for asset in assets.iter().filter(|a| a.origin == Origin::LibraryRow) {
             let mut dir = parent(&asset.rel_path);
+            let kiro = asset.kind == AssetKind::Hooks && asset.rel_path.ends_with(".kiro.hook");
             // Each hook config has its own folder (`hooks/<name>/hooks.json`): report the
-            // collection once.
-            if asset.kind == AssetKind::Hooks {
+            // collection once. Kiro hooks sit side by side.
+            if asset.kind == AssetKind::Hooks && !kiro {
                 dir = parent(dir);
             }
-            let (n, first) = folders.entry((dir, asset.kind)).or_insert((0, asset));
+            let (n, first) = folders.entry((dir, asset.kind, kiro)).or_insert((0, asset));
             *n += 1;
             if asset.rel_path < first.rel_path {
                 *first = asset;
             }
         }
-        for ((dir, kind), (n, first)) in folders {
-            let Some(g) = group(kind) else { continue };
+        for ((dir, kind, kiro), (n, first)) in folders {
+            let Some(g) = group(kind, kiro) else { continue };
             if in_plugin(dir, ctx.files) {
                 continue;
             }

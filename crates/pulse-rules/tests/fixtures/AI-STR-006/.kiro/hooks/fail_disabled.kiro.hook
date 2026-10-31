@@ -1,0 +1,6 @@
+{
+  "name": "Old hook",
+  "enabled": false,
+  "when": { "type": "fileEdit" },
+  "then": { "type": "askAgent", "prompt": "Check the change." }
+}

@@ -124,7 +124,7 @@
 ### AI-SEC-013 — Sensitive path reference
 - **Sev** Medium · **Kinds** all
 - **Detect** References to `~/.ssh`, `id_rsa`, `id_ed25519`, `~/.aws/credentials`, `.env` (as a read target, not in `.gitignore` advice), `/etc/passwd`, `/etc/shadow`, `~/.config/gh/hosts.yml`, `.npmrc`, `.pypirc`, keychain, browser profile directories.
-- **FP guards** Downgrade to Info inside deny-list contexts (`permissions.deny`, sentences containing "never read"/"do not access").
+- **FP guards** Downgrade to Info inside deny-list contexts (`permissions.deny`, sentences containing "never read"/"do not access"). Paths inside a hook's trigger filter (any `matcher`, Kiro legacy `when`) are not references (ADR-052).
 
 ---
 
@@ -153,7 +153,7 @@
 
 ### AI-STR-006 — Invalid hook definition
 - **Sev** High · **Kinds** Settings, Hooks
-- **Detect** Unknown event name (vs `lexicon::platform::{CLAUDE,CURSOR,COPILOT}_HOOK_EVENTS`, Cursor for `.cursor/hooks.json`, Copilot for `.github/hooks/` or hooks using the Copilot keys `bash`/`powershell`/`timeoutSec`; ADR-046), missing `command`/`prompt` on a command/prompt hook, `type` not in the platform's list (Claude: `command`, `prompt`, `http`, `mcp_tool`, `agent`; Cursor: `command`, `prompt`; Copilot: `command`, whose command is `bash`, else `powershell`), matcher that is not a valid regex (`*`, `""` and plain `A|B` lists are not regexes; JS look-around/backreferences are skipped), `timeout` (Copilot `timeoutSec`) ≤ 0 or > 600 s (Medium), a referenced script path (`./…`, `$CLAUDE_PROJECT_DIR/…`, `${CLAUDE_PLUGIN_ROOT}/…`, or relative with a script extension) that does not exist (Medium, ADR-026).
+- **Detect** Unknown event name (vs `lexicon::platform::{CLAUDE,CURSOR,COPILOT}_HOOK_EVENTS`, Cursor for `.cursor/hooks.json`, Copilot for `.github/hooks/` or hooks using the Copilot keys `bash`/`powershell`/`timeoutSec`; ADR-046), missing `command`/`prompt` on a command/prompt hook, `type` not in the platform's list (Claude: `command`, `prompt`, `http`, `mcp_tool`, `agent`; Cursor: `command`, `prompt`; Copilot: `command`, whose command is `bash`, else `powershell`; Kiro, ADR-052: legacy `*.kiro.hook` `when.type` from `KIRO_LEGACY_HOOK_EVENTS` and `then.type` `askAgent`/`runCommand`, v1 `trigger` from `KIRO_HOOK_TRIGGERS` and `action.type` `agent`/`command`, a missing trigger or action, `runCommand`/`command` without `command`, `askAgent`/`agent` without `prompt`; Kiro matchers may be `@` selectors or `*`/`?` wildcards and `timeout: 0` is valid; findings on a disabled hook say so), matcher that is not a valid regex (`*`, `""` and plain `A|B` lists are not regexes; JS look-around/backreferences are skipped), `timeout` (Copilot `timeoutSec`) ≤ 0 or > 600 s (Medium), a referenced script path (`./…`, `$CLAUDE_PROJECT_DIR/…`, `${CLAUDE_PLUGIN_ROOT}/…`, or relative with a script extension) that does not exist (Medium, ADR-026).
 
 ### AI-STR-007 — Duplicate asset name
 - **Sev** High · **Kinds** Skill, Agent, Prompt · **Scope** project

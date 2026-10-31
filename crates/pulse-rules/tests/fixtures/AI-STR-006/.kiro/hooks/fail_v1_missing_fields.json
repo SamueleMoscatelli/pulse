@@ -1,0 +1,9 @@
+{
+  "version": "v1",
+  "hooks": [
+    { "name": "a", "trigger": "Stop", "action": { "type": "command" } },
+    { "name": "b", "trigger": "Stop", "action": { "type": "agent", "command": "x" } },
+    { "name": "c", "action": { "type": "agent", "prompt": "Summarize." } },
+    { "name": "d", "trigger": "SessionStart" }
+  ]
+}

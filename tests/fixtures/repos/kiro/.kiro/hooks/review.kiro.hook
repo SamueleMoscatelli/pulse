@@ -1,0 +1,5 @@
+{
+  "name": "Review on save",
+  "when": { "type": "fileEdited", "patterns": ["*.ts"] },
+  "then": { "type": "askAgent", "prompt": "Review the edited file." }
+}

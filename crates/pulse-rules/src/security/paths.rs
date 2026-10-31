@@ -3,6 +3,7 @@
 use std::ops::Range;
 
 use aho_corasick::Match;
+use pulse_core::parse::HookFormat;
 use pulse_core::{
     Asset, AssetKind, Category, Finding, KindSet, Rule, RuleCtx, RuleMeta, Severity, Span,
 };
@@ -33,9 +34,17 @@ impl Rule for SensitivePath {
 
     fn check(&self, asset: &Asset, _ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
         let src = asset.source.as_str();
+        // Built on the first reference only: most assets have none.
+        let mut filters = None;
         let mut last_token = usize::MAX..usize::MAX;
         for m in PATHS.find_iter(src) {
             if !is_reference(src, &m) {
+                continue;
+            }
+            // AI-SEC-013 FP guard: a hook's trigger filter names the files that fire it.
+            let at = u32::try_from(m.start()).unwrap_or(u32::MAX);
+            let filters = filters.get_or_insert_with(|| hook_filters(asset));
+            if filters.iter().any(|s| s.start <= at && at < s.end) {
                 continue;
             }
             let token = token(src, m.range());
@@ -74,6 +83,24 @@ impl Rule for SensitivePath {
             out.push(f);
         }
     }
+}
+
+/// Trigger filters of a hook file: matchers, and the Kiro legacy `when` object (`patterns`).
+fn hook_filters(asset: &Asset) -> Vec<Span> {
+    if !matches!(asset.kind, AssetKind::Settings | AssetKind::Hooks) {
+        return Vec::new();
+    }
+    let mut out: Vec<Span> = asset
+        .hooks()
+        .iter()
+        .filter_map(|e| e.matcher_span)
+        .collect();
+    if asset.settings().hook_format == HookFormat::KiroLegacy
+        && let Some(when) = asset.json().root.as_ref().and_then(|r| r.get("when"))
+    {
+        out.push(when.span);
+    }
+    out
 }
 
 /// Whether the match is a whole path fragment: not glued to an identifier

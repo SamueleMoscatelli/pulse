@@ -11,5 +11,5 @@ pub use markdown::{
     CodeBlock, FileRef, Frontmatter, Heading, Import, Link, MarkdownView, Table, YamlError,
 };
 pub use mcp::{McpInput, McpServer, McpView, Transport};
-pub use settings::{HookCmd, HookEntry, SettingsView};
+pub use settings::{HookCmd, HookEntry, HookFormat, SettingsView};
 pub use tools::{ToolDef, ToolsView};

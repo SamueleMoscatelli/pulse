@@ -75,6 +75,51 @@ pub const COPILOT_HOOK_EVENTS: &[&str] = &[
     "userPromptSubmitted",
 ];
 
+/// Kiro v1 hook `trigger`s (`.kiro/hooks/*.json`), with the camelCase aliases kept by
+/// `/upgrade-agent` (kiro.dev/docs/hooks/types, ide/whats-new-v1/hooks, cli/v3/hooks-migration).
+pub const KIRO_HOOK_TRIGGERS: &[&str] = &[
+    "AgentSpawn",
+    "Manual",
+    "PostFileCreate",
+    "PostFileDelete",
+    "PostFileSave",
+    "PostTaskExec",
+    "PostToolUse",
+    "PreTaskExec",
+    "PreToolUse",
+    "SessionEnd",
+    "SessionStart",
+    "Stop",
+    "UserPromptSubmit",
+    "agentSpawn",
+    "postToolUse",
+    "preToolUse",
+    "stop",
+    "userPromptSubmit",
+];
+
+/// Kiro IDE 0.x `*.kiro.hook` `when.type`s, plus `manual` (in use in the corpus).
+pub const KIRO_LEGACY_HOOK_EVENTS: &[&str] = &[
+    "agentSpawn",
+    "agentStop",
+    "fileCreated",
+    "fileDeleted",
+    "fileEdited",
+    "manual",
+    "postTaskExecution",
+    "postToolUse",
+    "preTaskExecution",
+    "preToolUse",
+    "promptSubmit",
+    "userTriggered",
+];
+
+/// Kiro v1 hook `action.type`s.
+pub const KIRO_HOOK_TYPES: &[&str] = &["agent", "command"];
+
+/// Kiro IDE 0.x `then.type`s.
+pub const KIRO_LEGACY_HOOK_TYPES: &[&str] = &["askAgent", "runCommand"];
+
 /// Claude Code hook handler `type`s.
 pub const CLAUDE_HOOK_TYPES: &[&str] = &["agent", "command", "http", "mcp_tool", "prompt"];
 
@@ -203,6 +248,10 @@ mod tests {
             CLAUDE_HOOK_TYPES,
             CURSOR_HOOK_TYPES,
             COPILOT_HOOK_EVENTS,
+            KIRO_HOOK_TRIGGERS,
+            KIRO_LEGACY_HOOK_EVENTS,
+            KIRO_HOOK_TYPES,
+            KIRO_LEGACY_HOOK_TYPES,
             CLAUDE_TOOLS,
             COPILOT_TOOLS,
             COPILOT_TOOL_ALIASES,

@@ -1,0 +1,5 @@
+{
+  "name": "Env file validation",
+  "when": { "type": "fileEdited", "patterns": [".env*", "**/.env*"] },
+  "then": { "type": "askAgent", "prompt": "An environment file changed: check its format." }
+}
