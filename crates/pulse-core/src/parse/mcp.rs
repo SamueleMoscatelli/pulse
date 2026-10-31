@@ -1,5 +1,5 @@
-//! MCP config view: servers from `mcpServers` (Claude, Cursor, Gemini, Windsurf) or VS Code
-//! `servers` + `inputs`.
+//! MCP config view: servers from `mcpServers` (Claude, Cursor, Gemini, Windsurf, Kiro) or
+//! VS Code `servers` + `inputs`.
 
 use crate::model::Span;
 use crate::parse::json::{JsonDoc, JsonNode, Shape, ViewError};
@@ -25,6 +25,13 @@ pub struct McpServer {
     pub env: Vec<(String, String, Span)>,
     /// `(key, value, value span)`.
     pub headers: Vec<(String, String, Span)>,
+    /// String members of the Kiro `oauth` object as `(key, value, value span)`.
+    pub oauth: Vec<(String, String, Span)>,
+    /// Tools run without prompting: `(list key, tool, span)`, from `autoApprove` (Kiro,
+    /// Cline) and `alwaysAllow` (Cline, Roo).
+    pub auto_approve: Vec<(&'static str, String, Span)>,
+    /// Kiro `disabledTools`: tools hidden from the agent.
+    pub disabled_tools: Vec<(String, Span)>,
     /// `"disabled": true` or `"enabled": false`.
     pub disabled: bool,
     /// The whole server object.
@@ -126,6 +133,28 @@ fn server(sh: &mut Shape, name: &str, name_span: Span, node: &JsonNode) -> Optio
     let headers = get("headers")
         .map(|n| sh.string_map(n, "headers"))
         .unwrap_or_default();
+    // `oauth` mixes strings with `oauthScopes`: keep the strings, skip the rest silently.
+    let oauth = get("oauth")
+        .map(|n| {
+            sh.object(n, "oauth")
+                .iter()
+                .filter_map(|m| {
+                    m.value
+                        .as_str()
+                        .map(|v| (m.key.clone(), v.to_owned(), m.value.span))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut auto_approve = Vec::new();
+    for key in ["autoApprove", "alwaysAllow"] {
+        if let Some(n) = get(key) {
+            auto_approve.extend(sh.strings(n, key).into_iter().map(|(t, s)| (key, t, s)));
+        }
+    }
+    let disabled_tools = get("disabledTools")
+        .map(|n| sh.strings(n, "disabledTools"))
+        .unwrap_or_default();
     let flag = |k: &str| get(k).and_then(JsonNode::as_bool);
     let disabled = flag("disabled") == Some(true) || flag("enabled") == Some(false);
     Some(McpServer {
@@ -135,6 +164,9 @@ fn server(sh: &mut Shape, name: &str, name_span: Span, node: &JsonNode) -> Optio
         args,
         env,
         headers,
+        oauth,
+        auto_approve,
+        disabled_tools,
         disabled,
         span: node.span,
     })

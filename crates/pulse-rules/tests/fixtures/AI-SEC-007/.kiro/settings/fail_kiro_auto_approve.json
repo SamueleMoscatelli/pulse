@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "aws-docs": {
+      "command": "uvx",
+      "args": ["awslabs.aws-documentation-mcp-server==1.1.2"],
+      "disabled": true,
+      "autoApprove": ["*"]
+    },
+    "github": {
+      "url": "https://api.githubcopilot.com/mcp/",
+      "autoApprove": ["get_issue", "create_pull_request"],
+      "disabledTools": ["delete_repository"]
+    }
+  }
+}

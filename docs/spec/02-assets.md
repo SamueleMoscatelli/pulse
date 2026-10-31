@@ -8,7 +8,7 @@ Patterns are globset globs relative to the scan root. `**/` means "at any depth"
 |---|---|---|---|---|
 | 1 | `**/.claude/settings.json`, `**/.claude/settings.local.json` | Settings | Always | JSONC |
 | 2 | `**/.cursor/hooks.json`, `**/hooks/hooks.json` | Hooks | Always | JSONC |
-| 3 | `**/.mcp.json`, `**/.vscode/mcp.json`, `**/.cursor/mcp.json`, `**/claude_desktop_config.json`, `**/.gemini/settings.json` | McpConfig | Always | JSONC |
+| 3 | `**/.mcp.json`, `**/.vscode/mcp.json`, `**/.cursor/mcp.json`, `**/claude_desktop_config.json`, `**/.gemini/settings.json`, `**/.kiro/settings/mcp.json` | McpConfig | Always | JSONC |
 | 4 | `**/SKILL.md` | Skill | Always (frontmatter) / OnDemand (body) | MD+FM |
 | 5 | `**/.claude/agents/**/*.md`, `**/.github/agents/*.agent.md`, `**/.github/chatmodes/*.chatmode.md` | Agent | Always (description) / OnDemand (body) | MD+FM |
 | 6 | `**/.claude/commands/**/*.md`, `**/.github/prompts/*.prompt.md`, `**/*.prompty` | Prompt | OnDemand | MD+FM |
@@ -39,7 +39,7 @@ Matching order: built-in rows 1–10, then `[[scan.custom]]`, then `scan.include
 | Kind | Views available to rules |
 |---|---|
 | Instructions, ScopedInstructions, Agent, Prompt, Skill | `markdown()`: frontmatter (YAML mapping + span + key line map), body span, headings (level, text, span), code fences (lang, span), HTML comments (span), links/images (dest, span), `@path` imports (CLAUDE.md style, span), paragraphs (span) |
-| McpConfig | `mcp()`: servers map → `{ name, transport: Stdio{command,args,env} | Http{url,headers} | Sse{url,headers}, span }`. Handles `mcpServers` (Claude/Cursor/Gemini) and `servers` + `inputs` (VS Code) |
+| McpConfig | `mcp()`: servers map → `{ name, transport: Stdio{command,args,env} | Http{url,headers} | Sse{url,headers}, span }`. Handles `mcpServers` (Claude/Cursor/Gemini/Kiro) and `servers` + `inputs` (VS Code); per server also `disabled`/`enabled`, `autoApprove`/`alwaysAllow`, Kiro `disabledTools` and the string members of Kiro `oauth` (ADR-051) |
 | Settings | `settings()`: `permissions.{allow,deny,ask}` with spans, `hooks` (event → matchers → commands with spans), `env`, misc flags (`enableAllProjectMcpServers`, `defaultMode`) |
 | Hooks | `hooks()`: same hook model as Settings |
 | Tools | `tools()`: list of `{ name, description, schema, span }` |

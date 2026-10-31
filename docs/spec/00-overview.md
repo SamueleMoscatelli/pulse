@@ -19,7 +19,7 @@ Package managers (e.g. Microsoft `apm`) resolve and install AI assets. Pulse jud
 | Prompts / commands | `.claude/commands/*.md`, `.github/prompts/*.prompt.md`, `*.prompty` |
 | Skills | `**/SKILL.md` (+ files it references) |
 | Tools | tool-definition JSON (Anthropic `input_schema` / OpenAI `parameters` shapes) |
-| MCP servers | `.mcp.json`, `.vscode/mcp.json`, `.cursor/mcp.json`, `claude_desktop_config.json`, `.gemini/settings.json` |
+| MCP servers | `.mcp.json`, `.vscode/mcp.json`, `.cursor/mcp.json`, `claude_desktop_config.json`, `.gemini/settings.json`, `.kiro/settings/mcp.json` |
 | Hooks & permissions | `.claude/settings*.json` (hooks, permissions), `.cursor/hooks.json`, plugin `hooks/hooks.json` |
 
 The full discovery table is in `02-assets.md`.
