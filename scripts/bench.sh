@@ -44,7 +44,13 @@ best_ms() {
     json=$(mktemp)
     # -i: a failing gate exits non-zero, which is not a timing error.
     hyperfine -N -i -w 3 -r "$runs" --export-json "$json" "$*" >/dev/null 2>&1
-    grep -o '"min": *[0-9.e+-]*' "$json" | head -1 | awk -F: '{ printf "%.2f", $2 * 1000 }'
+    # The minimum of the per-run wall times: newer hyperfine also writes memory stats with
+    # their own "min" key, so a text match can pick up bytes instead of seconds.
+    perl -MJSON::PP -0777 -ne '
+      my $r = decode_json($_)->{results}[0];
+      my ($t) = sort { $a <=> $b } @{ $r->{times} || [$r->{min}] };
+      printf "%.2f", $t * 1000;
+    ' "$json"
     rm -f "$json"
   else
     perl -MTime::HiRes=time -e '
