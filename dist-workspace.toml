@@ -17,9 +17,10 @@ install-path = "CARGO_HOME"
 hosting = "github"
 # Whether to install an updater program
 install-updater = false
-# Homebrew tap the generated formula targets. The formula is uploaded with each release
-# as a template; there is no publish job, so nothing is pushed to the tap automatically.
+# Homebrew tap the generated formula is pushed to by the publish job (stable releases only),
+# with the HOMEBREW_TAP_TOKEN secret.
 tap = "SamueleMoscatelli/homebrew-tap"
+publish-jobs = ["homebrew"]
 # Formula name (the crate is `pulse-cli`, the binary is `pulse`)
 formula = "pulse"
 

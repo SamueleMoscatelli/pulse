@@ -10,7 +10,7 @@ once the improvements from the awesome-copilot testing are released.
 - [x] Test it on a `macos-latest` runner (the maintainer's Mac has no Homebrew):
       `brew install SamueleMoscatelli/tap/pulse && pulse --version`.
 - [x] Add the Homebrew install line to the README.
-- [ ] Optional: let each release update the tap. In `dist-workspace.toml` add `publish-jobs = ["homebrew"]`,
+- [x] Optional: let each release update the tap. In `dist-workspace.toml` add `publish-jobs = ["homebrew"]`,
       create a fine-grained token with write access to the tap repo only, store it as the
       `HOMEBREW_TAP_TOKEN` secret, run `dist generate` and commit the regenerated `release.yml`.
       Without this, copy `pulse.rb` to the tap by hand on every release.
@@ -46,7 +46,9 @@ formula, not dist's binary one. Revisit once there are users.
    A `-rc.N` suffix publishes a prerelease.
 3. When the Release workflow is green, move the major tag:
    `git tag -f -a v1 -m "Pulse v1" 'vX.Y.Z^{}' && git push -f origin v1`.
-4. Update the Homebrew tap (unless automated, see 1): in the `homebrew-tap` clone, replace
+4. Check that the Release workflow's `publish-homebrew-formula` job pushed `pulse X.Y.Z` to the
+   tap and that the tap's `test` workflow is green (ADR-056). If it failed (e.g. an expired
+   `HOMEBREW_TAP_TOKEN`), update the tap by hand: in the `homebrew-tap` clone, replace
    `Formula/pulse.rb` with the release's `pulse.rb`
    (`curl -fsSLo Formula/pulse.rb https://github.com/SamueleMoscatelli/pulse/releases/download/vX.Y.Z/pulse.rb`),
    commit `pulse X.Y.Z` and push. Its `test` workflow installs the formula on macOS (arm,
