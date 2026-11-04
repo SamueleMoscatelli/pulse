@@ -136,14 +136,13 @@ are attached to each [GitHub release](https://github.com/SamueleMoscatelli/pulse
 From source: `cargo install --locked --git https://github.com/SamueleMoscatelli/pulse pulse-cli`.
 
 ```sh
+# Homebrew (macOS / Linux)
+brew install SamueleMoscatelli/tap/pulse
 # macOS / Linux
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/SamueleMoscatelli/pulse/releases/latest/download/pulse-cli-installer.sh | sh
 # Windows (PowerShell)
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/SamueleMoscatelli/pulse/releases/latest/download/pulse-cli-installer.ps1 | iex"
 ```
-
-Each release also carries a Homebrew formula (`pulse.rb`) for the
-`SamueleMoscatelli/homebrew-tap` tap.
 
 ## GitHub Action
 
