@@ -13,7 +13,7 @@ use crate::lexicon::imperatives::{
     COMMENT_DIRECTIVES, GENERATED_MARKERS, HTML_TAG, IMPERATIVES, LICENSE_MARKERS, TOOL_COMMENTS,
 };
 use crate::lexicon::injection::INJECTION;
-use crate::security::injection::at_word_bounds;
+use crate::security::injection::is_hit;
 use crate::util::truncate;
 
 /// Chars of a comment or tag quoted in a message.
@@ -77,7 +77,7 @@ fn comment(src: &str, c: Span) -> Option<String> {
     if let Some(m) = INJECTION
         .automaton
         .find_iter(&norm.text)
-        .find(|m| at_word_bounds(&norm.text, m.range()))
+        .find(|m| is_hit(&norm, inner, m))
     {
         let phrase = truncate(&INJECTION.display[m.pattern().as_usize()], QUOTED);
         return Some(format!("HTML comment hides injection phrase \"{phrase}\""));
@@ -302,6 +302,7 @@ fn padding(asset: &Asset, md: &MarkdownView, out: &mut Vec<Finding>) {
                 .code_blocks
                 .iter()
                 .any(|c| c.span.start as usize <= i && i < c.span.end as usize)
+            && !cell_padding(asset.source.as_str(), md, start..i)
         {
             out.push(Finding::new(
                 &META,
@@ -317,6 +318,22 @@ fn padding(asset: &Asset, md: &MarkdownView, out: &mut Vec<Finding>) {
             ));
         }
     }
+}
+
+/// AI-SEC-011 FP guard: a run that aligns the cells of a GFM table row. It stays on one
+/// line inside a parsed table, and a `|` still follows it on that line, so the text after
+/// it is a rendered cell. Text after a row's last pipe is not a cell and stays reported.
+fn cell_padding(src: &str, md: &MarkdownView, run: Range<usize>) -> bool {
+    let in_table = md
+        .tables
+        .iter()
+        .any(|t| t.span.start as usize <= run.start && run.end < t.span.end as usize);
+    in_table
+        && !src.get(run.clone()).is_some_and(|r| r.contains('\n'))
+        && src
+            .get(run.end..)
+            .and_then(|rest| rest.split('\n').next())
+            .is_some_and(|line| line.contains('|'))
 }
 
 /// Whether one of `spans` (sorted, non-overlapping) covers byte `pos`.

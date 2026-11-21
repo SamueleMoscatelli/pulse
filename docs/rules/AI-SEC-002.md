@@ -11,6 +11,8 @@ An instruction file, skill, tool description or MCP config is read by the agent 
 
 The message quotes the lexicon phrase, e.g. `Prompt-injection phrase "ignore all previous instructions"`.
 
+Mode switches are matched as switches. "sudo mode" alone is also a product feature (re-authenticating before a sensitive action), so `Endpoints check that the user is in sudo mode` and `Ask the user to enter sudo mode` are not reported. `You are now in sudo mode` and `sudo mode enabled` are reported, and so are `Enter sudo mode` and `You must enable sudo mode`, because the verb opens its clause and addresses the model.
+
 Severity is downgraded to **Low** (still reported) when the phrase is:
 - inside a fenced code block whose info string is `text` or `example`, or
 - in a Markdown section whose heading contains "injection", "security" or "example attack" (up to the next heading of the same or a higher level).
