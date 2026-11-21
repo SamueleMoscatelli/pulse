@@ -4,10 +4,9 @@ All notable changes to Pulse are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Pulse follows
 [semantic versioning](https://semver.org/).
 
-## 1.2.1-rc.1 - 2026-11-21
+## 1.2.1 - 2026-11-21
 
-Release candidate for 1.2.1: false positives found by scanning 39 public repositories
-with AI assets (ADR-057).
+False positives found by scanning 39 public repositories with AI assets (ADR-057).
 
 ### Fixed
 
@@ -25,6 +24,10 @@ with AI assets (ADR-057).
   when a skill describes its domain (`Covers how the CLI passes the access token`).
 - AI-SEC-002 and AI-SEC-012 no longer treat "sudo mode", a product feature, as a prompt
   injection; `you are now in sudo mode` and `Enter sudo mode` still are.
+
+## 1.2.1-rc.1 - 2026-11-21
+
+Release candidate for 1.2.1, with the same changes.
 
 ## 1.2.0 - 2026-10-31
 
