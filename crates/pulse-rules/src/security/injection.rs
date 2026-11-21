@@ -2,12 +2,14 @@
 
 use std::ops::Range;
 
+use pulse_core::text::Normalized;
 use pulse_core::{
     Asset, Category, ConfigError, Finding, KindSet, MarkdownView, Rule, RuleCtx, RuleMeta,
     Severity, Span,
 };
 use serde::Deserialize;
 
+use crate::lexicon::imperatives::LEADERS;
 use crate::lexicon::injection::INJECTION;
 use crate::lexicon::normalize_phrase;
 use crate::util::truncate;
@@ -70,7 +72,7 @@ impl Rule for InjectionPhrase {
         let mut allow: Option<Vec<String>> = None;
         let mut guards: Option<Guards> = None;
         for m in inj.automaton.find_iter(text) {
-            if !at_word_bounds(text, m.range()) {
+            if !is_hit(norm, &asset.source, &m) {
                 continue;
             }
             let id = m.pattern().as_usize();
@@ -124,6 +126,30 @@ impl Rule for InjectionPhrase {
             out.push(f);
         }
     }
+}
+
+/// Whether lexicon match `m` in `norm` (the normalized `src`) counts: on word boundaries and,
+/// for an [`ADDRESSED`](crate::lexicon::injection::ADDRESSED) phrase, opening its clause in
+/// `src` (normalized text has no line breaks).
+pub(crate) fn is_hit(norm: &Normalized, src: &str, m: &aho_corasick::Match) -> bool {
+    at_word_bounds(&norm.text, m.range())
+        && (!INJECTION.addressed[m.pattern().as_usize()]
+            || opens_clause(src, norm.source_span(m.range()).start as usize))
+}
+
+/// Whether only [`LEADERS`] (or list markers) sit between the last clause break and `at`.
+fn opens_clause(text: &str, at: usize) -> bool {
+    let before = text.get(..at).unwrap_or_default();
+    let clause = before
+        .rsplit([
+            '.', '!', '?', ';', ':', ',', '(', ')', '\n', '"', '\u{201C}', '—', '–',
+        ])
+        .next()
+        .unwrap_or_default();
+    clause
+        .split(|c: char| !c.is_alphanumeric() && c != '\'')
+        .filter(|w| !w.is_empty() && !w.chars().all(|c| c.is_ascii_digit()))
+        .all(|w| LEADERS.iter().any(|l| l.eq_ignore_ascii_case(w)))
 }
 
 /// Whether `range` in `text` starts and ends on word boundaries (where the phrase has
@@ -254,6 +280,17 @@ mod tests {
         let t = "forget everythings";
         assert!(!at_word_bounds(t, 0..17));
         assert!(at_word_bounds("a</system>b", 1..10));
+    }
+
+    #[test]
+    fn addressed_phrases_must_open_their_clause() {
+        let at = |s: &str| opens_clause(s, s.find("enter").unwrap_or_default());
+        assert!(at("enter sudo mode"));
+        assert!(at("# Rules\n- **Now** enter sudo mode"));
+        assert!(at("Done. You must first enter sudo mode"));
+        assert!(at("1. Then enter sudo mode"));
+        assert!(!at("Ask the user to enter sudo mode"));
+        assert!(!at("Users must enter sudo mode"));
     }
 
     fn quoted_at(line: &str, phrase: &str) -> bool {

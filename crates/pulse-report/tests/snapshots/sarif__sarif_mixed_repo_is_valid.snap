@@ -1,6 +1,5 @@
 ---
 source: crates/pulse-report/tests/sarif.rs
-assertion_line: 54
 expression: out
 ---
 {
@@ -189,7 +188,7 @@ expression: out
               }
             }
           ],
-          "version": "1.2.0"
+          "version": "1.2.1"
         }
       }
     }
