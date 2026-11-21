@@ -4,9 +4,10 @@ All notable changes to Pulse are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Pulse follows
 [semantic versioning](https://semver.org/).
 
-## 1.2.1 - Unreleased
+## 1.2.1-rc.1 - 2026-11-21
 
-False positives found by scanning 39 public repositories with AI assets (ADR-057).
+Release candidate for 1.2.1: false positives found by scanning 39 public repositories
+with AI assets (ADR-057).
 
 ### Fixed
 
