@@ -152,6 +152,10 @@ pub const SENSITIVE: &[&str] = &[
     "conversation",
     "chat history",
     "system prompt",
+    "personal data",
+    "private data",
+    "user data",
+    "pii",
 ];
 
 /// Words that introduce a tool rather than the payload (`upload the build using the token`).

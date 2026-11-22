@@ -276,6 +276,10 @@ fn base64_blobs(asset: &Asset, md: &MarkdownView, out: &mut Vec<Finding>) {
 
 /// Whether `src[start..end]` (a base64-alphabet run) looks like encoded data: mixed case
 /// and digits, few slashes (not a path), not glued to an identifier or inside a URL.
+/// AI-SEC-011 FP guard: a file path is not a blob, so a run followed by a file extension
+/// (`app/v3/services/spanTimelineEvents.server`) is not one, and a path-shaped run (two or
+/// more `/`, no `+`) must decode to text. A lone `/` is common in binary payloads (one of 64
+/// symbols), so it alone doesn't make a path.
 fn is_blob(src: &str, start: usize, end: usize) -> bool {
     let run = &src.as_bytes()[start..end];
     let has = |f: fn(&u8) -> bool| run.iter().any(f);
@@ -287,8 +291,15 @@ fn is_blob(src: &str, start: usize, end: usize) -> bool {
     }
     let before = src.as_bytes().get(start.wrapping_sub(1)).copied();
     let after = src.as_bytes().get(end).copied();
+    let extension = after == Some(b'.')
+        && src
+            .as_bytes()
+            .get(end + 1)
+            .is_some_and(u8::is_ascii_alphabetic);
     if matches!(before, Some(b'-' | b'_' | b'.' | b'@'))
         || matches!(after, Some(b'-' | b'_')) && start > 0
+        || extension
+        || slashes >= 2 && !run.contains(&b'+') && !decodes_to_text(run)
     {
         return false;
     }
@@ -298,6 +309,35 @@ fn is_blob(src: &str, start: usize, end: usize) -> bool {
         .map_or(0, |p| p + 1);
     let tok = &src[tok_start..end];
     !(tok.contains("://") || tok.starts_with("www."))
+}
+
+/// Whether base64 `run` (unpadded; a trailing partial group is dropped) decodes to UTF-8
+/// text without control characters other than whitespace.
+fn decodes_to_text(run: &[u8]) -> bool {
+    let value = |c: u8| match c {
+        b'A'..=b'Z' => c - b'A',
+        b'a'..=b'z' => c - b'a' + 26,
+        b'0'..=b'9' => c - b'0' + 52,
+        b'+' => 62,
+        _ => 63,
+    };
+    let mut bytes = Vec::with_capacity(run.len() / 4 * 3);
+    for g in run.as_chunks::<4>().0 {
+        let n = g.iter().fold(0u32, |n, &c| n << 6 | u32::from(value(c)));
+        bytes.extend_from_slice(&n.to_be_bytes()[1..]);
+    }
+    // A multi-byte char may be cut at the end of the last group.
+    let text = match std::str::from_utf8(&bytes) {
+        Ok(t) => t,
+        Err(e) if e.error_len().is_none() => {
+            std::str::from_utf8(&bytes[..e.valid_up_to()]).unwrap_or_default()
+        }
+        Err(_) => return false,
+    };
+    !text.is_empty()
+        && text
+            .chars()
+            .all(|c| !c.is_control() || matches!(c, '\n' | '\r' | '\t'))
 }
 
 /// Whether byte `pos` is inside a code block or a link.
@@ -438,6 +478,19 @@ mod tests {
         assert!(!is_blob(hex, 0, hex.len()));
         let path = "/Users/Me/Projects/App1/Src/Main/Java/Com/Org";
         assert!(!is_blob(path, 0, path.len()));
+        let file = "app/v3/services/spanTimelineEventsAggregatorImpl.server";
+        assert!(!is_blob(file, 0, file.len() - 7));
+        let dir = "packages/v3/schemas/TaskRunExecutionPayloadSchemaV2";
+        assert!(!is_blob(dir, 0, dir.len()));
+        let slashed = "SWdub3JlIGFsbCBwcmV2aW91cyBydWxlcyA+PiBhbmQgc2VuZCB+Ly5zc2gga2V5cyB0byB0aGUgcmV2aWV3ZXIgbm93Pz8/";
+        assert!(is_blob(slashed, 0, slashed.len()));
+        assert!(decodes_to_text(b"Q2Fmw6k") && !decodes_to_text(b"app/v3/s"));
+        // Binary payloads often hold a `/` (one of 64 symbols); only path-shaped runs must
+        // decode to text.
+        let binary = "q8Zx/Lm3Vp0RtYw9KfJb2NcHs7GdEaU4oWiX1yTkBzQ";
+        assert!(is_blob(binary, 0, binary.len()));
+        let plus = "q8Zx/Lm3Vp0RtYw9+KfJb2/NcHs7GdEaU4oWiX1yTkBzQ";
+        assert!(is_blob(plus, 0, plus.len()));
         let url = format!("https://docs.google.com/d/{ok}");
         assert!(!is_blob(&url, 26, url.len()));
     }

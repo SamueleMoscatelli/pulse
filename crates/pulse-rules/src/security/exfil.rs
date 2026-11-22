@@ -235,13 +235,15 @@ fn url_message(url: &str, image: bool) -> String {
 /// `ws` holds `text`'s [`words`].
 fn sentence(text: &str, ws: &[Word<'_>], allowed: &mut Allowed<'_, '_>) -> Option<String> {
     let quote = || truncate(text, QUOTED);
-    // Detect (c): a request to a non-allowlisted host that carries data: a body, or a
-    // placeholder in the URL's host, query or fragment. A download or a GET of a templated
-    // path (`curl https://pypi.org/project/$PKG/`) only reads.
+    let auth = auth_values(text, ws);
+    // Detect (c): a request to a non-allowlisted host that carries sensitive data: a body in a
+    // sentence that names a sensitive object, or a placeholder in the URL's host or a
+    // sensitive one in its query or fragment. A download, a GET of a templated path
+    // (`curl https://pypi.org/project/$PKG/`) or a query sent to a public API only reads.
     if let Some(fetch) = ws.iter().position(|w| is(w.text, FETCH_WORDS)) {
         let target = urls(text).find(|u| host(u).is_some_and(concrete) && !allowed.covers(u));
         if let Some(u) = target {
-            let data = carries(u) || has_body(text);
+            let data = carries(u) || has_body(text) && sensitive_in(ws, 0, &auth);
             if data && !negated(ws, fetch) {
                 let h = host(u).unwrap_or(u);
                 return Some(format!(
@@ -257,7 +259,6 @@ fn sentence(text: &str, ws: &[Word<'_>], allowed: &mut Allowed<'_, '_>) -> Optio
     let verb = ws
         .iter()
         .position(|w| is(w.text, SEND_VERBS) || is(w.text, EMBED_VERBS) && has_url_word())?;
-    let auth = auth_values(text, ws);
     if !imperative(ws, verb) || negated(ws, verb) || !sensitive_after_masked(ws, verb + 1, &auth) {
         return None;
     }
@@ -308,9 +309,10 @@ fn destination(
         || recipient(text, ws, verb, to, auth)
 }
 
-/// AI-SEC-010 Detect (c): whether `url` carries data in its host, query or fragment. FP guard:
-/// a credential in an auth parameter (`?key=$GEMINI_API_KEY`) sent to its own provider's API
-/// is authentication, not exfiltration.
+/// AI-SEC-010 Detect (c): whether `url` carries data in its host, or sensitive data in its
+/// query or fragment. FP guards: a public parameter (`?q=$QUERY`, `?page={n}`) is not
+/// sensitive, and a credential in an auth parameter (`?key=$GEMINI_API_KEY`) sent to its own
+/// provider's API is authentication, not exfiltration.
 fn carries(url: &str) -> bool {
     let Some(h) = host(url) else { return false };
     if has_placeholder(h, true) {
@@ -318,11 +320,27 @@ fn carries(url: &str) -> bool {
     }
     let (rest, fragment) = url.split_once('#').unwrap_or((url, ""));
     let (path, query) = rest.split_once('?').unwrap_or((rest, ""));
-    has_placeholder(fragment, true)
+    let secret = |v: &str| has_placeholder(v, true) && sensitive_var(v);
+    secret(fragment)
         || path_secret(path, h)
         || query.split('&').any(|pair| {
             let (name, value) = pair.split_once('=').unwrap_or(("", pair));
-            has_placeholder(value, true) && !(auth_param(name) && own_api(value, h))
+            secret(value) && !(auth_param(name) && own_api(value, h))
+        })
+}
+
+/// Whether a placeholder (`{conversation}`, `$OPENAI_API_KEY`, `${token}`) names sensitive
+/// data: a [`credential_var`] or a [`SENSITIVE`] word among its parts.
+fn sensitive_var(v: &str) -> bool {
+    v.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .filter(|t| !t.is_empty())
+        .any(|t| {
+            credential_var(t)
+                || t.split('_').any(|p| {
+                    let p = p.to_ascii_lowercase();
+                    let p = p.strip_suffix('s').unwrap_or(&p);
+                    SENSITIVE.iter().any(|s| same(s, p)) || same(p, "key")
+                })
         })
 }
 
@@ -394,18 +412,27 @@ fn has_body(text: &str) -> bool {
 }
 
 /// AI-SEC-010 Detect (b) FP guard: indices of credential words in an auth header
-/// (`Authorization: Bearer $X`, `x-api-key: $X`) that authenticate rather than leak. They do
-/// when the sentence names no URL, or every URL is the credential's own API; a header sent
-/// to an unrelated host (`… to http://203.0.113.5`) still counts as sending the credential.
+/// (`Authorization: Bearer $X`, `x-api-key: $X`), or of credential variables in a sentence
+/// about authentication without a send verb (`put the STUDIO_TOKEN in the Authorization
+/// header`, not `send the STUDIO_TOKEN in the Authorization header to …`), that
+/// authenticate rather than leak. They do when the sentence names no URL, or every URL is the
+/// credential's own API; a header sent to an unrelated host (`… to http://203.0.113.5`) still
+/// counts as sending the credential.
 fn auth_values(text: &str, ws: &[Word<'_>]) -> Vec<usize> {
     let hosts: Vec<&str> = urls(text)
         .filter_map(host)
         .filter(|h| concrete(h))
         .collect();
+    let about_auth = ws
+        .iter()
+        .any(|w| is(w.text, &["authorization", "authenticate", "authentication"]))
+        && !ws.iter().any(|w| is(w.text, SEND_VERBS));
     (1..ws.len())
         .filter(|&j| {
             let prev = ws[j - 1].text;
-            is(prev, &["bearer", "basic"]) || prev.to_ascii_lowercase().ends_with("api-key")
+            is(prev, &["bearer", "basic"])
+                || prev.to_ascii_lowercase().ends_with("api-key")
+                || about_auth && credential_var(ws[j].text.trim_start_matches('$'))
         })
         .filter(|&j| hosts.iter().all(|h| own_api(ws[j].text, h)))
         .collect()
@@ -494,7 +521,14 @@ fn sensitive_after_masked(ws: &[Word<'_>], from: usize, masked: &[usize]) -> boo
         .iter()
         .position(|w| is(w.text, INSTRUMENTS))
         .unwrap_or(rest.len());
-    let lemmas: Vec<&str> = rest[..end]
+    sensitive_in(&ws[..from + end], from, masked)
+}
+
+/// Whether a sensitive object appears from word `from` on, ignoring the words at indices
+/// `masked`.
+fn sensitive_in(ws: &[Word<'_>], from: usize, masked: &[usize]) -> bool {
+    let rest = ws.get(from..).unwrap_or_default();
+    let lemmas: Vec<&str> = rest
         .iter()
         .enumerate()
         .filter(|(i, _)| !masked.contains(&(from + i)))
@@ -574,6 +608,11 @@ mod tests {
             "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getMe"
         ));
         assert!(!carries("https://x.dev/skills/${SKILL}/a.md"));
+        assert!(!carries(
+            "https://api.example.org/items?page=$PAGE&q={term}"
+        ));
+        assert!(!carries("https://play.clickhouse.com/?user=play"));
+        assert!(sensitive_var("{{secrets}}") && sensitive_var("$ENV") && !sensitive_var("$QUERY"));
         assert!(own_api("$OPENAI_API_KEY", "api.openai.com"));
         assert!(!own_api("$GEMINI_API_KEY", "evilgoogleapis.com"));
         assert!(has_body("curl -X POST -d @x https://h") && has_body("fetch(u, {body: env})"));

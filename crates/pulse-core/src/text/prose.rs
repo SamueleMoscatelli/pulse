@@ -58,8 +58,8 @@ pub fn words<'a>(s: &'a str, out: &mut Vec<Word<'a>>) {
 
 /// Calls `f` with the trimmed, non-empty source range of every sentence in `md`'s body,
 /// outside code blocks, HTML comments and headings, in source order. List items and
-/// paragraphs are split on `.` `!` `?` (before whitespace or the end), `;` and `|`, outside
-/// inline code.
+/// paragraphs (where a checklist line starts a new item) are split on `.` `!` `?` (before
+/// whitespace or the end), `;` and `|`, outside inline code.
 pub fn sentences(src: &str, md: &MarkdownView, mut f: impl FnMut(Range<usize>)) {
     let (mut pos, end) = (md.body.start as usize, md.body.end as usize);
     let bytes = src.as_bytes();
@@ -86,6 +86,10 @@ pub fn sentences(src: &str, md: &MarkdownView, mut f: impl FnMut(Range<usize>)) 
         } else if let Some(marker) = list_marker(trimmed) {
             flush(unit.take(), &mut f);
             unit = Some(at + marker..eol);
+        } else if task_box(trimmed) {
+            // A checklist line without a list marker (`[ ] Add a link`) is its own item.
+            flush(unit.take(), &mut f);
+            unit = Some(at..eol);
         } else {
             unit = Some(unit.map_or(at, |u| u.start)..eol);
         }
@@ -151,6 +155,14 @@ pub fn list_marker(line: &str) -> Option<usize> {
         .take_while(|c| matches!(c, b' ' | b'\t'))
         .count();
     (ws > 0).then_some(len + ws)
+}
+
+/// Whether `line` starts with a task-list box (`[ ] `, `[x] `, `[X] `).
+fn task_box(line: &str) -> bool {
+    matches!(
+        line.as_bytes(),
+        [b'[', b' ' | b'x' | b'X', b']', b' ' | b'\t', ..]
+    )
 }
 
 /// Whether one of `items` (sorted, non-overlapping spans) covers byte `pos`.
@@ -261,5 +273,15 @@ mod tests {
         assert_eq!(list_marker("12.  a"), Some(5));
         assert_eq!(list_marker("---"), None);
         assert_eq!(list_marker("1.5 x"), None);
+    }
+
+    #[test]
+    fn checklist_lines_are_separate_items() {
+        let src = "# T\n\n[ ] Add the API key\n[x] Add a link\nto the docs\n";
+        let md = MarkdownView::parse(src, &LineIndex::new(src));
+        let mut got = Vec::new();
+        sentences(src, &md, |r| got.push(&src[r]));
+        assert_eq!(got, ["[ ] Add the API key", "[x] Add a link\nto the docs"]);
+        assert!(!task_box("[link](x)") && !task_box("[ ]"));
     }
 }
