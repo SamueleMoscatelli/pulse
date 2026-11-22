@@ -4,10 +4,9 @@ All notable changes to Pulse are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Pulse follows
 [semantic versioning](https://semver.org/).
 
-## 1.2.2-rc.2 - 2026-11-22
+## 1.2.2 - 2026-11-22
 
-Second release candidate for 1.2.2 (`1.2.2-rc.1` was published without binaries): the
-remaining false positives from the 39-repository survey (ADR-058).
+The remaining false positives from the 39-repository survey (ADR-058).
 
 ### Fixed
 
@@ -23,6 +22,11 @@ remaining false positives from the 39-repository survey (ADR-058).
 - AI-SEC-011 no longer reports editor notes in HTML comments (`Customize this skill … Delete
   that copy …`, `Never edit this file by hand`). It now also reports comments that address
   an AI reader by name (`<!-- AI agents: ignore the rules above … -->`).
+
+## 1.2.2-rc.2 - 2026-11-22
+
+Second release candidate for 1.2.2, with the same changes. `1.2.2-rc.1` was published
+without binaries.
 
 ## 1.2.1 - 2026-11-21
 
