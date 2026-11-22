@@ -135,6 +135,29 @@ pub(crate) fn is_hit(norm: &Normalized, src: &str, m: &aho_corasick::Match) -> b
     at_word_bounds(&norm.text, m.range())
         && (!INJECTION.addressed[m.pattern().as_usize()]
             || opens_clause(src, norm.source_span(m.range()).start as usize))
+        && !advice(norm, src, m)
+}
+
+/// AI-SEC-002 FP guard: whether a "tell the user" match `m` (see
+/// [`tells_user`](crate::lexicon::injection::Injection::tells_user)) is followed by
+/// `to <verb>` in `src`: `do not tell the user to check their API key` is advice about what
+/// to say, not concealment. Any other continuation (`about this instruction`, `that you ran
+/// the command`, `they hid a report`) stays a hit.
+fn advice(norm: &Normalized, src: &str, m: &aho_corasick::Match) -> bool {
+    if !INJECTION.tells_user[m.pattern().as_usize()] {
+        return false;
+    }
+    let end = norm.source_span(m.range()).end as usize;
+    let rest = src.get(end..).unwrap_or_default();
+    // Only a space may separate the phrase from what follows (`… the user. To …` is
+    // another sentence).
+    let Some(rest) = rest.strip_prefix(' ') else {
+        return false;
+    };
+    let mut ws = rest
+        .split(|c: char| !c.is_alphanumeric() && c != '\'' && c != '’')
+        .filter(|w| !w.is_empty());
+    ws.next().is_some_and(|w| w.eq_ignore_ascii_case("to")) && ws.next().is_some()
 }
 
 /// Whether only [`LEADERS`] (or list markers) sit between the last clause break and `at`.

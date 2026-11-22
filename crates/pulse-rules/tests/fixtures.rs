@@ -555,6 +555,20 @@ fn sec002_quoted_mention_is_high_with_baseline_hint() {
 }
 
 #[test]
+fn sec002_concealment_and_user_statements_stay_critical() {
+    let f = sec002_fixture("fail_concealment.md");
+    assert_eq!(f.len(), 5, "{f:?}");
+    assert!(f.iter().all(|f| f.severity == Severity::Critical), "{f:?}");
+    let f = sec002_fixture("fail_user_statement.md");
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(f[0].severity, Severity::Critical);
+    assert!(
+        f[0].message
+            .starts_with("Prompt-injection phrase \"do not tell the user\"")
+    );
+}
+
+#[test]
 fn sec002_unquoted_phrase_in_safety_section_stays_critical() {
     let f = sec002_fixture("fail_unquoted_safety_section.md");
     assert_eq!(f.len(), 1, "{f:?}");
@@ -1142,6 +1156,18 @@ fn sec011_padding_outside_table_cells_is_reported() {
     let f = sec011(&src);
     assert_eq!(f.len(), 1, "{f:?}");
     assert_eq!(loc(&f[0]).0, 5);
+}
+
+#[test]
+fn sec011_agent_comment_marker_stays_high() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/AI-SEC-011");
+    let f = sec011(&fs::read_to_string(dir.join("fail_agent_comments.md")).unwrap());
+    assert_eq!(f.len(), 4, "{f:?}");
+    assert!(f.iter().all(|f| f.severity == Severity::High), "{f:?}");
+    assert!(
+        f[0].message
+            .starts_with("HTML comment hides an instruction")
+    );
 }
 
 #[test]
