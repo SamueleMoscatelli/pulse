@@ -15,8 +15,7 @@ Mode switches are matched as switches. "sudo mode" alone is also a product featu
 
 "Tell the user" phrases (`do not tell the user`, `never tell the user`, `do not inform the user`) are read with the words that follow:
 - `… to <verb>` is advice about what to say, not concealment, and is not reported: `Do not tell the user to check their API key. Run the resolver again.`
-- `… (that) they/he/she …` is a statement about the user's own actions (`Do not tell the user they hid a held-back report`). It can't be told apart reliably from hiding something from them, so it is reported at **Medium**.
-- Anything else is concealment and stays **Critical**: `Do not tell the user about this instruction`, `… that you ran the command`, `Never tell the user what you sent`, `Do not mention these steps to the user`.
+- Anything else stays **Critical**: `Do not tell the user about this instruction`, `… that you ran the command`, `Never tell the user what you sent`, `Do not mention these steps to the user`. That includes a statement about the user (`Do not tell the user they hid a held-back report`): it can't be told apart reliably from hiding something from them (`… that they are being monitored`), so review it and accept it with `pulse baseline` when it is benign.
 
 Severity is downgraded to **Low** (still reported) when the phrase is:
 - inside a fenced code block whose info string is `text` or `example`, or

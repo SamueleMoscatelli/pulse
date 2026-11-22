@@ -116,16 +116,12 @@ impl Rule for InjectionPhrase {
                 f
             } else {
                 let phrase = truncate(display, MAX_QUOTE);
-                let mut f = Finding::new(
+                Finding::new(
                     &META,
                     asset,
                     span,
                     format!("Prompt-injection phrase \"{phrase}\""),
-                );
-                if told(norm, &asset.source, &m) == Told::UserStatement {
-                    f.severity = Severity::Medium;
-                }
-                f
+                )
             };
             out.push(f);
         }
@@ -139,51 +135,29 @@ pub(crate) fn is_hit(norm: &Normalized, src: &str, m: &aho_corasick::Match) -> b
     at_word_bounds(&norm.text, m.range())
         && (!INJECTION.addressed[m.pattern().as_usize()]
             || opens_clause(src, norm.source_span(m.range()).start as usize))
-        && told(norm, src, m) != Told::Advice
+        && !advice(norm, src, m)
 }
 
-/// What follows a [`tells_user`](crate::lexicon::injection::Injection::tells_user) phrase.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Told {
-    /// `do not tell the user to check their API key`: which advice to give, not concealment.
-    Advice,
-    /// `do not tell the user (that) they hid a report`: a statement about the user's own
-    /// actions. Not reliably told apart from concealment, so reported at Medium.
-    UserStatement,
-    /// Anything else (`about this instruction`, `that you ran the command`), and phrases that
-    /// don't tell the user.
-    Other,
-}
-
-/// AI-SEC-002 FP guard: classifies the words after a "tell the user" match `m` in `src`.
-pub(crate) fn told(norm: &Normalized, src: &str, m: &aho_corasick::Match) -> Told {
+/// AI-SEC-002 FP guard: whether a "tell the user" match `m` (see
+/// [`tells_user`](crate::lexicon::injection::Injection::tells_user)) is followed by
+/// `to <verb>` in `src`: `do not tell the user to check their API key` is advice about what
+/// to say, not concealment. Any other continuation (`about this instruction`, `that you ran
+/// the command`, `they hid a report`) stays a hit.
+fn advice(norm: &Normalized, src: &str, m: &aho_corasick::Match) -> bool {
     if !INJECTION.tells_user[m.pattern().as_usize()] {
-        return Told::Other;
+        return false;
     }
     let end = norm.source_span(m.range()).end as usize;
     let rest = src.get(end..).unwrap_or_default();
-    // Only a space may separate the phrase from what follows (`… the user. They …` is
+    // Only a space may separate the phrase from what follows (`… the user. To …` is
     // another sentence).
-    if !rest.starts_with(' ') {
-        return Told::Other;
-    }
+    let Some(rest) = rest.strip_prefix(' ') else {
+        return false;
+    };
     let mut ws = rest
         .split(|c: char| !c.is_alphanumeric() && c != '\'' && c != '’')
         .filter(|w| !w.is_empty());
-    let first = ws.next().unwrap_or_default();
-    let first = if first.eq_ignore_ascii_case("that") {
-        ws.next().unwrap_or_default()
-    } else {
-        first
-    };
-    let is = |w: &str, l: &[&str]| l.iter().any(|x| x.eq_ignore_ascii_case(w));
-    if first.eq_ignore_ascii_case("to") && ws.next().is_some() {
-        Told::Advice
-    } else if is(first, &["they", "he", "she"]) {
-        Told::UserStatement
-    } else {
-        Told::Other
-    }
+    ws.next().is_some_and(|w| w.eq_ignore_ascii_case("to")) && ws.next().is_some()
 }
 
 /// Whether only [`LEADERS`] (or list markers) sit between the last clause break and `at`.

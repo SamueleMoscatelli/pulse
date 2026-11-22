@@ -555,13 +555,13 @@ fn sec002_quoted_mention_is_high_with_baseline_hint() {
 }
 
 #[test]
-fn sec002_concealment_stays_critical_and_user_statements_are_medium() {
+fn sec002_concealment_and_user_statements_stay_critical() {
     let f = sec002_fixture("fail_concealment.md");
     assert_eq!(f.len(), 5, "{f:?}");
     assert!(f.iter().all(|f| f.severity == Severity::Critical), "{f:?}");
     let f = sec002_fixture("fail_user_statement.md");
     assert_eq!(f.len(), 1, "{f:?}");
-    assert_eq!(f[0].severity, Severity::Medium);
+    assert_eq!(f[0].severity, Severity::Critical);
     assert!(
         f[0].message
             .starts_with("Prompt-injection phrase \"do not tell the user\"")
