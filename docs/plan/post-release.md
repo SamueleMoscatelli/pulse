@@ -42,6 +42,10 @@ formula, not dist's binary one. Revisit once there are users.
 ## Every release from now on
 1. PR: bump `version` in the root `Cargo.toml`, add the `CHANGELOG.md` section (`## X.Y.Z - date`),
    refresh the report snapshots (only the version line changes) and the README sample header.
+   The section must not contain token-like text such as `Bearer <word>`: GitHub masks it in the
+   plan job's output, drops the whole output ("Skip output 'val' since it may contain secret"),
+   and the release is published without binaries (as `v1.2.2-rc.1` was). After tagging, check that
+   the release has its archives, not only `dist-manifest.json`.
 2. Merge, then on an up-to-date `main`: `git tag -a vX.Y.Z -m "Pulse X.Y.Z" && git push origin vX.Y.Z`.
    A `-rc.N` suffix publishes a prerelease.
 3. When the Release workflow is green, move the major tag:
