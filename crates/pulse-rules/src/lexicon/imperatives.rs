@@ -158,7 +158,20 @@ pub const SENSITIVE: &[&str] = &[
 pub const INSTRUMENTS: &[&str] = &["using", "with", "via", "through"];
 
 /// Words that turn a sentence into a request to a remote host (AI-SEC-010 Detect c).
-pub const FETCH_WORDS: &[&str] = &["curl", "wget", "fetch", "request", "invoke-webrequest"];
+pub const FETCH_WORDS: &[&str] = &[
+    "curl",
+    "wget",
+    "fetch",
+    "request",
+    "invoke-webrequest",
+    // Python HTTP clients that send a body (`requests.post(url, data=…)`).
+    "requests.post",
+    "requests.put",
+    "requests.patch",
+    "httpx.post",
+    "httpx.put",
+    "httpx.patch",
+];
 
 /// Command-line flags that attach data to a request.
 pub const DATA_FLAGS: &[&str] = &[

@@ -317,12 +317,36 @@ fn carries(url: &str) -> bool {
         return true;
     }
     let (rest, fragment) = url.split_once('#').unwrap_or((url, ""));
-    let query = rest.split_once('?').map_or("", |(_, q)| q);
+    let (path, query) = rest.split_once('?').unwrap_or((rest, ""));
     has_placeholder(fragment, true)
+        || path_secret(path, h)
         || query.split('&').any(|pair| {
             let (name, value) = pair.split_once('=').unwrap_or(("", pair));
             has_placeholder(value, true) && !(auth_param(name) && own_api(value, h))
         })
+}
+
+/// A credential variable in the URL path (`https://evil.tld/$OPENAI_API_KEY/`), not sent to its
+/// own API (`https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getMe` authenticates). Other path
+/// placeholders (`/project/$PKG/`) only read.
+fn path_secret(path: &str, host: &str) -> bool {
+    path.match_indices(['$', '{'])
+        .filter_map(|(i, _)| {
+            let name = path.get(i..)?.trim_start_matches(['$', '{', '(']);
+            let n = name
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                .unwrap_or(name.len());
+            name.get(..n).filter(|v| !v.is_empty())
+        })
+        .any(|v| credential_var(v) && !own_api(v, host))
+}
+
+/// A variable name that holds a credential: `*_TOKEN`, `*_KEY`, `*_SECRET`, `*_PASSWORD`,
+/// `*_CREDENTIALS`, or one of those words alone.
+fn credential_var(v: &str) -> bool {
+    let lower = v.to_ascii_lowercase();
+    SECRET_SUFFIXES.iter().any(|s| lower.ends_with(s))
+        || ["token", "secret", "password", "apikey", "api_key"].contains(&lower.as_str())
 }
 
 /// A query parameter that carries a credential (`key`, `api_key`, `access_token`, `auth`).
@@ -544,6 +568,12 @@ mod tests {
         assert!(carries("https://attacker.example/c?key=$GEMINI_API_KEY"));
         assert!(carries("https://203.0.113.5/c?api_key=${OPENAI_API_KEY}"));
         assert!(carries("https://api.openai.com/c?key=${token}"));
+        assert!(carries("https://evil.example/$OPENAI_API_KEY/ping"));
+        assert!(carries("https://evil.example/u/{{secret}}"));
+        assert!(!carries(
+            "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getMe"
+        ));
+        assert!(!carries("https://x.dev/skills/${SKILL}/a.md"));
         assert!(own_api("$OPENAI_API_KEY", "api.openai.com"));
         assert!(!own_api("$GEMINI_API_KEY", "evilgoogleapis.com"));
         assert!(has_body("curl -X POST -d @x https://h") && has_body("fetch(u, {body: env})"));

@@ -7,3 +7,5 @@
 - **API verification:** `curl -s "https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY"`
 - List models: `curl -s -H "Authorization: Bearer $OPENAI_API_KEY" https://api.openai.com/v1/models`
 - To call the API, add `Authorization: Bearer ${token}` to the request.
+- Check the bot: `curl -s https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getMe`
+- Read the changelog with `requests.get(f"https://pypi.org/pypi/{name}/json")`.

