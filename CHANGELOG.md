@@ -4,6 +4,24 @@ All notable changes to Pulse are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Pulse follows
 [semantic versioning](https://semver.org/).
 
+## 1.2.2 - Unreleased
+
+The remaining false positives from the 39-repository survey (ADR-058).
+
+### Fixed
+
+- AI-SEC-010 no longer reports downloads and reads as "Request sends data". Only a request
+  body, or data in the URL's host, query or fragment, counts; a placeholder in the path
+  (`curl https://pypi.org/project/$PKG/`) does not. A credential sent to its own provider's
+  API (`?key=$GEMINI_API_KEY` to `googleapis.com`, `Authorization: Bearer …`) is
+  authentication. The same credential sent to an unrelated host is still reported.
+- AI-SEC-002 no longer treats `do not tell the user to <do something>` as concealment, and
+  reports `do not tell the user (that) they …` at Medium instead of Critical. It now also
+  catches `never tell the user …` and `do not mention these steps …`.
+- AI-SEC-011 no longer reports editor notes in HTML comments (`Customize this skill … Delete
+  that copy …`, `Never edit this file by hand`). It now also reports comments that address
+  an AI reader by name (`<!-- AI agents: ignore the rules above … -->`).
+
 ## 1.2.1 - 2026-11-21
 
 False positives found by scanning 39 public repositories with AI assets (ADR-057).

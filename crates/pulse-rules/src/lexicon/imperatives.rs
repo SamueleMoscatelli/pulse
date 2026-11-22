@@ -176,8 +176,59 @@ pub const DATA_FLAGS: &[&str] = &[
     "--body-data",
 ];
 
+/// Request-body markers in code (`fetch(url, {body: …})`, `requests.post(url, data=…)`,
+/// PowerShell `-Body`) that make a request send data (AI-SEC-010 Detect c).
+pub const BODY_MARKERS: &[&str] = &["body:", "data=", "json=", "files=", "-body"];
+
+/// Generic words of a credential variable name; the rest names its provider
+/// (`OPENAI_API_KEY` → `openai`).
+pub const CREDENTIAL_WORDS: &[&str] = &[
+    "api", "key", "keys", "token", "secret", "access", "auth", "bearer", "pat", "personal",
+    "client", "id", "x",
+];
+
+/// Providers whose API host doesn't contain their name (`GEMINI_API_KEY` →
+/// `generativelanguage.googleapis.com`).
+pub const PROVIDER_HOSTS: &[(&str, &str)] = &[
+    ("gemini", "googleapis.com"),
+    ("google", "googleapis.com"),
+    ("aws", "amazonaws.com"),
+];
+
 /// Phrases in an HTML comment that make it a directive even without a leading verb.
 pub const COMMENT_DIRECTIVES: &[&str] = &["you must", "always", "never"];
+
+/// Nouns naming the document itself (`this skill`, `that copy`): a comment directive about
+/// them addresses the file's editor (AI-SEC-011 FP guard). `prompt`, `rule` and
+/// `instruction` are left out: `ignore this prompt` speaks to the model.
+pub const DOC_NOUNS: &[&str] = &[
+    "file", "skill", "agent", "command", "copy", "template", "section", "page", "document",
+    "readme", "comment", "block", "table", "list", "line", "heading", "example",
+];
+
+/// Words before a comment directive's verb (`you must not edit`, `never edit`).
+pub const DIRECTIVE_LEAD: &[&str] = &[
+    "you", "must", "should", "not", "never", "always", "please", "do", "don't", "don’t",
+];
+
+/// Verbs that stay instructions to the model even about the document (`Ignore this section`).
+pub const OVERRIDE_VERBS: &[&str] = &["ignore", "disregard", "forget", "skip"];
+
+/// Words that address an AI reader by name (`AI agents: …`, `Claude, …`) in a comment.
+pub const AGENT_NOUNS: &[&str] = &[
+    "ai",
+    "agent",
+    "assistant",
+    "model",
+    "llm",
+    "bot",
+    "claude",
+    "copilot",
+    "cursor",
+    "codex",
+    "gemini",
+    "chatgpt",
+];
 
 /// Leading words of tool directives in HTML comments (AI-SEC-011 FP guard).
 pub const TOOL_COMMENTS: &[&str] = &[
