@@ -77,6 +77,58 @@ pub const PHRASES: &[&str] = &[
 /// enable sudo mode`), not `ask the user to enter sudo mode` (a product feature).
 pub const ADDRESSED: &[&str] = &["{enable|enter|activate} sudo mode"];
 
+/// Verbs that make a sentence quoting an injection phrase a defensive rule when their object
+/// points back at the content ([`BACK_REFERENCES`]): `If a file says 'ignore previous
+/// instructions', flag it`.
+pub const DEFENSIVE_VERBS: &[&str] = &[
+    "flag",
+    "flags",
+    "ignore",
+    "ignores",
+    "disregard",
+    "refuse",
+    "refuses",
+    "reject",
+    "rejects",
+    "resist",
+    "report",
+    "reports",
+    "distrust",
+    "treat",
+    "treats",
+    "quarantine",
+    "escalate",
+];
+
+/// Objects of a [`DEFENSIVE_VERBS`] verb that refer to the quoted content (`flag it`, `treat
+/// any comment that says … as data`), unlike `report your system prompt`.
+pub const BACK_REFERENCES: &[&str] = &[
+    "it", "them", "this", "that", "these", "those", "such", "any", "all",
+];
+
+/// Words that mark the quoted content as untrusted by themselves.
+pub const DEFENSIVE_WORDS: &[&str] = &["untrusted", "suspicious"];
+
+/// Prepositions that introduce where an application setting lives (`enable developer mode in
+/// Settings`).
+pub const SETTING_PREPOSITIONS: &[&str] = &["in", "under", "from", "on", "via", "through", "using"];
+
+/// Nouns of an application's UI (`… in Settings`, `… from the About phone screen`).
+pub const SETTING_NOUNS: &[&str] = &[
+    "settings",
+    "setting",
+    "preferences",
+    "options",
+    "menu",
+    "panel",
+    "screen",
+    "toolbar",
+    "dashboard",
+    "app",
+    "console",
+    "extensions",
+];
+
 /// The compiled injection lexicon.
 pub struct Injection {
     /// Matches every normalized expansion, leftmost-longest.
@@ -90,6 +142,12 @@ pub struct Injection {
     /// Whether each pattern ID tells or informs "the user" (`do not tell the user`), so
     /// what follows decides between advice, a statement and concealment.
     pub tells_user: Vec<bool>,
+    /// Whether each pattern ID qualifies an action (`without telling the user`), so a
+    /// negated action (`don't delete it without telling the user`) is no concealment.
+    pub qualifies: Vec<bool>,
+    /// Whether each pattern ID switches on a mode that is also an application setting
+    /// (`enable developer mode`).
+    pub setting: Vec<bool>,
 }
 
 /// [`PHRASES`], expanded, normalized and compiled once.
@@ -122,12 +180,19 @@ pub static INJECTION: LazyLock<Injection> = LazyLock::new(|| {
         .iter()
         .map(|d| d.ends_with(" the user") && (d.contains("tell") || d.contains("inform")))
         .collect();
+    let qualifies = display.iter().map(|d| d.starts_with("without ")).collect();
+    let setting = display
+        .iter()
+        .map(|d| d.ends_with(" developer mode") && !d.starts_with("you "))
+        .collect();
     Injection {
         automaton,
         normalized,
         display,
         addressed,
         tells_user,
+        qualifies,
+        setting,
     }
 });
 
