@@ -4,9 +4,9 @@ All notable changes to Pulse are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Pulse follows
 [semantic versioning](https://semver.org/).
 
-## 1.2.3 - 2026-11-22
+## 1.2.3-rc.1 - 2026-11-22
 
-False positives from the 156-repository survey (ADR-059).
+Release candidate for 1.2.3: false positives from the 156-repository survey (ADR-059).
 
 ### Fixed
 
