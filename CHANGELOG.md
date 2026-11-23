@@ -4,9 +4,9 @@ All notable changes to Pulse are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Pulse follows
 [semantic versioning](https://semver.org/).
 
-## 1.2.4-rc.1 - 2026-11-23
+## 1.2.4 - 2026-11-23
 
-Release candidate for 1.2.4: AI-EFF-002 was dropped next to AI-EFF-001 (ADR-060).
+AI-EFF-002 was dropped next to AI-EFF-001 (ADR-060).
 
 ### Fixed
 
@@ -17,6 +17,10 @@ Release candidate for 1.2.4: AI-EFF-002 was dropped next to AI-EFF-001 (ADR-060)
   `budgets.always_on` get one more High finding: the gate result is unchanged with default
   settings, but the Efficiency rating can drop, and in new-code mode with a baseline the
   finding is new.
+
+## 1.2.4-rc.1 - 2026-11-23
+
+Release candidate for 1.2.4, with the same changes.
 
 ## 1.2.3 - 2026-11-23
 
