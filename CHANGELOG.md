@@ -4,6 +4,18 @@ All notable changes to Pulse are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Pulse follows
 [semantic versioning](https://semver.org/).
 
+## 1.2.4 - Unreleased
+
+### Fixed
+
+- AI-EFF-002 (always-on context over budget) is now reported when the largest always-on
+  file is also over its own budget. Both findings point at the start of that file, and the
+  engine kept only AI-EFF-001 there, so AI-EFF-002 was dropped (ADR-060). A Medium
+  AI-EFF-001 that AI-EFF-002 used to hide is reported too. Projects over
+  `budgets.always_on` get one more High finding: the gate result is unchanged with default
+  settings, but the Efficiency rating can drop, and in new-code mode with a baseline the
+  finding is new.
+
 ## 1.2.3 - 2026-11-23
 
 False positives from the 156-repository survey (ADR-059).
