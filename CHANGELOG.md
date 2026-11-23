@@ -4,9 +4,9 @@ All notable changes to Pulse are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Pulse follows
 [semantic versioning](https://semver.org/).
 
-## 1.2.3-rc.1 - 2026-11-22
+## 1.2.3 - 2026-11-23
 
-Release candidate for 1.2.3: false positives from the 156-repository survey (ADR-059).
+False positives from the 156-repository survey (ADR-059).
 
 ### Fixed
 
@@ -26,6 +26,10 @@ Release candidate for 1.2.3: false positives from the 156-repository survey (ADR
   longer joins unrelated checklist items into one send instruction.
 - AI-SEC-011 no longer reports file paths (`app/v3/services/spanTimelineEvents.server`) as
   Base64 blobs.
+
+## 1.2.3-rc.1 - 2026-11-22
+
+Release candidate for 1.2.3, with the same changes.
 
 ## 1.2.2 - 2026-11-22
 
