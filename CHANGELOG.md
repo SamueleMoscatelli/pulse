@@ -4,7 +4,9 @@ All notable changes to Pulse are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Pulse follows
 [semantic versioning](https://semver.org/).
 
-## 1.2.4 - Unreleased
+## 1.2.4-rc.1 - 2026-11-23
+
+Release candidate for 1.2.4: AI-EFF-002 was dropped next to AI-EFF-001 (ADR-060).
 
 ### Fixed
 
