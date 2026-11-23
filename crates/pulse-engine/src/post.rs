@@ -11,20 +11,25 @@ use xxhash_rust::xxh3::Xxh3;
 /// AI-SEC-004).
 const PREFERRED: &[(&str, &str)] = &[("AI-SEC-003", "AI-SEC-004")];
 
+/// Rules whose finding is a verdict on the whole project, not on the span it points at, so it
+/// is never merged with another rule's finding there (ADR-060: AI-EFF-002 points at its
+/// largest contributor, where AI-EFF-001 also reports an oversized file).
+const PROJECT_WIDE: &[&str] = &["AI-EFF-002"];
+
 /// Keeps one rule per (span, category): the rule with the highest-severity finding, ties to
 /// the lowest rule ID; all of that rule's findings there are kept.
-/// Findings of unregistered (custom) rules are never merged.
+/// Findings of unregistered (custom) rules and of [`PROJECT_WIDE`] rules are never merged.
 pub fn dedup(findings: Vec<Finding>) -> Vec<Finding> {
     // Grouped by index, borrowing locations: no `Location` clone per finding (P7.1).
     let mut groups: HashMap<(&Location, Category), Vec<usize>> = HashMap::new();
     let mut keep = vec![false; findings.len()];
     for (i, f) in findings.iter().enumerate() {
         match pulse_rules::find(f.rule_id) {
-            Some(meta) => groups
+            Some(meta) if !PROJECT_WIDE.contains(&meta.id) => groups
                 .entry((&f.location, meta.category))
                 .or_default()
                 .push(i),
-            None => keep[i] = true,
+            _ => keep[i] = true,
         }
     }
     for mut group in groups.into_values() {
@@ -188,6 +193,25 @@ mod tests {
             out.iter()
                 .any(|f| f.rule_id == "AI-STR-002" && f.severity == Severity::High)
         );
+    }
+
+    #[test]
+    fn dedup_never_merges_project_wide_findings() {
+        let a = asset("one\ntwo\n");
+        let s = Span::new(0, 0);
+        let out = dedup(vec![
+            finding(&a, "AI-EFF-001", Severity::High, s),
+            finding(&a, "AI-EFF-002", Severity::High, s),
+            finding(&a, "AI-EFF-004", Severity::Medium, s),
+        ]);
+        let ids: Vec<_> = out.iter().map(|f| f.rule_id).collect();
+        assert_eq!(ids, ["AI-EFF-001", "AI-EFF-002"]);
+        // A Medium AI-EFF-001 is no longer hidden by the High AI-EFF-002 either.
+        let out = dedup(vec![
+            finding(&a, "AI-EFF-001", Severity::Medium, s),
+            finding(&a, "AI-EFF-002", Severity::High, s),
+        ]);
+        assert_eq!(out.len(), 2);
     }
 
     #[test]
